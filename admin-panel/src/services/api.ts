@@ -62,6 +62,9 @@ export const adminAPI = {
         fetchAPI(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     deleteUser: (id: number) =>
         fetchAPI(`/api/admin/users/${id}`, { method: 'DELETE' }),
+    changeUserTier: (id: number, new_tier: string, reason: string) =>
+        fetchAPI(`/api/admin/users/${id}/tier`, { method: 'PUT', body: JSON.stringify({ new_tier, reason }) }),
+    getUserTierHistory: (id: number) => fetchAPI(`/api/admin/users/${id}/tier-history`),
 
     // Invitation Codes
     getCodes: (page = 1, filter = 'all') =>

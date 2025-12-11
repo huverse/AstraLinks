@@ -241,6 +241,100 @@ router.patch('/users/:id', async (req: Request, res: Response) => {
 });
 
 /**
+ * PUT /api/admin/users/:id/tier
+ * Update user tier with required reason
+ */
+router.put('/users/:id/tier', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        const { new_tier, reason } = req.body;
+        const adminId = (req as any).user.id;
+
+        // Validate inputs
+        if (!new_tier || !['free', 'pro', 'ultra'].includes(new_tier)) {
+            res.status(400).json({ error: '无效的等级' });
+            return;
+        }
+        if (!reason || reason.trim().length < 5) {
+            res.status(400).json({ error: '请提供至少5个字符的变更理由' });
+            return;
+        }
+
+        // Get current user tier
+        const [users] = await pool.execute<RowDataPacket[]>(
+            'SELECT username, user_tier FROM users WHERE id = ?',
+            [id]
+        );
+
+        if (users.length === 0) {
+            res.status(404).json({ error: '用户不存在' });
+            return;
+        }
+
+        const oldTier = users[0].user_tier || 'free';
+        const username = users[0].username;
+
+        if (oldTier === new_tier) {
+            res.status(400).json({ error: '新等级与当前等级相同' });
+            return;
+        }
+
+        // Update user tier
+        await pool.execute(
+            'UPDATE users SET user_tier = ? WHERE id = ?',
+            [new_tier, id]
+        );
+
+        // Log the tier change
+        await pool.execute(
+            'INSERT INTO user_tier_changes (user_id, admin_id, old_tier, new_tier, reason) VALUES (?, ?, ?, ?, ?)',
+            [id, adminId, oldTier, new_tier, reason.trim()]
+        );
+
+        // Log admin action
+        await logAdminAction(adminId, 'CHANGE_USER_TIER', 'user', parseInt(id), {
+            username,
+            old_tier: oldTier,
+            new_tier,
+            reason: reason.trim()
+        }, getClientIP(req));
+
+        res.json({
+            message: `用户 ${username} 的等级已从 ${oldTier} 变更为 ${new_tier}`,
+            old_tier: oldTier,
+            new_tier
+        });
+    } catch (error: any) {
+        console.error('Change user tier error:', error);
+        res.status(500).json({ error: 'Failed to change user tier' });
+    }
+});
+
+/**
+ * GET /api/admin/users/:id/tier-history
+ * Get user's tier change history
+ */
+router.get('/users/:id/tier-history', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+
+        const [history] = await pool.execute<RowDataPacket[]>(
+            `SELECT tc.*, u.username as admin_username
+             FROM user_tier_changes tc
+             LEFT JOIN users u ON tc.admin_id = u.id
+             WHERE tc.user_id = ?
+             ORDER BY tc.created_at DESC`,
+            [id]
+        );
+
+        res.json(history);
+    } catch (error: any) {
+        console.error('Get tier history error:', error);
+        res.status(500).json({ error: 'Failed to fetch tier history' });
+    }
+});
+
+/**
  * DELETE /api/admin/users/:id
  * Delete user (with undo support)
  */

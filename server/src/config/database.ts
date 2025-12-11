@@ -345,6 +345,23 @@ export async function initDatabase(): Promise<void> {
       `);
     }
 
+    // User tier change logs table (for admin tier modifications)
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS user_tier_changes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        user_id INT NOT NULL,
+        admin_id INT NOT NULL,
+        old_tier ENUM('free', 'pro', 'ultra') NOT NULL,
+        new_tier ENUM('free', 'pro', 'ultra') NOT NULL,
+        reason TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_user_id (user_id),
+        INDEX idx_admin_id (admin_id),
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+        FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
     // ==================================================================================
     // SPLIT INVITATION SYSTEM (分裂邀请码系统)
     // ==================================================================================
