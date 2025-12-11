@@ -1,4 +1,4 @@
-import { pool, oldDbPool } from '../config/database';
+import { pool } from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 
 interface WpUser {
@@ -14,9 +14,13 @@ interface SyncResult {
     errors: string[];
 }
 
+// Sync API configuration
+const SYNC_API_URL = process.env.SYNC_API_URL || 'https://galaxyous.com/sync-api.php';
+const SYNC_API_KEY = process.env.SYNC_API_KEY || 'astralinks_sync_2024_secret';
+
 /**
- * Run the database sync from WordPress to new database
- * - Reads users from old WordPress wp_users table
+ * Run the database sync from WordPress via HTTP API
+ * - Fetches users from old WordPress via sync-api.php
  * - Inserts new users with needs_password_reset = TRUE
  * - Does NOT sync passwords (WordPress uses incompatible hash)
  */
@@ -31,14 +35,30 @@ export async function runSync(): Promise<SyncResult> {
     const connection = await pool.getConnection();
 
     try {
-        console.log('🔄 Starting WordPress user sync...');
+        console.log('🔄 Starting WordPress user sync via HTTP API...');
+        console.log(`📡 Fetching from: ${SYNC_API_URL}`);
 
-        // 1. Fetch users from old WordPress database
-        const [wpUsers] = await oldDbPool.execute<RowDataPacket[]>(
-            'SELECT ID, user_login, user_email FROM wp_users'
-        );
+        // 1. Fetch users from sync API
+        const response = await fetch(`${SYNC_API_URL}?key=${SYNC_API_KEY}`, {
+            method: 'GET',
+            headers: {
+                'X-Sync-Key': SYNC_API_KEY,
+                'Accept': 'application/json'
+            }
+        });
 
-        console.log(`📥 Found ${wpUsers.length} users in WordPress database`);
+        if (!response.ok) {
+            throw new Error(`API request failed: ${response.status} ${response.statusText}`);
+        }
+
+        const data = await response.json() as { success: boolean; users: WpUser[]; error?: string };
+
+        if (!data.success || !Array.isArray(data.users)) {
+            throw new Error(data.error || 'Invalid API response');
+        }
+
+        const wpUsers = data.users;
+        console.log(`📥 Found ${wpUsers.length} users from sync API`);
 
         // 2. Get existing synced users (by wp_user_id)
         const [existingUsers] = await connection.execute<RowDataPacket[]>(
@@ -47,7 +67,7 @@ export async function runSync(): Promise<SyncResult> {
         const existingWpIds = new Set(existingUsers.map(u => u.wp_user_id));
 
         // 3. Process each WordPress user
-        for (const wpUser of wpUsers as WpUser[]) {
+        for (const wpUser of wpUsers) {
             try {
                 // Skip if already synced
                 if (existingWpIds.has(wpUser.ID)) {
@@ -122,3 +142,4 @@ export async function runSync(): Promise<SyncResult> {
 
     return result;
 }
+
