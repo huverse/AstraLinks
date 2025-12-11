@@ -42,6 +42,7 @@ interface TabState {
     sampleCount: number;
     resolution: string;
     fps: number;
+    durationSeconds: number;
 }
 
 interface HistoryItem {
@@ -70,7 +71,8 @@ const initialTabData: TabState = {
     guidanceScale: 7.5,
     sampleCount: 1,
     resolution: '720p',
-    fps: 24
+    fps: 24,
+    durationSeconds: 5
 };
 
 const DEFAULT_MODELS = {
@@ -252,7 +254,7 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
         const {
             prompt, refImage, imgSize, aspectRatio, voiceName, customModel,
             temperature, topP, seed, safetyLevel,
-            negativePrompt, guidanceScale, resolution, fps, sampleCount
+            negativePrompt, guidanceScale, resolution, fps, sampleCount, durationSeconds
         } = currentState;
 
         try {
@@ -274,7 +276,8 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                 guidanceScale,
                 sampleCount,
                 resolution,
-                fps
+                fps,
+                durationSeconds
             };
 
             const modelToUse = customModel || globalConfig.modelName || undefined;
