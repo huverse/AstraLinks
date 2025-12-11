@@ -53,30 +53,24 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         setMode(newMode);
     };
 
-    // Fetch policy content from announcements
+    // Fetch policy content from site settings
     const fetchPolicyContent = async (type: 'terms' | 'privacy') => {
         setLoadingPolicy(true);
         setShowPolicyModal(type);
         try {
-            const res = await fetch(`${API_BASE}/api/announcements/public`);
+            const endpoint = type === 'terms'
+                ? `${API_BASE}/api/settings/public/terms`
+                : `${API_BASE}/api/settings/public/privacy`;
+
+            const res = await fetch(endpoint);
             if (res.ok) {
                 const data = await res.json();
-                const policy = data.announcements?.find((a: any) =>
-                    a.content_type === type
-                );
-                if (policy) {
-                    setPolicyContent({
-                        title: type === 'terms' ? '用户协议' : '隐私政策',
-                        content: policy.content
-                    });
-                } else {
-                    setPolicyContent({
-                        title: type === 'terms' ? '用户协议' : '隐私政策',
-                        content: type === 'terms'
-                            ? '欢迎使用本平台。使用本服务即表示您同意遵守我们的服务条款。我们保留随时更新条款的权利。'
-                            : '我们重视您的隐私。我们收集的信息仅用于提供和改进服务。我们不会出售您的个人信息。'
-                    });
-                }
+                setPolicyContent({
+                    title: type === 'terms' ? '用户协议' : '隐私政策',
+                    content: data.content || (type === 'terms' ? '暂无用户协议内容。' : '暂无隐私政策内容。')
+                });
+            } else {
+                throw new Error('加载失败');
             }
         } catch (e) {
             setPolicyContent({
@@ -315,8 +309,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                 type="button"
                                 onClick={() => setAgreedToTerms(!agreedToTerms)}
                                 className={`w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 transition-all ${agreedToTerms
-                                        ? 'bg-blue-500 text-white'
-                                        : 'bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600'
+                                    ? 'bg-blue-500 text-white'
+                                    : 'bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600'
                                     }`}
                             >
                                 {agreedToTerms && <Check size={14} />}
@@ -440,7 +434,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                     <Loader2 className="animate-spin text-blue-500" size={32} />
                                 </div>
                             ) : (
-                                <div 
+                                <div
                                     className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 leading-relaxed"
                                     dangerouslySetInnerHTML={{ __html: policyContent?.content?.replace(/\n/g, '<br/>') || '' }}
                                 />

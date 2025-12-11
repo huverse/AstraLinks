@@ -5,7 +5,54 @@ import { RowDataPacket } from 'mysql2';
 
 const router = Router();
 
-// Apply admin middleware to all routes
+// ==================== PUBLIC ROUTES (NO AUTH) ====================
+
+/**
+ * GET /api/settings/public/terms
+ * Get terms of service (public, no auth needed)
+ */
+router.get('/public/terms', async (req: Request, res: Response) => {
+    try {
+        const [settings] = await pool.execute<RowDataPacket[]>(
+            `SELECT setting_value FROM site_settings WHERE setting_key = 'terms_of_service'`
+        );
+
+        if (settings.length === 0 || !settings[0].setting_value) {
+            res.json({ content: '暂无用户协议内容。' });
+            return;
+        }
+
+        res.json({ content: settings[0].setting_value });
+    } catch (error: any) {
+        console.error('Get terms error:', error);
+        res.status(500).json({ error: 'Failed to fetch terms' });
+    }
+});
+
+/**
+ * GET /api/settings/public/privacy
+ * Get privacy policy (public, no auth needed)
+ */
+router.get('/public/privacy', async (req: Request, res: Response) => {
+    try {
+        const [settings] = await pool.execute<RowDataPacket[]>(
+            `SELECT setting_value FROM site_settings WHERE setting_key = 'privacy_policy'`
+        );
+
+        if (settings.length === 0 || !settings[0].setting_value) {
+            res.json({ content: '暂无隐私政策内容。' });
+            return;
+        }
+
+        res.json({ content: settings[0].setting_value });
+    } catch (error: any) {
+        console.error('Get privacy error:', error);
+        res.status(500).json({ error: 'Failed to fetch privacy policy' });
+    }
+});
+
+// ==================== ADMIN ROUTES (REQUIRES AUTH) ====================
+// Apply admin middleware to remaining routes
 router.use(authMiddleware, adminMiddleware);
 
 /**
