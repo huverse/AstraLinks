@@ -29,7 +29,7 @@ function App() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename="/admin">
       <Layout onLogout={() => setIsAuthenticated(false)}>
         <Routes>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

@@ -30,7 +30,7 @@ async function fetchAPI(endpoint: string, options: RequestInit = {}) {
 
     if (response.status === 401) {
         setAuthToken(null);
-        window.location.href = '/login';
+        // Don't use window.location - let React handle re-render to login
         throw new Error('Unauthorized');
     }
 
