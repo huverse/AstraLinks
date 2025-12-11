@@ -5,7 +5,7 @@ import { Search, Ban, Trash2, ShieldOff } from 'lucide-react';
 export default function Users() {
     const [users, setUsers] = useState<any[]>([]);
     const [search, setSearch] = useState('');
-    const [page, setPage] = useState(1);
+    const [page, _setPage] = useState(1);
     const [loading, setLoading] = useState(true);
 
     const loadUsers = () => {

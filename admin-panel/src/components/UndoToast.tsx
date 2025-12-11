@@ -63,7 +63,7 @@ export default function UndoToast() {
         return () => clearInterval(interval);
     }, [operations]);
 
-    const handleUndo = async (id: number, operationType: string) => {
+    const handleUndo = async (id: number, _operationType: string) => {
         setUndoing(id);
         try {
             await adminAPI.cancelOperation(id);
@@ -126,8 +126,8 @@ export default function UndoToast() {
                             onClick={() => handleUndo(op.id, op.operation_type)}
                             disabled={undoing === op.id}
                             className={`px-3 py-1.5 rounded-lg text-sm font-medium flex items-center gap-1 transition-colors ${undoing === op.id
-                                    ? 'bg-gray-500 cursor-wait'
-                                    : 'bg-orange-500 hover:bg-orange-600'
+                                ? 'bg-gray-500 cursor-wait'
+                                : 'bg-orange-500 hover:bg-orange-600'
                                 }`}
                         >
                             <Undo2 size={14} className={undoing === op.id ? 'animate-spin' : ''} />
