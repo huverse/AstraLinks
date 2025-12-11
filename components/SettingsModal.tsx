@@ -7,6 +7,7 @@ import CloudConfigSelector from './CloudConfigSelector';
 import CloudSync from './CloudSync';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE } from '../utils/api';
+import { DEFAULT_PARTICIPANTS } from '../constants';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -364,10 +365,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${(userTierInfo.monthlyTokenUsage / userTierInfo.tokenLimit) > 0.9
-                            ? 'bg-gradient-to-r from-red-500 to-orange-500'
-                            : (userTierInfo.monthlyTokenUsage / userTierInfo.tokenLimit) > 0.7
-                              ? 'bg-gradient-to-r from-amber-500 to-yellow-500'
-                              : 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                          ? 'bg-gradient-to-r from-red-500 to-orange-500'
+                          : (userTierInfo.monthlyTokenUsage / userTierInfo.tokenLimit) > 0.7
+                            ? 'bg-gradient-to-r from-amber-500 to-yellow-500'
+                            : 'bg-gradient-to-r from-emerald-500 to-teal-500'
                           }`}
                         style={{
                           width: `${Math.min((userTierInfo.monthlyTokenUsage / userTierInfo.tokenLimit) * 100, 100)}%`
@@ -509,6 +510,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               const isEnabled = p.config.enabled;
               const isSpecial = p.id === specialRoleId && gameMode !== GameMode.FREE_CHAT;
               const isCustom = p.isCustom;
+              const isRemovable = isCustom || !DEFAULT_PARTICIPANTS.some(dp => dp.id === p.id);
               const temperature = p.config.temperature ?? 0.7;
 
               return (
@@ -565,14 +567,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                     </div>
 
                     <div className="flex items-center gap-3 pl-2">
-                      {isCustom && (
+                      {isRemovable && (
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             onRemoveCustomParticipant(p.id);
                           }}
                           className="p-3 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors z-10 touch-manipulation"
-                          title="Remove Custom Model"
+                          title="删除此模型"
                         >
                           <Trash2 size={20} />
                         </button>
