@@ -4,6 +4,34 @@ import axios from 'axios';
 const router = Router();
 
 /**
+ * Normalize Gemini API base URL
+ * Ensures the URL ends with /v1beta for proper API routing
+ */
+const normalizeGeminiUrl = (url?: string): string => {
+    const defaultUrl = 'https://generativelanguage.googleapis.com/v1beta';
+    if (!url?.trim()) return defaultUrl;
+
+    let cleanUrl = url.trim().replace(/\/+$/, '');
+
+    // If user provided just the domain, add /v1beta
+    if (cleanUrl.match(/^https?:\/\/[^\/]+$/)) {
+        return `${cleanUrl}/v1beta`;
+    }
+
+    // If URL ends with /v1 or /v1beta, use as-is
+    if (cleanUrl.match(/\/v1(beta)?$/)) {
+        return cleanUrl;
+    }
+
+    // Otherwise append /v1beta if it looks like a base URL (no path after domain)
+    if (!cleanUrl.includes('/v1')) {
+        return `${cleanUrl}/v1beta`;
+    }
+
+    return cleanUrl;
+};
+
+/**
  * POST /api/proxy/gemini
  * Proxy requests to Google Gemini API
  * This allows Chinese users to access Gemini through the US server
@@ -17,9 +45,11 @@ router.post('/gemini', async (req: Request, res: Response) => {
             return;
         }
 
-        // Build the target URL
-        const targetBaseUrl = baseUrl?.trim().replace(/\/+$/, '') || 'https://generativelanguage.googleapis.com/v1beta';
+        // Build the target URL with proper normalization
+        const targetBaseUrl = normalizeGeminiUrl(baseUrl);
         const targetUrl = `${targetBaseUrl}/models/${model || 'gemini-2.5-flash'}:generateContent`;
+
+        console.log(`[Gemini Proxy] Target URL: ${targetUrl}`);
 
         // Build proper request body - systemInstruction and safetySettings are top-level, not inside generationConfig
         const requestBody: any = { contents };
@@ -81,6 +111,8 @@ router.post('/gemini', async (req: Request, res: Response) => {
             });
         } else if (error.code === 'ECONNABORTED') {
             res.status(504).json({ error: 'Request timeout' });
+        } else if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') {
+            res.status(502).json({ error: '无法连接到 API 服务器，请检查 Base URL 是否正确' });
         } else {
             res.status(500).json({ error: 'Proxy error', message: error.message });
         }
@@ -100,7 +132,7 @@ router.post('/gemini/stream', async (req: Request, res: Response) => {
             return;
         }
 
-        const targetBaseUrl = baseUrl?.trim().replace(/\/+$/, '') || 'https://generativelanguage.googleapis.com/v1beta';
+        const targetBaseUrl = normalizeGeminiUrl(baseUrl);
         const targetUrl = `${targetBaseUrl}/models/${model || 'gemini-2.5-flash'}:streamGenerateContent?alt=sse`;
 
         // Set up SSE headers
@@ -242,7 +274,7 @@ router.post('/gemini/images', async (req: Request, res: Response) => {
             return;
         }
 
-        const targetBaseUrl = baseUrl?.trim().replace(/\/+$/, '') || 'https://generativelanguage.googleapis.com/v1beta';
+        const targetBaseUrl = normalizeGeminiUrl(baseUrl);
         const targetUrl = `${targetBaseUrl}/models/${model || 'imagen-3.0-generate-001'}:predict`;
 
         const response = await axios.post(
@@ -289,7 +321,7 @@ router.post('/gemini/videos', async (req: Request, res: Response) => {
             return;
         }
 
-        const targetBaseUrl = baseUrl?.trim().replace(/\/+$/, '') || 'https://generativelanguage.googleapis.com/v1beta';
+        const targetBaseUrl = normalizeGeminiUrl(baseUrl);
         const targetUrl = `${targetBaseUrl}/models/${model || 'veo-3.1-fast-generate-preview'}:predictLongRunning`;
 
         const response = await axios.post(
@@ -338,7 +370,7 @@ router.get('/gemini/operations/:name', async (req: Request, res: Response) => {
             return;
         }
 
-        const targetBaseUrl = baseUrl?.trim().replace(/\/+$/, '') || 'https://generativelanguage.googleapis.com/v1beta';
+        const targetBaseUrl = normalizeGeminiUrl(baseUrl);
         const targetUrl = `${targetBaseUrl}/${name}`;
 
         const response = await axios.get(targetUrl, {
