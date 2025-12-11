@@ -10,6 +10,7 @@ import MultimodalCenter from './components/MultimodalCenter';
 import VotingPanel from './components/VotingPanel';
 import LoginModal from './components/LoginModal';
 import FeedbackWidget from './components/FeedbackWidget';
+import ProfileCenter from './components/ProfileCenter';
 import { useAuth } from './contexts/AuthContext';
 import { generateResponse, generateSessionTitle, detectRefereeIntent, summarizeHistory } from './services/aiService';
 
@@ -238,6 +239,7 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isMultimodalOpen, setIsMultimodalOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Auth Context
   const { user, isAuthenticated, logout } = useAuth();
@@ -1691,10 +1693,8 @@ const App: React.FC = () => {
             {/* Auth Button */}
             {isAuthenticated ? (
               <button
-                onClick={() => {
-                  if (window.confirm('确定要登出吗？')) logout();
-                }}
-                title={`已登录: ${user?.username}`}
+                onClick={() => setIsProfileOpen(true)}
+                title={`个人中心: ${user?.username}`}
                 className="p-3 md:p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors rounded-full relative"
               >
                 <UserCheck size={20} />
@@ -2068,6 +2068,13 @@ const App: React.FC = () => {
 
       {/* Feedback Widget - Always visible floating button */}
       <FeedbackWidget />
+
+      {/* Profile Center Modal */}
+      <ProfileCenter
+        isOpen={isProfileOpen}
+        onClose={() => setIsProfileOpen(false)}
+        token={localStorage.getItem('galaxyous_token')}
+      />
 
     </div>
   );

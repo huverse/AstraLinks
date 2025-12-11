@@ -415,6 +415,22 @@ export default function ProfileCenter({ isOpen, onClose, token }: ProfileCenterP
                                 </p>
                             </div>
                         )}
+
+                        {/* Logout Button */}
+                        <div className="pt-4 border-t border-gray-200 dark:border-slate-700">
+                            <button
+                                onClick={() => {
+                                    if (window.confirm('确定要登出吗？')) {
+                                        localStorage.removeItem('galaxyous_token');
+                                        onClose();
+                                        window.location.reload();
+                                    }
+                                }}
+                                className="w-full py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors font-medium"
+                            >
+                                退出登录
+                            </button>
+                        </div>
                     </div>
                 ) : (
                     <div className="p-12 text-center text-gray-500">
