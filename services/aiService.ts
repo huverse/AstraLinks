@@ -388,14 +388,14 @@ export const summarizeHistory = async (
 //  LIVE API MANAGER
 // ==================================================================================
 
-// ... (LiveSessionManager class unchanged)
+// ... (LiveSessionManager class - now uses backend proxy for China support)
 export class LiveSessionManager {
-    private client: any;
     private audioContext: AudioContext | null = null;
     private inputSource: MediaStreamAudioSourceNode | null = null;
     private processor: ScriptProcessorNode | null = null;
     private isConnected: boolean = false;
     private currentStream: MediaStream | null = null;
+    private ws: WebSocket | null = null;
 
     private nextStartTime: number = 0;
 
@@ -406,43 +406,57 @@ export class LiveSessionManager {
     async connect() {
         if (this.isConnected) return;
 
-        const options = sanitizeOptions(this.apiKey, this.baseUrl);
-        const ai = new GoogleGenAI(options);
+        // Build WebSocket URL to backend proxy
+        const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsHost = PROXY_API_BASE.replace(/^https?:\/\//, '').replace(/\/$/, '');
+        const wsUrl = new URL(`${wsProtocol}//${wsHost}/gemini-live`);
+        wsUrl.searchParams.set('apiKey', this.apiKey);
+        if (this.modelName) wsUrl.searchParams.set('model', this.modelName);
+        if (this.voiceName) wsUrl.searchParams.set('voiceName', this.voiceName);
+        if (this.baseUrl) wsUrl.searchParams.set('baseUrl', this.baseUrl);
 
         this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
-        const model = this.modelName || 'gemini-2.5-flash-native-audio-preview-09-2025';
-        this.client = await ai.live.connect({
-            model,
-            config: {
-                responseModalities: [Modality.AUDIO],
-                speechConfig: {
-                    voiceConfig: { prebuiltVoiceConfig: { voiceName: this.voiceName } }
-                }
-            },
-            callbacks: {
-                onopen: () => {
-                    console.log("Live Session Connected");
+        // Connect to backend WebSocket proxy
+        this.ws = new WebSocket(wsUrl.toString());
+
+        this.ws.onopen = () => {
+            console.log("Live Session: Connected to proxy");
+        };
+
+        this.ws.onmessage = (event) => {
+            try {
+                const msg = JSON.parse(event.data);
+
+                if (msg.type === 'connected') {
+                    console.log("Live Session: Connected to Gemini via proxy");
                     this.isConnected = true;
                     this.nextStartTime = 0;
-                },
-                onmessage: (msg: any) => {
-                    const audioData = msg.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+                    this.startMicrophone();
+                } else if (msg.type === 'message') {
+                    const audioData = msg.data?.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
                     if (audioData) {
                         this.playAudioChunk(audioData);
                     }
-                },
-                onclose: () => {
-                    console.log("Live Session Closed");
+                } else if (msg.type === 'disconnected') {
+                    console.log("Live Session: Disconnected");
                     this.disconnect();
-                },
-                onerror: (err: any) => {
-                    console.error("Live Session Error:", err);
+                } else if (msg.type === 'error') {
+                    console.error("Live Session Error:", msg.error);
                 }
+            } catch (e) {
+                console.error("Error parsing message:", e);
             }
-        });
+        };
 
-        await this.startMicrophone();
+        this.ws.onclose = () => {
+            console.log("Live Session: WebSocket closed");
+            this.disconnect();
+        };
+
+        this.ws.onerror = (err) => {
+            console.error("Live Session: WebSocket error", err);
+        };
     }
 
     private async startMicrophone() {
@@ -469,7 +483,7 @@ export class LiveSessionManager {
             this.processor.connect(inputContext.destination);
 
             this.processor.onaudioprocess = (e) => {
-                if (!this.isConnected || !this.client) return;
+                if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
                 const inputData = e.inputBuffer.getChannelData(0);
 
@@ -480,12 +494,12 @@ export class LiveSessionManager {
 
                 const base64PCM = this.float32ToBase64(inputData);
 
-                this.client.sendRealtimeInput({
-                    media: {
-                        mimeType: "audio/pcm;rate=16000",
-                        data: base64PCM
-                    }
-                });
+                // Send to backend proxy
+                this.ws.send(JSON.stringify({
+                    type: 'audio',
+                    mimeType: 'audio/pcm;rate=16000',
+                    data: base64PCM
+                }));
             };
         } catch (e) {
             console.error("Microphone Access Failed", e);
@@ -542,6 +556,10 @@ export class LiveSessionManager {
 
     disconnect() {
         this.isConnected = false;
+        if (this.ws) {
+            this.ws.close();
+            this.ws = null;
+        }
         if (this.currentStream) {
             this.currentStream.getTracks().forEach(track => track.stop());
             this.currentStream = null;
@@ -558,7 +576,6 @@ export class LiveSessionManager {
             this.audioContext.close();
             this.audioContext = null;
         }
-        this.client = null;
         this.nextStartTime = 0;
     }
 }

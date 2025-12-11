@@ -17,6 +17,7 @@ import configTemplatesRoutes from './routes/configTemplates';
 import { initDatabase } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
+import { initGeminiLiveProxy } from './services/geminiLive';
 
 dotenv.config();
 
@@ -27,7 +28,7 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors({
     origin: process.env.NODE_ENV === 'production'
-        ? ['https://your-frontend-domain.com', 'https://admin.your-domain.com']
+        ? ['https://astralinks.xyz', 'https://www.astralinks.xyz']
         : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174', 'http://127.0.0.1:5175'],
     credentials: true
 }));
@@ -58,6 +59,9 @@ async function startServer() {
 
         // Initialize WebSocket
         initWebSocket(httpServer);
+
+        // Initialize Gemini Live WebSocket proxy (for China users)
+        initGeminiLiveProxy(httpServer);
 
         // Schedule daily sync at 3:00 AM
         cron.schedule('0 3 * * *', async () => {
