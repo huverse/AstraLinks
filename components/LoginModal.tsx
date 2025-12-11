@@ -250,10 +250,10 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                             <Key size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
                                 type="text"
-                                placeholder="邀请码（8位）"
+                                placeholder="邀请码（8位或12位）"
                                 value={invitationCode}
                                 onChange={(e) => setInvitationCode(e.target.value.toUpperCase())}
-                                maxLength={8}
+                                maxLength={12}
                                 className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all font-mono tracking-widest"
                                 required
                             />
