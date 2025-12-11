@@ -8,7 +8,7 @@ const router = Router();
 
 /**
  * POST /api/auth/register
- * Register a new user with invitation code
+ * Register a new user with invitation code (supports both normal and split codes)
  */
 router.post('/register', async (req: Request, res: Response) => {
     try {
@@ -35,20 +35,55 @@ router.post('/register', async (req: Request, res: Response) => {
         const ip = req.ip || req.socket.remoteAddress || '';
         const fingerprint = deviceFingerprint || generateDeviceFingerprint(userAgent, ip);
 
-        // Verify invitation code
-        const [codeRows] = await pool.execute<RowDataPacket[]>(
+        // Try to find invitation code in both systems
+        let codeType: 'normal' | 'split' | null = null;
+        let codeData: any = null;
+        let splitTreeId: string | null = null;
+
+        // First check normal invitation codes (8 characters)
+        const [normalCodes] = await pool.execute<RowDataPacket[]>(
             'SELECT id, is_used, used_device_fingerprint FROM invitation_codes WHERE code = ?',
             [invitationCode]
         );
 
-        if (codeRows.length === 0) {
-            res.status(400).json({ error: '邀请码无效' });
-            return;
+        if (normalCodes.length > 0) {
+            codeData = normalCodes[0];
+            codeType = 'normal';
+            if (codeData.is_used) {
+                res.status(400).json({ error: '该邀请码已被使用' });
+                return;
+            }
         }
 
-        const codeData = codeRows[0];
-        if (codeData.is_used) {
-            res.status(400).json({ error: '该邀请码已被使用' });
+        // If not found, check split invitation codes (12 characters)
+        if (!codeData) {
+            const [splitCodes] = await pool.execute<RowDataPacket[]>(
+                `SELECT c.*, t.is_banned as tree_banned 
+                 FROM split_invitation_codes c
+                 JOIN split_invitation_trees t ON c.tree_id = t.id
+                 WHERE c.code = ?`,
+                [invitationCode]
+            );
+
+            if (splitCodes.length > 0) {
+                codeData = splitCodes[0];
+                codeType = 'split';
+                splitTreeId = codeData.tree_id;
+
+                if (codeData.is_used) {
+                    res.status(400).json({ error: '该邀请码已被使用' });
+                    return;
+                }
+                if (codeData.tree_banned) {
+                    res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
+                    return;
+                }
+            }
+        }
+
+        // Code not found in either system
+        if (!codeData) {
+            res.status(400).json({ error: '邀请码无效' });
             return;
         }
 
@@ -78,21 +113,39 @@ router.post('/register', async (req: Request, res: Response) => {
         // Hash password and create user
         const passwordHash = await hashPassword(password);
 
-        const [result] = await pool.execute<ResultSetHeader>(
-            `INSERT INTO users (username, email, password_hash, invitation_code_used, device_fingerprint)
-       VALUES (?, ?, ?, ?, ?)`,
-            [username, email || null, passwordHash, invitationCode, fingerprint]
-        );
+        // Build insert query based on code type
+        let insertSql: string;
+        let insertParams: any[];
 
+        if (codeType === 'split') {
+            insertSql = `INSERT INTO users (username, email, password_hash, invitation_code_used, device_fingerprint, split_code_used, split_tree_id)
+                         VALUES (?, ?, ?, NULL, ?, ?, ?)`;
+            insertParams = [username, email || null, passwordHash, fingerprint, invitationCode, splitTreeId];
+        } else {
+            insertSql = `INSERT INTO users (username, email, password_hash, invitation_code_used, device_fingerprint)
+                         VALUES (?, ?, ?, ?, ?)`;
+            insertParams = [username, email || null, passwordHash, invitationCode, fingerprint];
+        }
+
+        const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
         const userId = result.insertId;
 
         // Mark invitation code as used
-        await pool.execute(
-            `UPDATE invitation_codes 
-       SET is_used = TRUE, used_by_user_id = ?, used_device_fingerprint = ?, used_at = NOW()
-       WHERE id = ?`,
-            [userId, fingerprint, codeData.id]
-        );
+        if (codeType === 'normal') {
+            await pool.execute(
+                `UPDATE invitation_codes 
+                 SET is_used = TRUE, used_by_user_id = ?, used_device_fingerprint = ?, used_at = NOW()
+                 WHERE id = ?`,
+                [userId, fingerprint, codeData.id]
+            );
+        } else {
+            await pool.execute(
+                `UPDATE split_invitation_codes 
+                 SET is_used = TRUE, used_by_user_id = ?, used_at = NOW()
+                 WHERE id = ?`,
+                [userId, codeData.id]
+            );
+        }
 
         // Generate token
         const token = generateToken({ id: userId, username, isAdmin: false });

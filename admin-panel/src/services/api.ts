@@ -148,7 +148,27 @@ export const adminAPI = {
 
     // Export
     exportUsers: (format = 'csv') => fetchAPI(`/api/admin/export/users?format=${format}`),
-    exportLogs: (days = 30, format = 'csv') => fetchAPI(`/api/admin/export/logs?days=${days}&format=${format}`)
+    exportLogs: (days = 30, format = 'csv') => fetchAPI(`/api/admin/export/logs?days=${days}&format=${format}`),
+
+    // Split Invitation System
+    getSplitInvitationStats: () => fetchAPI('/api/split-invitation/admin/stats'),
+    getSplitInvitationTrees: () => fetchAPI('/api/split-invitation/admin/trees'),
+    getSplitInvitationTree: (treeId: string) => fetchAPI(`/api/split-invitation/admin/tree/${treeId}`),
+    getSplitInvitationCooldown: () => fetchAPI('/api/split-invitation/admin/cooldown'),
+    createSplitInvitationRoot: () => fetchAPI('/api/split-invitation/admin/create-root', { method: 'POST' }),
+    toggleSplitInvitation: (enabled: boolean) =>
+        fetchAPI('/api/split-invitation/admin/toggle', { method: 'PUT', body: JSON.stringify({ enabled }) }),
+    updateSplitInvitationSettings: (code_limit: number) =>
+        fetchAPI('/api/split-invitation/admin/settings', { method: 'PUT', body: JSON.stringify({ code_limit }) }),
+    banSplitInvitationTree: (treeId: string, reason: string, duration_days?: number, trigger_user_id?: number) =>
+        fetchAPI(`/api/split-invitation/admin/ban-tree/${treeId}`, {
+            method: 'POST',
+            body: JSON.stringify({ reason, duration_days, trigger_user_id })
+        }),
+    unbanSplitInvitationTree: (treeId: string) =>
+        fetchAPI(`/api/split-invitation/admin/unban-tree/${treeId}`, { method: 'POST' }),
+    unbanSplitInvitationUser: (userId: number) =>
+        fetchAPI(`/api/split-invitation/admin/unban-user/${userId}`, { method: 'POST' })
 };
 
 

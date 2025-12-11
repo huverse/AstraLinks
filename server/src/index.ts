@@ -14,6 +14,8 @@ import analyticsRoutes from './routes/analytics';
 import announcementsRoutes from './routes/announcements';
 import settingsRoutes from './routes/settings';
 import configTemplatesRoutes from './routes/configTemplates';
+import splitInvitationRoutes from './routes/splitInvitation';
+import profileRoutes from './routes/profile';
 import { initDatabase } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
@@ -45,6 +47,8 @@ app.use('/api/analytics', analyticsRoutes);
 app.use('/api/announcements', announcementsRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/config-templates', configTemplatesRoutes);
+app.use('/api/split-invitation', splitInvitationRoutes);
+app.use('/api/profile', profileRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

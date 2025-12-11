@@ -345,7 +345,110 @@ export async function initDatabase(): Promise<void> {
       `);
     }
 
-    console.log('📊 Database tables verified/created (users, invitations, sync_logs, reports, bans, admin_logs, user_configs, user_analytics, feedback_messages, pending_operations, announcements, site_settings, config_templates, model_tiers)');
+    // ==================================================================================
+    // SPLIT INVITATION SYSTEM (分裂邀请码系统)
+    // ==================================================================================
+
+    // Split invitation trees table
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS split_invitation_trees (
+        id VARCHAR(36) PRIMARY KEY,
+        root_code_id INT,
+        created_by_admin_id INT NOT NULL,
+        is_banned BOOLEAN DEFAULT FALSE,
+        banned_reason TEXT,
+        banned_at TIMESTAMP NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_admin (created_by_admin_id),
+        INDEX idx_banned (is_banned),
+        FOREIGN KEY (created_by_admin_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Split invitation codes table
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS split_invitation_codes (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        code VARCHAR(12) NOT NULL UNIQUE,
+        tree_id VARCHAR(36) NOT NULL,
+        creator_user_id INT,
+        used_by_user_id INT,
+        is_used BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        used_at TIMESTAMP NULL,
+        INDEX idx_code (code),
+        INDEX idx_tree_id (tree_id),
+        INDEX idx_creator (creator_user_id),
+        FOREIGN KEY (tree_id) REFERENCES split_invitation_trees(id) ON DELETE CASCADE,
+        FOREIGN KEY (creator_user_id) REFERENCES users(id) ON DELETE SET NULL,
+        FOREIGN KEY (used_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Admin root code creation cooldown tracking
+    await connection.execute(`
+      CREATE TABLE IF NOT EXISTS admin_split_cooldowns (
+        admin_id INT PRIMARY KEY,
+        last_root_code_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (admin_id) REFERENCES users(id) ON DELETE CASCADE
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    `);
+
+    // Add split invitation columns to users
+    try {
+      await connection.execute(`
+        ALTER TABLE users ADD COLUMN split_code_used VARCHAR(12)
+      `);
+    } catch (e: any) {
+      if (!e.message.includes('Duplicate column')) console.log('split_code_used may exist');
+    }
+
+    try {
+      await connection.execute(`
+        ALTER TABLE users ADD COLUMN split_tree_id VARCHAR(36)
+      `);
+    } catch (e: any) {
+      if (!e.message.includes('Duplicate column')) console.log('split_tree_id may exist');
+    }
+
+    try {
+      await connection.execute(`
+        ALTER TABLE users ADD COLUMN split_codes_generated INT DEFAULT 0
+      `);
+    } catch (e: any) {
+      if (!e.message.includes('Duplicate column')) console.log('split_codes_generated may exist');
+    }
+
+    // Add profile columns to users
+    try {
+      await connection.execute(`
+        ALTER TABLE users ADD COLUMN phone VARCHAR(20)
+      `);
+    } catch (e: any) {
+      if (!e.message.includes('Duplicate column')) console.log('phone may exist');
+    }
+
+    try {
+      await connection.execute(`
+        ALTER TABLE users ADD COLUMN avatar_url VARCHAR(255)
+      `);
+    } catch (e: any) {
+      if (!e.message.includes('Duplicate column')) console.log('avatar_url may exist');
+    }
+
+    // Seed split invitation settings
+    try {
+      await connection.execute(`
+        INSERT IGNORE INTO site_settings (\`key\`, value, description)
+        VALUES 
+          ('split_invitation_enabled', 'false', '是否启用分裂邀请码系统'),
+          ('split_invitation_code_limit', '2', '每个用户可生成的分裂邀请码数量')
+      `);
+    } catch (e) {
+      // Settings may already exist
+    }
+
+    console.log('📊 Database tables verified/created (users, invitations, sync_logs, reports, bans, admin_logs, user_configs, user_analytics, feedback_messages, pending_operations, announcements, site_settings, config_templates, model_tiers, split_invitation_trees, split_invitation_codes)');
   } finally {
     connection.release();
   }

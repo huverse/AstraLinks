@@ -5,6 +5,7 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Users from './pages/Users';
 import InvitationCodes from './pages/InvitationCodes';
+import SplitInvitations from './pages/SplitInvitations';
 import Reports from './pages/Reports';
 import Bans from './pages/Bans';
 import Logs from './pages/Logs';
@@ -36,6 +37,7 @@ function App() {
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/users" element={<Users />} />
           <Route path="/invitations" element={<InvitationCodes />} />
+          <Route path="/split-invitations" element={<SplitInvitations />} />
           <Route path="/reports" element={<Reports />} />
           <Route path="/bans" element={<Bans />} />
           <Route path="/logs" element={<Logs />} />

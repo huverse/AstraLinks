@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Ticket, Flag, Ban, FileText, LogOut, BarChart3, MessageSquare, Megaphone, Settings, FileCode, Moon, Sun } from 'lucide-react';
+import { LayoutDashboard, Users, Ticket, Flag, Ban, FileText, LogOut, BarChart3, MessageSquare, Megaphone, Settings, FileCode, Moon, Sun, Share2 } from 'lucide-react';
 import { setAuthToken } from '../services/api';
 import UndoToast from './UndoToast';
 
@@ -8,6 +8,7 @@ const navItems = [
     { path: '/dashboard', label: '仪表盘', icon: LayoutDashboard },
     { path: '/users', label: '用户管理', icon: Users },
     { path: '/invitations', label: '邀请码', icon: Ticket },
+    { path: '/split-invitations', label: '分裂邀请', icon: Share2 },
     { path: '/reports', label: '举报管理', icon: Flag },
     { path: '/bans', label: '封禁管理', icon: Ban },
     { path: '/logs', label: '操作日志', icon: FileText },
