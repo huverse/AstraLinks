@@ -260,6 +260,30 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                         </div>
                     )}
 
+                    {/* Terms and Privacy Agreement (Register only) */}
+                    {mode === 'register' && (
+                        <div className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
+                            注册即表示您同意我们的
+                            <a
+                                href="/terms"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:underline mx-1"
+                            >
+                                用户协议
+                            </a>
+                            和
+                            <a
+                                href="/privacy"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-blue-500 hover:underline mx-1"
+                            >
+                                隐私政策
+                            </a>
+                        </div>
+                    )}
+
                     {/* Submit Button */}
                     <button
                         type="submit"

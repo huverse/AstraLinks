@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Participant, ProviderType } from '../types';
-import { X, Image as ImageIcon, Video, Mic, MessageSquare, Loader2, Wand2, Download, Upload, Play, Film, Type, Music, Sparkles, CheckCircle2, Terminal, History, RefreshCcw, Settings2, ChevronDown, ChevronUp, StopCircle, Wifi, Volume2, ThermometerSun, Zap, Hash, Shield, Layers, Sliders, Settings, Plus, Trash2, FileJson, ArrowDownToLine, ArrowUpFromLine, ExternalLink, Globe, Cloud, CloudUpload } from 'lucide-react';
+import { X, Image as ImageIcon, Video, Mic, MessageSquare, Loader2, Wand2, Download, Upload, Play, Film, Type, Music, Sparkles, CheckCircle2, Terminal, History, RefreshCcw, Settings2, ChevronDown, ChevronUp, StopCircle, Wifi, Volume2, ThermometerSun, Zap, Hash, Shield, Layers, Sliders, Settings, Plus, Trash2, FileJson, ArrowDownToLine, ArrowUpFromLine, ExternalLink, Globe, Cloud, CloudUpload, Code } from 'lucide-react';
 import { generateImage, generateVideo, generateSpeech, transcribeAudio, analyzeMedia, editImage, URI_PREFIX, LiveSessionManager } from '../services/aiService';
 import CloudSync from './CloudSync';
 
@@ -43,6 +43,7 @@ interface TabState {
     resolution: string;
     fps: number;
     durationSeconds: number;
+    customParams: string; // JSON string for additional API parameters
 }
 
 interface HistoryItem {
@@ -72,7 +73,8 @@ const initialTabData: TabState = {
     sampleCount: 1,
     resolution: '720p',
     fps: 24,
-    durationSeconds: 5
+    durationSeconds: 5,
+    customParams: '{}'
 };
 
 const DEFAULT_MODELS = {
@@ -254,13 +256,21 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
         const {
             prompt, refImage, imgSize, aspectRatio, voiceName, customModel,
             temperature, topP, seed, safetyLevel,
-            negativePrompt, guidanceScale, resolution, fps, sampleCount, durationSeconds
+            negativePrompt, guidanceScale, resolution, fps, sampleCount, durationSeconds, customParams
         } = currentState;
 
         try {
             const apiKey = globalConfig.apiKey;
             const baseUrl = globalConfig.baseUrl;
             const provider = globalConfig.provider || ProviderType.GEMINI; // Use provider from config
+
+            // Parse custom parameters
+            let parsedCustomParams = {};
+            try {
+                parsedCustomParams = JSON.parse(customParams || '{}');
+            } catch (e) {
+                console.warn('Failed to parse custom params:', e);
+            }
 
             const configOverrides = {
                 temperature,
@@ -277,7 +287,8 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                 sampleCount,
                 resolution,
                 fps,
-                durationSeconds
+                durationSeconds,
+                ...parsedCustomParams // Merge custom parameters
             };
 
             const modelToUse = customModel || globalConfig.modelName || undefined;
@@ -764,6 +775,37 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                             className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 outline-none focus:border-purple-500 font-mono"
                                         />
                                     </div>
+                                </div>
+
+                                {/* Custom Parameters Section */}
+                                <div className="mt-6 p-4 bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-xl border border-purple-500/20">
+                                    <div className="flex items-center justify-between mb-3">
+                                        <label className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2">
+                                            <Code size={12} /> 自定义参数 (JSON)
+                                        </label>
+                                        <button
+                                            type="button"
+                                            onClick={() => updateTab(activeTab as any, {
+                                                customParams: JSON.stringify({
+                                                    personGeneration: "ALLOW_ADULT",
+                                                    numberOfImages: 1,
+                                                    includeRaiReason: false
+                                                }, null, 2)
+                                            })}
+                                            className="text-xs text-purple-400 hover:text-purple-300 px-2 py-1 bg-purple-500/20 rounded hover:bg-purple-500/30 transition-colors"
+                                        >
+                                            加载示例
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        value={currentTab.customParams}
+                                        onChange={(e) => updateTab(activeTab as any, { customParams: e.target.value })}
+                                        placeholder='{"personGeneration": "ALLOW_ADULT", "numberOfImages": 1}'
+                                        className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 outline-none focus:border-purple-500 font-mono h-24 resize-none"
+                                    />
+                                    <p className="text-xs text-slate-500 mt-2">
+                                        提示: 可添加 API 特定参数如 personGeneration, numberOfImages, includeRaiReason 等
+                                    </p>
                                 </div>
                             </div>
                         )}

@@ -11,6 +11,7 @@ import VotingPanel from './components/VotingPanel';
 import LoginModal from './components/LoginModal';
 import FeedbackWidget from './components/FeedbackWidget';
 import ProfileCenter from './components/ProfileCenter';
+import AnnouncementBanner from './components/AnnouncementBanner';
 import { useAuth } from './contexts/AuthContext';
 import { generateResponse, generateSessionTitle, detectRefereeIntent, summarizeHistory } from './services/aiService';
 
@@ -240,9 +241,19 @@ const App: React.FC = () => {
   const [isMultimodalOpen, setIsMultimodalOpen] = useState(false);
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
 
   // Auth Context
   const { user, token, isAuthenticated, logout } = useAuth();
+
+  // Auto-show announcements when authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      // Small delay to avoid UI overlap
+      const timer = setTimeout(() => setIsAnnouncementOpen(true), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated]);
 
   // Selection / Share State
   const [selectionMode, setSelectionMode] = useState(false);
@@ -2075,6 +2086,12 @@ const App: React.FC = () => {
         onClose={() => setIsProfileOpen(false)}
         onLogout={logout}
         token={token}
+      />
+
+      {/* Announcement Banner Modal */}
+      <AnnouncementBanner
+        isOpen={isAnnouncementOpen}
+        onClose={() => setIsAnnouncementOpen(false)}
       />
 
     </div>
