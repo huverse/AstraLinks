@@ -132,6 +132,12 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
     const [liveVolume, setLiveVolume] = useState(0);
     const [isLiveConnected, setIsLiveConnected] = useState(false);
 
+    // AI Config Assistant states
+    const [showAiAssistant, setShowAiAssistant] = useState(false);
+    const [aiQuery, setAiQuery] = useState('');
+    const [aiResponse, setAiResponse] = useState('');
+    const [aiLoading, setAiLoading] = useState(false);
+
     useEffect(() => {
         localStorage.setItem('galaxyous_multimodal_config', JSON.stringify(globalConfig));
     }, [globalConfig]);
@@ -227,6 +233,80 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
         }
         setIsLiveConnected(false);
         setLiveVolume(0);
+    };
+
+    // AI Config Assistant handler
+    const handleAiAssist = async () => {
+        if (!aiQuery.trim() || !globalConfig.apiKey) {
+            setAiResponse('请先配置 API Key 并输入您的需求描述');
+            return;
+        }
+
+        setAiLoading(true);
+        setAiResponse('');
+
+        const systemPrompt = `你是一个多模态 AI 配置助手。用户会描述他们想要生成的内容和效果，你需要根据他们的需求推荐最佳的 API 参数配置。
+
+当前用户正在使用的标签: ${activeTab}
+支持的自定义参数包括:
+- personGeneration: "DONT_ALLOW" | "ALLOW_ADULT" (是否允许生成人物)
+- numberOfImages: 1-4 (生成图片数量)
+- includeRaiReason: true | false (是否包含安全过滤原因)
+- durationSeconds: 4-8 (视频时长，仅限VIDEO)
+- aspectRatio: "1:1" | "16:9" | "9:16" | "4:3" (画面比例)
+- safetyFilterLevel: "BLOCK_NONE" | "BLOCK_LOW_AND_ABOVE" | "BLOCK_MEDIUM_AND_ABOVE"
+
+请根据用户描述，返回一个 JSON 对象，包含推荐的参数配置。只返回 JSON，不要其他解释。`;
+
+        try {
+            const apiKey = globalConfig.apiKey;
+            const baseUrl = globalConfig.baseUrl || 'https://generativelanguage.googleapis.com';
+            const model = 'gemini-2.0-flash-lite';
+
+            const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: `${systemPrompt}\n\n用户需求: ${aiQuery}` }] }],
+                    generationConfig: { temperature: 0.3, maxOutputTokens: 500 }
+                })
+            });
+
+            if (!res.ok) throw new Error('AI 请求失败');
+
+            const data = await res.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+            // Try to extract JSON from response
+            const jsonMatch = text.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsedJson = JSON.parse(jsonMatch[0]);
+                setAiResponse(JSON.stringify(parsedJson, null, 2));
+            } else {
+                setAiResponse(text);
+            }
+        } catch (e: any) {
+            setAiResponse('AI 助手出错: ' + e.message);
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const applyAiSuggestion = () => {
+        try {
+            const parsed = JSON.parse(aiResponse);
+            // Merge with existing customParams
+            const existingParams = JSON.parse(currentTab.customParams || '{}');
+            const merged = { ...existingParams, ...parsed };
+            updateTab(activeTab as any, { customParams: JSON.stringify(merged, null, 2) });
+            setShowAiAssistant(false);
+            setAiQuery('');
+            setAiResponse('');
+        } catch (e) {
+            alert('无法应用 AI 建议，请检查 JSON 格式');
+        }
     };
 
     const handleAction = async () => {
@@ -796,6 +876,13 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                         >
                                             加载示例
                                         </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => setShowAiAssistant(true)}
+                                            className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors flex items-center gap-1"
+                                        >
+                                            <Sparkles size={10} /> AI 助手
+                                        </button>
                                     </div>
                                     <textarea
                                         value={currentTab.customParams}
@@ -804,7 +891,7 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                         className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 outline-none focus:border-purple-500 font-mono h-24 resize-none"
                                     />
                                     <p className="text-xs text-slate-500 mt-2">
-                                        提示: 可添加 API 特定参数如 personGeneration, numberOfImages, includeRaiReason 等
+                                        提示: 可添加 API 特定参数如 personGeneration, numberOfImages, includeRaiReason 等。点击 AI 助手可获取智能推荐。
                                     </p>
                                 </div>
                             </div>
@@ -1098,6 +1185,84 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                 }}
                                 configType="multimodal"
                             />
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* AI Config Assistant Modal */}
+            {showAiAssistant && (
+                <div className="fixed inset-0 z-[120] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+                    <div className="bg-[#1c1c1e] w-full max-w-lg rounded-2xl border border-white/10 shadow-2xl">
+                        <div className="p-6 border-b border-white/10 flex justify-between items-center">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                <Sparkles size={20} className="text-purple-400" /> AI 配置助手
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowAiAssistant(false);
+                                    setAiQuery('');
+                                    setAiResponse('');
+                                }}
+                                className="p-2 hover:bg-white/10 rounded-lg text-slate-400"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">
+                                    描述您想要的效果
+                                </label>
+                                <textarea
+                                    value={aiQuery}
+                                    onChange={(e) => setAiQuery(e.target.value)}
+                                    placeholder="例如：我想生成一个8秒的视频，包含人物，高清画质..."
+                                    className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 outline-none focus:border-purple-500 h-20 resize-none"
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleAiAssist}
+                                disabled={aiLoading || !aiQuery.trim()}
+                                className="w-full py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-medium shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                            >
+                                {aiLoading ? (
+                                    <>
+                                        <Loader2 size={16} className="animate-spin" />
+                                        AI 正在分析...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Wand2 size={16} />
+                                        获取推荐配置
+                                    </>
+                                )}
+                            </button>
+
+                            {aiResponse && (
+                                <div className="space-y-3">
+                                    <label className="block text-sm font-medium text-slate-300">
+                                        AI 推荐参数
+                                    </label>
+                                    <div className="bg-black/30 border border-green-500/30 rounded-lg p-3 max-h-40 overflow-y-auto">
+                                        <pre className="text-xs text-green-400 font-mono whitespace-pre-wrap">
+                                            {aiResponse}
+                                        </pre>
+                                    </div>
+                                    <button
+                                        onClick={applyAiSuggestion}
+                                        className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium flex items-center justify-center gap-2 transition-colors"
+                                    >
+                                        <CheckCircle2 size={16} />
+                                        应用到自定义参数
+                                    </button>
+                                </div>
+                            )}
+
+                            <p className="text-xs text-slate-500 text-center">
+                                AI 助手将根据您的需求推荐最佳 API 参数配置
+                            </p>
                         </div>
                     </div>
                 </div>
