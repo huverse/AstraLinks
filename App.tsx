@@ -242,7 +242,7 @@ const App: React.FC = () => {
   const [isProfileOpen, setIsProfileOpen] = useState(false);
 
   // Auth Context
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, token, isAuthenticated, logout } = useAuth();
 
   // Selection / Share State
   const [selectionMode, setSelectionMode] = useState(false);
@@ -2073,7 +2073,7 @@ const App: React.FC = () => {
       <ProfileCenter
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
-        token={localStorage.getItem('galaxyous_token')}
+        token={token}
       />
 
     </div>
