@@ -1,7 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-// API base URL - in production, this should be your server URL
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+// API base URL - detect production by hostname
+const getApiBase = () => {
+    // Check for environment variable first
+    if (import.meta.env.VITE_API_BASE) {
+        return import.meta.env.VITE_API_BASE;
+    }
+    // In production (astralinks.xyz), use same origin
+    if (typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz') {
+        return 'https://astralinks.xyz';
+    }
+    // Development fallback
+    return 'http://localhost:3001';
+};
+const API_BASE = getApiBase();
 
 interface User {
     id: number;

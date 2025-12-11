@@ -39,7 +39,12 @@ interface ProfileCenterProps {
     token: string | null;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+const getApiBase = () => {
+    if (import.meta.env.VITE_API_BASE) return import.meta.env.VITE_API_BASE;
+    if (typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz') return 'https://astralinks.xyz';
+    return 'http://localhost:3001';
+};
+const API_BASE = getApiBase();
 
 export default function ProfileCenter({ isOpen, onClose, token }: ProfileCenterProps) {
     const [profile, setProfile] = useState<ProfileData | null>(null);
@@ -353,8 +358,8 @@ export default function ProfileCenter({ isOpen, onClose, token }: ProfileCenterP
                                             <div
                                                 key={code.code}
                                                 className={`flex items-center justify-between p-3 rounded-lg border ${code.is_used
-                                                        ? 'bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600'
-                                                        : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+                                                    ? 'bg-gray-50 dark:bg-slate-700 border-gray-200 dark:border-slate-600'
+                                                    : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
                                                     }`}
                                             >
                                                 <div>

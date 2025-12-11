@@ -24,7 +24,12 @@ export const USE_BACKEND_PROXY = true;
  * Backend API base URL. In production, this should be your server domain.
  * For development, use localhost.
  */
-export const PROXY_API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3001';
+const getProxyApiBase = () => {
+    if (import.meta.env.VITE_API_BASE) return import.meta.env.VITE_API_BASE;
+    if (typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz') return 'https://astralinks.xyz';
+    return 'http://localhost:3001';
+};
+export const PROXY_API_BASE = getProxyApiBase();
 
 /**
  * Call Gemini API through backend proxy
