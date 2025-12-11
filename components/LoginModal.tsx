@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
-import { X, User, Mail, Lock, Key, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { X, User, Mail, Lock, Key, Loader2, AlertCircle, CheckCircle, FileText, Shield, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { API_BASE } from '../utils/api';
 
 interface LoginModalProps {
     isOpen: boolean;
@@ -28,6 +29,12 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     const [resetUserId, setResetUserId] = useState<number | null>(null);
     const [resetUsername, setResetUsername] = useState('');
 
+    // Terms and Privacy Agreement
+    const [agreedToTerms, setAgreedToTerms] = useState(false);
+    const [showPolicyModal, setShowPolicyModal] = useState<'terms' | 'privacy' | null>(null);
+    const [policyContent, setPolicyContent] = useState<{ title: string, content: string } | null>(null);
+    const [loadingPolicy, setLoadingPolicy] = useState(false);
+
     const resetForm = () => {
         setUsername('');
         setEmail('');
@@ -38,11 +45,47 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         setSuccess(null);
         setResetUserId(null);
         setResetUsername('');
+        setAgreedToTerms(false);
     };
 
     const handleModeSwitch = (newMode: ModalMode) => {
         resetForm();
         setMode(newMode);
+    };
+
+    // Fetch policy content from announcements
+    const fetchPolicyContent = async (type: 'terms' | 'privacy') => {
+        setLoadingPolicy(true);
+        setShowPolicyModal(type);
+        try {
+            const res = await fetch(`${API_BASE}/api/announcements/public`);
+            if (res.ok) {
+                const data = await res.json();
+                const policy = data.announcements?.find((a: any) =>
+                    a.content_type === type
+                );
+                if (policy) {
+                    setPolicyContent({
+                        title: type === 'terms' ? '用户协议' : '隐私政策',
+                        content: policy.content
+                    });
+                } else {
+                    setPolicyContent({
+                        title: type === 'terms' ? '用户协议' : '隐私政策',
+                        content: type === 'terms'
+                            ? '欢迎使用本平台。使用本服务即表示您同意遵守我们的服务条款。我们保留随时更新条款的权利。'
+                            : '我们重视您的隐私。我们收集的信息仅用于提供和改进服务。我们不会出售您的个人信息。'
+                    });
+                }
+            }
+        } catch (e) {
+            setPolicyContent({
+                title: type === 'terms' ? '用户协议' : '隐私政策',
+                content: '加载失败，请稍后重试。'
+            });
+        } finally {
+            setLoadingPolicy(false);
+        }
     };
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -87,6 +130,11 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
         if (!invitationCode) {
             setError('请输入邀请码');
+            return;
+        }
+
+        if (!agreedToTerms) {
+            setError('请先阅读并同意用户协议和隐私政策');
             return;
         }
 
@@ -262,25 +310,35 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
                     {/* Terms and Privacy Agreement (Register only) */}
                     {mode === 'register' && (
-                        <div className="text-xs text-slate-500 dark:text-slate-400 text-center leading-relaxed">
-                            注册即表示您同意我们的
-                            <a
-                                href="/terms"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:underline mx-1"
+                        <div className="flex items-start gap-3 p-3 bg-slate-100 dark:bg-slate-800/50 rounded-xl">
+                            <button
+                                type="button"
+                                onClick={() => setAgreedToTerms(!agreedToTerms)}
+                                className={`w-5 h-5 rounded flex items-center justify-center shrink-0 mt-0.5 transition-all ${agreedToTerms
+                                        ? 'bg-blue-500 text-white'
+                                        : 'bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600'
+                                    }`}
                             >
-                                用户协议
-                            </a>
-                            和
-                            <a
-                                href="/privacy"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="text-blue-500 hover:underline mx-1"
-                            >
-                                隐私政策
-                            </a>
+                                {agreedToTerms && <Check size={14} />}
+                            </button>
+                            <div className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                                我已阅读并同意
+                                <button
+                                    type="button"
+                                    onClick={() => fetchPolicyContent('terms')}
+                                    className="text-blue-500 hover:underline mx-1 font-medium"
+                                >
+                                    《用户协议》
+                                </button>
+                                和
+                                <button
+                                    type="button"
+                                    onClick={() => fetchPolicyContent('privacy')}
+                                    className="text-blue-500 hover:underline mx-1 font-medium"
+                                >
+                                    《隐私政策》
+                                </button>
+                            </div>
                         </div>
                     )}
 
@@ -356,6 +414,52 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     )}
                 </form>
             </div>
+
+            {/* Policy Modal */}
+            {showPolicyModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-lg max-h-[80vh] overflow-hidden shadow-2xl">
+                        <div className="px-6 py-4 border-b border-slate-200 dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-blue-500 to-indigo-600">
+                            <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                {showPolicyModal === 'terms' ? <FileText size={20} /> : <Shield size={20} />}
+                                {policyContent?.title || (showPolicyModal === 'terms' ? '用户协议' : '隐私政策')}
+                            </h3>
+                            <button
+                                onClick={() => {
+                                    setShowPolicyModal(null);
+                                    setPolicyContent(null);
+                                }}
+                                className="p-1.5 hover:bg-white/20 rounded-lg text-white/80 hover:text-white transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+                        <div className="p-6 max-h-[60vh] overflow-y-auto">
+                            {loadingPolicy ? (
+                                <div className="flex items-center justify-center py-10">
+                                    <Loader2 className="animate-spin text-blue-500" size={32} />
+                                </div>
+                            ) : (
+                                <div 
+                                    className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 leading-relaxed"
+                                    dangerouslySetInnerHTML={{ __html: policyContent?.content?.replace(/\n/g, '<br/>') || '' }}
+                                />
+                            )}
+                        </div>
+                        <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                            <button
+                                onClick={() => {
+                                    setShowPolicyModal(null);
+                                    setPolicyContent(null);
+                                }}
+                                className="w-full py-2.5 bg-blue-500 hover:bg-blue-600 text-white rounded-xl font-medium transition-colors"
+                            >
+                                我已阅读
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

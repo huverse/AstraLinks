@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Megaphone, FileText, Shield, AlertTriangle, Info, ChevronRight, ExternalLink } from 'lucide-react';
+import { X, Megaphone, FileText, Shield, AlertTriangle, ChevronRight, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE } from '../utils/api';
 
@@ -17,16 +17,34 @@ interface AnnouncementBannerProps {
     onClose: () => void;
 }
 
+const DISMISS_KEY = 'announcement_dismissed_until';
+
 export default function AnnouncementBanner({ isOpen, onClose }: AnnouncementBannerProps) {
     const { isAuthenticated, token } = useAuth();
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(true);
     const [showFullContent, setShowFullContent] = useState(false);
+    const [dontShowToday, setDontShowToday] = useState(false);
+
+    // Check if should show based on dismiss setting
+    const shouldShow = () => {
+        const dismissedUntil = localStorage.getItem(DISMISS_KEY);
+        if (dismissedUntil) {
+            const until = parseInt(dismissedUntil, 10);
+            if (Date.now() < until) {
+                return false;
+            }
+        }
+        return true;
+    };
 
     useEffect(() => {
-        if (isOpen) {
+        if (isOpen && shouldShow()) {
             fetchAnnouncements();
+        } else if (isOpen && !shouldShow()) {
+            // Auto-close if dismissed
+            onClose();
         }
     }, [isOpen, isAuthenticated]);
 
@@ -42,10 +60,16 @@ export default function AnnouncementBanner({ isOpen, onClose }: AnnouncementBann
                 headers['Authorization'] = `Bearer ${token}`;
             }
 
+            console.log('[Announcement] Fetching from:', endpoint);
             const res = await fetch(endpoint, { headers });
             if (res.ok) {
                 const data = await res.json();
-                setAnnouncements(data.announcements || []);
+                console.log('[Announcement] Received:', data);
+                // Filter out terms and privacy from regular announcements
+                const filtered = (data.announcements || []).filter((a: Announcement) =>
+                    a.content_type !== 'terms' && a.content_type !== 'privacy'
+                );
+                setAnnouncements(filtered);
             }
         } catch (error) {
             console.error('Failed to fetch announcements:', error);
@@ -67,6 +91,15 @@ export default function AnnouncementBanner({ isOpen, onClose }: AnnouncementBann
         }
     };
 
+    const handleDismiss = () => {
+        if (dontShowToday) {
+            // Set dismiss until 24 hours from now
+            const until = Date.now() + 24 * 60 * 60 * 1000;
+            localStorage.setItem(DISMISS_KEY, until.toString());
+        }
+        onClose();
+    };
+
     const handleNext = async () => {
         const current = announcements[currentIndex];
         if (current && isAuthenticated) {
@@ -77,7 +110,7 @@ export default function AnnouncementBanner({ isOpen, onClose }: AnnouncementBann
             setCurrentIndex(prev => prev + 1);
             setShowFullContent(false);
         } else {
-            onClose();
+            handleDismiss();
         }
     };
 
@@ -91,10 +124,10 @@ export default function AnnouncementBanner({ isOpen, onClose }: AnnouncementBann
         if (current && isAuthenticated) {
             await markAsRead(current.id);
         }
-        onClose();
+        handleDismiss();
     };
 
-    if (!isOpen || loading || announcements.length === 0) return null;
+    if (!isOpen || loading || announcements.length === 0 || !shouldShow()) return null;
 
     const current = announcements[currentIndex];
 
@@ -171,29 +204,35 @@ export default function AnnouncementBanner({ isOpen, onClose }: AnnouncementBann
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 flex items-center justify-between bg-slate-50 dark:bg-slate-800/50">
-                    <div className="text-sm text-slate-500">
-                        {announcements.length > 1 && (
-                            <span>{currentIndex + 1} / {announcements.length}</span>
-                        )}
-                    </div>
-                    <div className="flex gap-3">
-                        {current.content_type === 'terms' || current.content_type === 'privacy' ? (
-                            <a
-                                href={current.content_type === 'terms' ? '/terms' : '/privacy'}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="px-4 py-2 text-sm text-slate-600 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 flex items-center gap-1"
+                <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            {/* Don't show today checkbox */}
+                            <button
+                                type="button"
+                                onClick={() => setDontShowToday(!dontShowToday)}
+                                className={`w-5 h-5 rounded flex items-center justify-center shrink-0 transition-all ${dontShowToday
+                                        ? 'bg-blue-500 text-white'
+                                        : 'bg-white dark:bg-slate-700 border-2 border-slate-300 dark:border-slate-600'
+                                    }`}
                             >
-                                查看完整版本 <ExternalLink size={14} />
-                            </a>
-                        ) : null}
-                        <button
-                            onClick={handleNext}
-                            className="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-medium shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30 transition-all active:scale-95"
-                        >
-                            {currentIndex < announcements.length - 1 ? '下一条' : '我知道了'}
-                        </button>
+                                {dontShowToday && <Check size={14} />}
+                            </button>
+                            <span className="text-xs text-slate-500 dark:text-slate-400">
+                                一天内不再显示
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {announcements.length > 1 && (
+                                <span className="text-sm text-slate-500">{currentIndex + 1} / {announcements.length}</span>
+                            )}
+                            <button
+                                onClick={handleNext}
+                                className="px-6 py-2.5 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl font-medium shadow-lg shadow-blue-500/20 hover:shadow-xl hover:shadow-blue-500/30 transition-all active:scale-95"
+                            >
+                                {currentIndex < announcements.length - 1 ? '下一条' : '我知道了'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
