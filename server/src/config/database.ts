@@ -304,6 +304,7 @@ export async function initDatabase(): Promise<void> {
         is_active BOOLEAN DEFAULT TRUE,
         download_count INT DEFAULT 0,
         created_by INT,
+        template_type VARCHAR(50) DEFAULT 'participant',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX idx_tier (tier_required),
@@ -311,6 +312,18 @@ export async function initDatabase(): Promise<void> {
         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
+
+    // Add template_type column if it doesn't exist (for existing deployments)
+    try {
+      await connection.execute(`
+        ALTER TABLE config_templates ADD COLUMN template_type VARCHAR(50) DEFAULT 'participant'
+      `);
+    } catch (e: any) {
+      // Column may already exist
+      if (!e.message.includes('Duplicate column')) {
+        console.log('template_type column may already exist');
+      }
+    }
 
     // Model tiers table (defines which models belong to which tier)
     await connection.execute(`
