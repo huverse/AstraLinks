@@ -5,7 +5,8 @@ const router = Router();
 
 /**
  * Normalize Gemini API base URL
- * Ensures the URL ends with /v1beta for proper API routing
+ * - For Google's official domain: ensures /v1beta suffix
+ * - For third-party/custom URLs: uses as-is (they may have their own API structure)
  */
 const normalizeGeminiUrl = (url?: string): string => {
     const defaultUrl = 'https://generativelanguage.googleapis.com/v1beta';
@@ -13,23 +14,23 @@ const normalizeGeminiUrl = (url?: string): string => {
 
     let cleanUrl = url.trim().replace(/\/+$/, '');
 
-    // If user provided just the domain, add /v1beta
-    if (cleanUrl.match(/^https?:\/\/[^\/]+$/)) {
-        return `${cleanUrl}/v1beta`;
+    // Check if this is Google's official domain
+    const isGoogleDomain = cleanUrl.includes('googleapis.com') || cleanUrl.includes('google.com');
+
+    if (isGoogleDomain) {
+        // For Google's domain, ensure /v1beta is present
+        if (cleanUrl.match(/^https?:\/\/[^\/]+$/)) {
+            return `${cleanUrl}/v1beta`;
+        }
+        if (!cleanUrl.match(/\/v1(beta)?$/)) {
+            return `${cleanUrl}/v1beta`;
+        }
     }
 
-    // If URL ends with /v1 or /v1beta, use as-is
-    if (cleanUrl.match(/\/v1(beta)?$/)) {
-        return cleanUrl;
-    }
-
-    // Otherwise append /v1beta if it looks like a base URL (no path after domain)
-    if (!cleanUrl.includes('/v1')) {
-        return `${cleanUrl}/v1beta`;
-    }
-
+    // For third-party URLs, use as-is (they have their own API structure)
     return cleanUrl;
 };
+
 
 /**
  * POST /api/proxy/gemini
