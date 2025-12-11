@@ -697,32 +697,70 @@ export const validateConnection = async (config: ParticipantConfig, provider: Pr
     if (!config.apiKey) throw new Error("API Key Missing");
     try {
         if (provider === ProviderType.GEMINI) {
-            const options = sanitizeOptions(config.apiKey, config.baseUrl);
-            const ai = new GoogleGenAI(options);
-            await ai.models.generateContent({
-                model: config.modelName || 'gemini-2.5-flash',
-                contents: { parts: [{ text: 'Ping' }] },
-                config: { maxOutputTokens: 1 }
-            });
+            // Use proxy for Gemini to work in China
+            if (USE_BACKEND_PROXY) {
+                const response = await fetch(`${PROXY_API_BASE}/api/proxy/gemini`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        apiKey: config.apiKey,
+                        model: config.modelName || 'gemini-2.5-flash',
+                        contents: [{ parts: [{ text: 'Ping' }] }],
+                        config: { maxOutputTokens: 1 },
+                        baseUrl: config.baseUrl
+                    })
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    throw new Error(error.details?.error?.message || error.error || `HTTP ${response.status}`);
+                }
+            } else {
+                const options = sanitizeOptions(config.apiKey, config.baseUrl);
+                const ai = new GoogleGenAI(options);
+                await ai.models.generateContent({
+                    model: config.modelName || 'gemini-2.5-flash',
+                    contents: { parts: [{ text: 'Ping' }] },
+                    config: { maxOutputTokens: 1 }
+                });
+            }
         } else {
-            const base = normalizeOpenAIUrl(config.baseUrl);
-            const url = `${base}/chat/completions`;
-            const payload = {
-                model: config.modelName || 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: 'Ping' }],
-                max_tokens: 1
-            };
-            const res = await fetchWithRetry(url, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${config.apiKey}`
-                },
-                body: JSON.stringify(payload)
-            });
-            if (!res.ok) {
-                const errText = await res.text();
-                throw new Error(`HTTP ${res.status}: ${errText}`);
+            // OpenAI - also use proxy if enabled
+            if (USE_BACKEND_PROXY) {
+                const response = await fetch(`${PROXY_API_BASE}/api/proxy/openai`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        apiKey: config.apiKey,
+                        baseUrl: config.baseUrl,
+                        model: config.modelName || 'gpt-3.5-turbo',
+                        messages: [{ role: 'user', content: 'Ping' }],
+                        maxTokens: 1
+                    })
+                });
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+                    throw new Error(error.details?.error?.message || error.error || `HTTP ${response.status}`);
+                }
+            } else {
+                const base = normalizeOpenAIUrl(config.baseUrl);
+                const url = `${base}/chat/completions`;
+                const payload = {
+                    model: config.modelName || 'gpt-3.5-turbo',
+                    messages: [{ role: 'user', content: 'Ping' }],
+                    max_tokens: 1
+                };
+                const res = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${config.apiKey}`
+                    },
+                    body: JSON.stringify(payload)
+                });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${errText}`);
+                }
             }
         }
     } catch (e: any) { throw new Error(formatErrorMessage(e)); }
