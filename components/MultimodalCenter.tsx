@@ -260,21 +260,29 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
 
         try {
             const apiKey = globalConfig.apiKey;
-            const baseUrl = globalConfig.baseUrl || 'https://generativelanguage.googleapis.com';
+            const baseUrl = globalConfig.baseUrl || '';
             const model = 'gemini-2.0-flash-lite';
 
-            const url = `${baseUrl}/v1beta/models/${model}:generateContent?key=${apiKey}`;
+            // Use backend proxy for China network compatibility
+            const API_BASE = (import.meta as any).env?.VITE_PROXY_API_BASE || 'http://localhost:3001';
+            const proxyUrl = `${API_BASE}/api/proxy/gemini`;
 
-            const res = await fetch(url, {
+            const res = await fetch(proxyUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
+                    apiKey,
+                    baseUrl,
+                    model,
                     contents: [{ parts: [{ text: `${systemPrompt}\n\n用户需求: ${aiQuery}` }] }],
                     generationConfig: { temperature: 0.3, maxOutputTokens: 500 }
                 })
             });
 
-            if (!res.ok) throw new Error('AI 请求失败');
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                throw new Error(errData.error || 'AI 请求失败');
+            }
 
             const data = await res.json();
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
@@ -815,6 +823,22 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                                     className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-green-500"
                                                 />
                                             </div>
+                                            <div>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Layers size={12} /> 生成数量</label>
+                                                    <span className="text-xs font-mono bg-white/10 px-2 rounded text-blue-300">{currentTab.sampleCount}张</span>
+                                                </div>
+                                                <input
+                                                    type="range" min="1" max="4" step="1"
+                                                    value={currentTab.sampleCount}
+                                                    onChange={(e) => updateTab(activeTab as any, { sampleCount: parseInt(e.target.value) })}
+                                                    className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                                                />
+                                                <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                                                    <span>1张</span>
+                                                    <span>4张</span>
+                                                </div>
+                                            </div>
                                         </div>
                                         <div>
                                             <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2"><Shield size={12} /> 负面提示词 (Avoid)</label>
@@ -829,17 +853,47 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                 )}
 
                                 {activeTab === 'VIDEO' && (
-                                    <div className="grid grid-cols-1 md:grid-cols-1 gap-6">
+                                    <div className="space-y-6">
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">分辨率 (Resolution)</label>
+                                                <select
+                                                    value={currentTab.resolution}
+                                                    onChange={(e) => updateTab(activeTab as any, { resolution: e.target.value })}
+                                                    className="w-full bg-[#1c1c1e] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
+                                                >
+                                                    <option value="720p" className="bg-[#1c1c1e] text-white">720p (HD)</option>
+                                                    <option value="1080p" className="bg-[#1c1c1e] text-white">1080p (FHD)</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <div className="flex justify-between items-center mb-2">
+                                                    <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2"><Film size={12} /> 帧率 (FPS)</label>
+                                                    <span className="text-xs font-mono bg-white/10 px-2 rounded text-blue-300">{currentTab.fps}</span>
+                                                </div>
+                                                <input
+                                                    type="range" min="12" max="30" step="1"
+                                                    value={currentTab.fps}
+                                                    onChange={(e) => updateTab(activeTab as any, { fps: parseInt(e.target.value) })}
+                                                    className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                                />
+                                            </div>
+                                        </div>
                                         <div>
-                                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 flex items-center gap-2">分辨率 (Resolution)</label>
-                                            <select
-                                                value={currentTab.resolution}
-                                                onChange={(e) => updateTab(activeTab as any, { resolution: e.target.value })}
-                                                className="w-full bg-[#1c1c1e] border border-white/10 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-blue-500"
-                                            >
-                                                <option value="720p" className="bg-[#1c1c1e] text-white">720p (HD)</option>
-                                                <option value="1080p" className="bg-[#1c1c1e] text-white">1080p (FHD)</option>
-                                            </select>
+                                            <div className="flex justify-between items-center mb-2">
+                                                <label className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2"><Video size={12} /> 视频时长 (Duration)</label>
+                                                <span className="text-xs font-mono bg-amber-500/20 px-2 rounded text-amber-300">{currentTab.durationSeconds}秒</span>
+                                            </div>
+                                            <input
+                                                type="range" min="4" max="8" step="1"
+                                                value={currentTab.durationSeconds}
+                                                onChange={(e) => updateTab(activeTab as any, { durationSeconds: parseInt(e.target.value) })}
+                                                className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-amber-500"
+                                            />
+                                            <div className="flex justify-between text-[10px] text-slate-500 mt-1">
+                                                <span>4秒</span>
+                                                <span>8秒</span>
+                                            </div>
                                         </div>
                                     </div>
                                 )}
