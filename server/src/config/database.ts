@@ -439,10 +439,10 @@ export async function initDatabase(): Promise<void> {
     // Seed split invitation settings
     try {
       await connection.execute(`
-        INSERT IGNORE INTO site_settings (\`key\`, value, description)
+        INSERT IGNORE INTO site_settings (setting_key, setting_value)
         VALUES 
-          ('split_invitation_enabled', 'false', '是否启用分裂邀请码系统'),
-          ('split_invitation_code_limit', '2', '每个用户可生成的分裂邀请码数量')
+          ('split_invitation_enabled', 'false'),
+          ('split_invitation_code_limit', '2')
       `);
     } catch (e) {
       // Settings may already exist

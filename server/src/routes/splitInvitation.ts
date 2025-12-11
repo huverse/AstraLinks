@@ -27,10 +27,10 @@ const generateSplitCode = (): string => {
 router.get('/enabled', async (req: Request, res: Response) => {
     try {
         const [rows] = await pool.execute<RowDataPacket[]>(
-            'SELECT value FROM site_settings WHERE `key` = ?',
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
             ['split_invitation_enabled']
         );
-        const enabled = rows[0]?.value === 'true';
+        const enabled = rows[0]?.setting_value === 'true';
         res.json({ enabled });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -58,10 +58,10 @@ router.get('/my-codes', authMiddleware, async (req: Request, res: Response) => {
 
         // Get code limit from settings
         const [settings] = await pool.execute<RowDataPacket[]>(
-            'SELECT value FROM site_settings WHERE `key` = ?',
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
             ['split_invitation_code_limit']
         );
-        const limit = parseInt(settings[0]?.value || '2');
+        const limit = parseInt(settings[0]?.setting_value || '2');
 
         // Get codes created by this user
         const [codes] = await pool.execute<RowDataPacket[]>(
@@ -95,10 +95,10 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
 
         // Check if system is enabled
         const [enabledSetting] = await pool.execute<RowDataPacket[]>(
-            'SELECT value FROM site_settings WHERE `key` = ?',
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
             ['split_invitation_enabled']
         );
-        if (enabledSetting[0]?.value !== 'true') {
+        if (enabledSetting[0]?.setting_value !== 'true') {
             res.status(400).json({ error: '分裂邀请系统未启用' });
             return;
         }
@@ -126,10 +126,10 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
 
         // Get code limit
         const [settings] = await pool.execute<RowDataPacket[]>(
-            'SELECT value FROM site_settings WHERE `key` = ?',
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
             ['split_invitation_code_limit']
         );
-        const limit = parseInt(settings[0]?.value || '2');
+        const limit = parseInt(settings[0]?.setting_value || '2');
 
         if (users[0].split_codes_generated >= limit) {
             res.status(400).json({ error: `您已达到邀请码生成上限 (${limit} 个)` });
@@ -219,7 +219,7 @@ router.post('/validate/:code', async (req: Request, res: Response) => {
 router.get('/admin/stats', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
     try {
         const [enabledSetting] = await pool.execute<RowDataPacket[]>(
-            'SELECT value FROM site_settings WHERE `key` = ?',
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
             ['split_invitation_enabled']
         );
 
@@ -240,7 +240,7 @@ router.get('/admin/stats', authMiddleware, adminMiddleware, async (req: Request,
         );
 
         res.json({
-            enabled: enabledSetting[0]?.value === 'true',
+            enabled: enabledSetting[0]?.setting_value === 'true',
             totalTrees: treeCount[0].count,
             bannedTrees: bannedTreeCount[0].count,
             totalCodes: codeCount[0].total || 0,
@@ -528,7 +528,7 @@ router.put('/admin/toggle', authMiddleware, adminMiddleware, async (req: Request
         const { enabled } = req.body;
 
         await pool.execute(
-            'UPDATE site_settings SET value = ? WHERE `key` = ?',
+            'UPDATE site_settings SET setting_value = ? WHERE setting_key = ?',
             [enabled ? 'true' : 'false', 'split_invitation_enabled']
         );
 
@@ -548,7 +548,7 @@ router.put('/admin/settings', authMiddleware, adminMiddleware, async (req: Reque
 
         if (code_limit !== undefined) {
             await pool.execute(
-                'UPDATE site_settings SET value = ? WHERE `key` = ?',
+                'UPDATE site_settings SET setting_value = ? WHERE setting_key = ?',
                 [String(code_limit), 'split_invitation_code_limit']
             );
         }
