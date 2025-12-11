@@ -354,7 +354,7 @@ export async function initDatabase(): Promise<void> {
       CREATE TABLE IF NOT EXISTS split_invitation_trees (
         id VARCHAR(36) PRIMARY KEY,
         root_code_id INT,
-        created_by_admin_id INT NOT NULL,
+        created_by_admin_id INT,
         is_banned BOOLEAN DEFAULT FALSE,
         banned_reason TEXT,
         banned_at TIMESTAMP NULL,
