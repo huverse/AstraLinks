@@ -23,6 +23,7 @@ interface Stats {
     totalCodes: number;
     usedCodes: number;
     usersInSystem: number;
+    codeLimit: number;
 }
 
 interface CooldownInfo {
@@ -53,6 +54,9 @@ export default function SplitInvitations() {
             setStats(statsRes);
             setTrees(treesRes);
             setCooldown(cooldownRes);
+            if (statsRes?.codeLimit) {
+                setCodeLimit(statsRes.codeLimit);
+            }
         } catch (error) {
             console.error('Failed to load data:', error);
         } finally {

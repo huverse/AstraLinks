@@ -2073,6 +2073,7 @@ const App: React.FC = () => {
       <ProfileCenter
         isOpen={isProfileOpen}
         onClose={() => setIsProfileOpen(false)}
+        onLogout={logout}
         token={token}
       />
 

@@ -139,14 +139,24 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
         // Generate unique code
         let code = generateSplitCode();
         let attempts = 0;
+        let codeIsUnique = false;
         while (attempts < 10) {
             const [existing] = await pool.execute<RowDataPacket[]>(
                 'SELECT id FROM split_invitation_codes WHERE code = ?',
                 [code]
             );
-            if (!existing.length) break;
+            if (!existing.length) {
+                codeIsUnique = true;
+                break;
+            }
             code = generateSplitCode();
             attempts++;
+        }
+
+        // Final check - if we couldn't generate a unique code after 10 attempts
+        if (!codeIsUnique) {
+            res.status(500).json({ error: '生成邀请码失败，请稍后重试' });
+            return;
         }
 
         // Insert code
@@ -239,13 +249,19 @@ router.get('/admin/stats', authMiddleware, adminMiddleware, async (req: Request,
             'SELECT COUNT(*) as count FROM split_invitation_trees WHERE is_banned = TRUE'
         );
 
+        const [codeLimitSetting] = await pool.execute<RowDataPacket[]>(
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+            ['split_invitation_code_limit']
+        );
+
         res.json({
             enabled: enabledSetting[0]?.setting_value === 'true',
             totalTrees: treeCount[0].count,
             bannedTrees: bannedTreeCount[0].count,
             totalCodes: codeCount[0].total || 0,
             usedCodes: codeCount[0].used || 0,
-            usersInSystem: userCount[0].count
+            usersInSystem: userCount[0].count,
+            codeLimit: parseInt(codeLimitSetting[0]?.setting_value || '2')
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
@@ -366,14 +382,26 @@ router.post('/admin/create-root', authMiddleware, adminMiddleware, async (req: R
         // Generate root code
         let code = generateSplitCode();
         let attempts = 0;
+        let codeIsUnique = false;
         while (attempts < 10) {
             const [existing] = await pool.execute<RowDataPacket[]>(
                 'SELECT id FROM split_invitation_codes WHERE code = ?',
                 [code]
             );
-            if (!existing.length) break;
+            if (!existing.length) {
+                codeIsUnique = true;
+                break;
+            }
             code = generateSplitCode();
             attempts++;
+        }
+
+        // Final check - if we couldn't generate a unique code after 10 attempts
+        if (!codeIsUnique) {
+            // Rollback tree creation
+            await pool.execute('DELETE FROM split_invitation_trees WHERE id = ?', [treeId]);
+            res.status(500).json({ error: '生成邀请码失败，请稍后重试' });
+            return;
         }
 
         // Insert root code (no creator_user_id since it's admin-created)

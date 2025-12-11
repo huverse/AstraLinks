@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { User, Crown, Star, Shield, Copy, Check, Phone, MessageCircle, Zap, Link2, X, ChevronRight, RefreshCw, Plus } from 'lucide-react';
+import { User, Crown, Star, Shield, Copy, Check, Phone, MessageCircle, Zap, Link2, X, ChevronRight, RefreshCw, Plus, LogOut } from 'lucide-react';
+import { API_BASE } from '../utils/api';
 
 interface ProfileData {
     id: number;
@@ -36,17 +37,11 @@ interface SplitCodeData {
 interface ProfileCenterProps {
     isOpen: boolean;
     onClose: () => void;
+    onLogout: () => void;
     token: string | null;
 }
 
-const getApiBase = () => {
-    if (import.meta.env.VITE_API_BASE) return import.meta.env.VITE_API_BASE;
-    if (typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz') return 'https://astralinks.xyz';
-    return 'http://localhost:3001';
-};
-const API_BASE = getApiBase();
-
-export default function ProfileCenter({ isOpen, onClose, token }: ProfileCenterProps) {
+export default function ProfileCenter({ isOpen, onClose, onLogout, token }: ProfileCenterProps) {
     const [profile, setProfile] = useState<ProfileData | null>(null);
     const [splitCodes, setSplitCodes] = useState<SplitCodeData | null>(null);
     const [loading, setLoading] = useState(true);
@@ -421,13 +416,13 @@ export default function ProfileCenter({ isOpen, onClose, token }: ProfileCenterP
                             <button
                                 onClick={() => {
                                     if (window.confirm('确定要登出吗？')) {
-                                        localStorage.removeItem('galaxyous_token');
                                         onClose();
-                                        window.location.reload();
+                                        onLogout();
                                     }
                                 }}
-                                className="w-full py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors font-medium"
+                                className="w-full py-3 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors font-medium flex items-center justify-center gap-2"
                             >
+                                <LogOut size={18} />
                                 退出登录
                             </button>
                         </div>
