@@ -1,10 +1,12 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Participant, ProviderType, GameMode } from '../types';
-import { X, Save, CheckCircle2, AlertCircle, Cpu, Key, Link2, MessageSquare, Users2, Gavel, BookOpen, MessageCircle, Plus, Trash2, Edit2, Upload, Download, ShieldCheck, ThermometerSun, UserCircle2, Zap, Wifi, Wand2, ImagePlus, BarChart2, Hash, RotateCcw, BrainCircuit, Sparkles, Cloud, CloudUpload } from 'lucide-react';
+import { X, Save, CheckCircle2, AlertCircle, Cpu, Key, Link2, MessageSquare, Users2, Gavel, BookOpen, MessageCircle, Plus, Trash2, Edit2, Upload, Download, ShieldCheck, ThermometerSun, UserCircle2, Zap, Wifi, Wand2, ImagePlus, BarChart2, Hash, RotateCcw, BrainCircuit, Sparkles, Cloud, CloudUpload, Crown, Star, Shield, Infinity } from 'lucide-react';
 import { validateConnection, generatePersonaPrompt } from '../services/aiService';
 import CloudConfigSelector from './CloudConfigSelector';
 import CloudSync from './CloudSync';
+import { useAuth } from '../contexts/AuthContext';
+import { API_BASE } from '../utils/api';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -46,6 +48,26 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   // Ref for hidden file input to handle avatar uploads
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const [avatarTargetId, setAvatarTargetId] = useState<string | null>(null);
+
+  // User tier info for token limit display
+  const { isAuthenticated, token } = useAuth();
+  const [userTierInfo, setUserTierInfo] = useState<{
+    tier: string;
+    monthlyTokenUsage: number;
+    tokenLimit: number;
+  } | null>(null);
+
+  // Fetch user tier info
+  useEffect(() => {
+    if (isOpen && isAuthenticated && token) {
+      fetch(`${API_BASE}/api/config-templates/user-tier`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => data && setUserTierInfo(data))
+        .catch(() => { });
+    }
+  }, [isOpen, isAuthenticated, token]);
 
   if (!isOpen) return null;
 
@@ -294,7 +316,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             {/* Global Stats */}
-            <div className="flex flex-col sm:flex-row gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row gap-4 mb-4">
               <div className="flex-1 p-4 bg-slate-50 dark:bg-black/20 rounded-2xl border border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center text-center">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-1">总消耗 (Total)</span>
                 <span className="text-2xl font-black text-slate-700 dark:text-white">{globalStats.total.toLocaleString()}</span>
@@ -308,6 +330,62 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
                 <span className="text-xl font-bold text-purple-600 dark:text-purple-400">{globalStats.completion.toLocaleString()}</span>
               </div>
             </div>
+
+            {/* Token Limit Progress Bar */}
+            {userTierInfo && (
+              <div className="mb-6 p-4 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800/50 dark:to-slate-900/50 rounded-2xl border border-slate-200 dark:border-slate-700">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    {userTierInfo.tier === 'ultra' ? (
+                      <Crown className="text-amber-500" size={18} />
+                    ) : userTierInfo.tier === 'pro' ? (
+                      <Star className="text-purple-500" size={18} />
+                    ) : (
+                      <Shield className="text-gray-400" size={18} />
+                    )}
+                    <span className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                      {userTierInfo.tier.charAt(0).toUpperCase() + userTierInfo.tier.slice(1)} 配额
+                    </span>
+                  </div>
+                  <div className="text-sm text-slate-500 dark:text-slate-400">
+                    {userTierInfo.tokenLimit === -1 ? (
+                      <span className="flex items-center gap-1 text-amber-500">
+                        <Infinity size={14} /> 无限制
+                      </span>
+                    ) : (
+                      <span>
+                        {userTierInfo.monthlyTokenUsage.toLocaleString()} / {userTierInfo.tokenLimit.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {userTierInfo.tokenLimit !== -1 && (
+                  <>
+                    <div className="h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${(userTierInfo.monthlyTokenUsage / userTierInfo.tokenLimit) > 0.9
+                            ? 'bg-gradient-to-r from-red-500 to-orange-500'
+                            : (userTierInfo.monthlyTokenUsage / userTierInfo.tokenLimit) > 0.7
+                              ? 'bg-gradient-to-r from-amber-500 to-yellow-500'
+                              : 'bg-gradient-to-r from-emerald-500 to-teal-500'
+                          }`}
+                        style={{
+                          width: `${Math.min((userTierInfo.monthlyTokenUsage / userTierInfo.tokenLimit) * 100, 100)}%`
+                        }}
+                      />
+                    </div>
+                    <div className="flex justify-between mt-2 text-xs text-slate-400">
+                      <span>
+                        {((userTierInfo.monthlyTokenUsage / userTierInfo.tokenLimit) * 100).toFixed(1)}% 已使用
+                      </span>
+                      <span>
+                        剩余 {(userTierInfo.tokenLimit - userTierInfo.monthlyTokenUsage).toLocaleString()}
+                      </span>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* Per Model Stats */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
