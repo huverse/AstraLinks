@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { User, Crown, Star, Shield, Copy, Check, Phone, MessageCircle, Zap, Link2, X, ChevronRight, RefreshCw, Plus, LogOut } from 'lucide-react';
+import { User, Crown, Star, Shield, Copy, Check, Phone, MessageCircle, Zap, Link2, X, ChevronRight, RefreshCw, Plus, LogOut, Lock, AlertTriangle } from 'lucide-react';
 import { API_BASE } from '../utils/api';
 
 interface ProfileData {
@@ -465,6 +465,96 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                 </p>
                             </div>
                         )}
+
+                        {/* Password Change Section */}
+                        <div className="space-y-3">
+                            <h3 className="font-semibold text-gray-900 dark:text-white">账户安全</h3>
+                            <button
+                                onClick={() => {
+                                    const oldPassword = prompt('请输入当前密码:');
+                                    if (!oldPassword) return;
+                                    const newPassword = prompt('请输入新密码 (至少6位):');
+                                    if (!newPassword) return;
+                                    if (newPassword.length < 6) {
+                                        alert('新密码长度至少6位');
+                                        return;
+                                    }
+                                    const confirmPassword = prompt('请再次输入新密码:');
+                                    if (newPassword !== confirmPassword) {
+                                        alert('两次输入的密码不一致');
+                                        return;
+                                    }
+                                    fetch(`${API_BASE}/api/auth/change-password`, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                        },
+                                        body: JSON.stringify({ oldPassword, newPassword })
+                                    })
+                                        .then(res => res.json())
+                                        .then(data => {
+                                            if (data.error) {
+                                                alert('❌ ' + data.error);
+                                            } else {
+                                                alert('✅ 密码修改成功');
+                                            }
+                                        })
+                                        .catch(() => alert('❌ 网络错误'));
+                                }}
+                                className="w-full flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700 rounded-lg border border-gray-200 dark:border-slate-600 hover:bg-gray-100 dark:hover:bg-slate-600 transition-colors"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Lock size={20} className="text-blue-500" />
+                                    <div className="text-left">
+                                        <p className="font-medium text-gray-900 dark:text-white">修改密码</p>
+                                        <p className="text-xs text-gray-500">更新您的账户密码</p>
+                                    </div>
+                                </div>
+                                <ChevronRight size={20} className="text-gray-400" />
+                            </button>
+                        </div>
+
+                        {/* Danger Zone - Account Deletion */}
+                        <div className="space-y-3">
+                            <h3 className="font-semibold text-red-500">危险操作</h3>
+                            <button
+                                onClick={() => {
+                                    if (!window.confirm('⚠️ 确定要注销账户吗？\n\n此操作不可撤销，所有数据将被永久删除！')) return;
+                                    const password = prompt('请输入密码以确认注销:');
+                                    if (!password) return;
+                                    fetch(`${API_BASE}/api/auth/delete-account`, {
+                                        method: 'DELETE',
+                                        headers: {
+                                            'Content-Type': 'application/json',
+                                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                        },
+                                        body: JSON.stringify({ password })
+                                    })
+                                        .then(res => res.json())
+                                        .then(data => {
+                                            if (data.error) {
+                                                alert('❌ ' + data.error);
+                                            } else {
+                                                alert('✅ 账户已注销');
+                                                onClose();
+                                                onLogout();
+                                            }
+                                        })
+                                        .catch(() => alert('❌ 网络错误'));
+                                }}
+                                className="w-full flex items-center justify-between p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <AlertTriangle size={20} className="text-red-500" />
+                                    <div className="text-left">
+                                        <p className="font-medium text-red-600 dark:text-red-400">注销账户</p>
+                                        <p className="text-xs text-red-500/70">永久删除您的账户和所有数据</p>
+                                    </div>
+                                </div>
+                                <ChevronRight size={20} className="text-red-400" />
+                            </button>
+                        </div>
 
                         {/* Logout Button */}
                         <div className="pt-4 border-t border-gray-200 dark:border-slate-700">

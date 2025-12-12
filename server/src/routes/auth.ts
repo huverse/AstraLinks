@@ -310,6 +310,101 @@ router.post('/logout', authMiddleware, async (req: AuthenticatedRequest, res: Re
     res.json({ message: '登出成功' });
 });
 
+/**
+ * POST /api/auth/change-password
+ * Change password for authenticated user
+ */
+router.post('/change-password', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { oldPassword, newPassword } = req.body;
+        const userId = req.user?.id;
+
+        if (!oldPassword || !newPassword) {
+            res.status(400).json({ error: '请输入旧密码和新密码' });
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            res.status(400).json({ error: '新密码长度至少6位' });
+            return;
+        }
+
+        // Get current password hash
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT password_hash FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (rows.length === 0) {
+            res.status(404).json({ error: '用户不存在' });
+            return;
+        }
+
+        // Verify old password
+        const isValid = await verifyPassword(oldPassword, rows[0].password_hash);
+        if (!isValid) {
+            res.status(401).json({ error: '旧密码错误' });
+            return;
+        }
+
+        // Hash new password and update
+        const newPasswordHash = await hashPassword(newPassword);
+        await pool.execute(
+            'UPDATE users SET password_hash = ?, needs_password_reset = 0 WHERE id = ?',
+            [newPasswordHash, userId]
+        );
+
+        res.json({ message: '密码修改成功' });
+    } catch (error) {
+        console.error('Change password error:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+/**
+ * DELETE /api/auth/delete-account
+ * Delete account for authenticated user (requires password confirmation)
+ */
+router.delete('/delete-account', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const { password } = req.body;
+        const userId = req.user?.id;
+
+        if (!password) {
+            res.status(400).json({ error: '请输入密码以确认注销' });
+            return;
+        }
+
+        // Get current password hash
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            'SELECT password_hash, username FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (rows.length === 0) {
+            res.status(404).json({ error: '用户不存在' });
+            return;
+        }
+
+        // Verify password
+        const isValid = await verifyPassword(password, rows[0].password_hash);
+        if (!isValid) {
+            res.status(401).json({ error: '密码错误' });
+            return;
+        }
+
+        // Delete user (cascade should handle related data based on DB schema)
+        await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
+
+        console.log(`User ${rows[0].username} (ID: ${userId}) deleted their account`);
+
+        res.json({ message: '账户已注销' });
+    } catch (error) {
+        console.error('Delete account error:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
 // ========== QQ OAuth 2.0 ==========
 
 const QQ_APP_ID = process.env.QQ_APP_ID || '';
