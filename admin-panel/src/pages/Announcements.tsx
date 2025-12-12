@@ -103,6 +103,19 @@ export default function Announcements() {
         setEditingItem(null);
     };
 
+    // Convert UTC ISO string to local datetime-local format (YYYY-MM-DDTHH:mm)
+    const utcToLocalDateTime = (utcString: string | null): string => {
+        if (!utcString) return '';
+        const date = new Date(utcString);
+        // Format as local datetime-local value
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+
     const openEditor = (item?: Announcement) => {
         if (item) {
             setEditingItem(item);
@@ -113,8 +126,8 @@ export default function Announcements() {
                 display_type: item.display_type,
                 priority: item.priority,
                 is_active: item.is_active,
-                start_time: item.start_time ? item.start_time.slice(0, 16) : '',
-                end_time: item.end_time ? item.end_time.slice(0, 16) : '',
+                start_time: utcToLocalDateTime(item.start_time),
+                end_time: utcToLocalDateTime(item.end_time),
                 target_user_ids: item.target_user_ids ? item.target_user_ids.join(', ') : ''
             });
         } else {
