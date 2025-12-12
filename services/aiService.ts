@@ -1517,8 +1517,8 @@ export const generateVideo = async (
             if (operation.error) throw new Error((operation.error as any).message);
 
             // Try multiple paths for URI extraction (API structure may vary)
-            let uri = operation.response?.generatedVideos?.[0]?.video?.uri
-                || operation.response?.videos?.[0]?.uri
+            let uri = (operation.response as any)?.generatedVideos?.[0]?.video?.uri
+                || (operation.response as any)?.videos?.[0]?.uri
                 || (operation as any).generatedVideos?.[0]?.video?.uri
                 || (operation as any).videos?.[0]?.uri;
 
