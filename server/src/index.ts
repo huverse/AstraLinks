@@ -16,7 +16,7 @@ import settingsRoutes from './routes/settings';
 import configTemplatesRoutes from './routes/configTemplates';
 import splitInvitationRoutes from './routes/splitInvitation';
 import profileRoutes from './routes/profile';
-import { initDatabase } from './config/database';
+import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
 import { initGeminiLiveProxy } from './services/geminiLive';
@@ -59,6 +59,7 @@ app.get('/api/health', (req, res) => {
 async function startServer() {
     try {
         await initDatabase();
+        await initTimezone();
         console.log('✅ Database initialized');
 
         // Initialize WebSocket

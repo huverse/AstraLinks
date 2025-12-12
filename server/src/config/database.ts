@@ -13,8 +13,19 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  timezone: '+08:00' // China Standard Time (UTC+8)
+  timezone: 'local' // Use server local timezone
 });
+
+// Initialize timezone on startup
+export async function initTimezone(): Promise<void> {
+  try {
+    // Set session timezone to China Standard Time
+    await pool.execute("SET time_zone = '+08:00'");
+    console.log('✅ MySQL timezone set to +08:00 (CST)');
+  } catch (error) {
+    console.error('Failed to set MySQL timezone:', error);
+  }
+}
 
 // Old WordPress database connection (for sync)
 export const oldDbPool = mysql.createPool({
