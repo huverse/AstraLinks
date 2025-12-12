@@ -130,10 +130,21 @@ export default function Announcements() {
         }
 
         try {
+            // Convert local datetime-local values to ISO format with timezone
+            // datetime-local gives us local time, we need to send it as-is to preserve user intent
+            // The backend should store it directly and compare with server local time
+            const formatDateTime = (dt: string) => {
+                if (!dt) return null;
+                // datetime-local format: "2025-12-03T22:45"
+                // Convert to full ISO with Z suffix is wrong, keep local time
+                // Just append :00 for seconds if needed
+                return dt.includes(':') && dt.split(':').length === 2 ? dt + ':00' : dt;
+            };
+
             const data = {
                 ...form,
-                start_time: form.start_time || null,
-                end_time: form.end_time || null,
+                start_time: formatDateTime(form.start_time),
+                end_time: formatDateTime(form.end_time),
                 target_user_ids: form.target_user_ids
                     ? form.target_user_ids.split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id))
                     : null

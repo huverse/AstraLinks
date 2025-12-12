@@ -59,4 +59,35 @@ router.post('/test-password', async (req: Request, res: Response) => {
     }
 });
 
+// 调试公告查询
+router.get('/announcements', async (req: Request, res: Response) => {
+    try {
+        // 获取服务器当前时间
+        const [timeResult] = await pool.execute<RowDataPacket[]>(
+            'SELECT NOW() as server_now, UTC_TIMESTAMP() as utc_now'
+        );
+
+        // 获取所有公告及其时间条件
+        const [announcements] = await pool.execute<RowDataPacket[]>(
+            `SELECT 
+                id, title, content_type, display_type, priority, is_active,
+                start_time, end_time,
+                (start_time IS NULL OR start_time <= NOW()) as start_ok,
+                (end_time IS NULL OR end_time > NOW()) as end_ok,
+                created_at
+             FROM announcements
+             ORDER BY created_at DESC`
+        );
+
+        res.json({
+            server_time: timeResult[0],
+            announcements_count: (announcements as any[]).length,
+            announcements: announcements
+        });
+    } catch (error: any) {
+        res.json({ error: error.message });
+    }
+});
+
 export default router;
+
