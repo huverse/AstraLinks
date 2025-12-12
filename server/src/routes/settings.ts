@@ -5,24 +5,57 @@ import { RowDataPacket } from 'mysql2';
 
 const router = Router();
 
+// ==================== CACHING ====================
+interface CacheEntry {
+    value: string;
+    timestamp: number;
+}
+
+const cache: Map<string, CacheEntry> = new Map();
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+function getCached(key: string): string | null {
+    const entry = cache.get(key);
+    if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
+        return entry.value;
+    }
+    return null;
+}
+
+function setCache(key: string, value: string): void {
+    cache.set(key, { value, timestamp: Date.now() });
+}
+
+export function clearSettingsCache(): void {
+    cache.clear();
+    console.log('[Settings] Cache cleared');
+}
+
 // ==================== PUBLIC ROUTES (NO AUTH) ====================
 
 /**
  * GET /api/settings/public/terms
- * Get terms of service (public, no auth needed)
+ * Get terms of service (public, no auth needed, cached)
  */
 router.get('/public/terms', async (req: Request, res: Response) => {
     try {
+        // Check cache first
+        const cached = getCached('user_agreement');
+        if (cached !== null) {
+            res.json({ content: cached, cached: true });
+            return;
+        }
+
         const [settings] = await pool.execute<RowDataPacket[]>(
             `SELECT setting_value FROM site_settings WHERE setting_key = 'user_agreement'`
         );
 
-        if (settings.length === 0 || !settings[0].setting_value) {
-            res.json({ content: '暂无用户协议内容。' });
-            return;
-        }
+        const content = settings.length > 0 && settings[0].setting_value
+            ? settings[0].setting_value
+            : '暂无用户协议内容。';
 
-        res.json({ content: settings[0].setting_value });
+        setCache('user_agreement', content);
+        res.json({ content });
     } catch (error: any) {
         console.error('Get terms error:', error);
         res.status(500).json({ error: 'Failed to fetch terms' });
@@ -31,20 +64,27 @@ router.get('/public/terms', async (req: Request, res: Response) => {
 
 /**
  * GET /api/settings/public/privacy
- * Get privacy policy (public, no auth needed)
+ * Get privacy policy (public, no auth needed, cached)
  */
 router.get('/public/privacy', async (req: Request, res: Response) => {
     try {
+        // Check cache first
+        const cached = getCached('privacy_policy');
+        if (cached !== null) {
+            res.json({ content: cached, cached: true });
+            return;
+        }
+
         const [settings] = await pool.execute<RowDataPacket[]>(
             `SELECT setting_value FROM site_settings WHERE setting_key = 'privacy_policy'`
         );
 
-        if (settings.length === 0 || !settings[0].setting_value) {
-            res.json({ content: '暂无隐私政策内容。' });
-            return;
-        }
+        const content = settings.length > 0 && settings[0].setting_value
+            ? settings[0].setting_value
+            : '暂无隐私政策内容。';
 
-        res.json({ content: settings[0].setting_value });
+        setCache('privacy_policy', content);
+        res.json({ content });
     } catch (error: any) {
         console.error('Get privacy error:', error);
         res.status(500).json({ error: 'Failed to fetch privacy policy' });
@@ -106,6 +146,10 @@ router.put('/:key', async (req: Request, res: Response) => {
              ON DUPLICATE KEY UPDATE setting_value = ?, updated_by = ?`,
             [key, value, adminId, value, adminId]
         );
+
+        // Clear cache for this key
+        cache.delete(key);
+        console.log(`[Settings] Cache cleared for key: ${key}`);
 
         res.json({ message: 'Setting updated' });
     } catch (error: any) {

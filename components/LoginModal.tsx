@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, User, Mail, Lock, Key, Loader2, AlertCircle, CheckCircle, FileText, Shield, Check } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE } from '../utils/api';
+import MarkdownRenderer from './MarkdownRenderer';
 
 interface LoginModalProps {
     isOpen: boolean;
@@ -434,9 +435,9 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                     <Loader2 className="animate-spin text-blue-500" size={32} />
                                 </div>
                             ) : (
-                                <div
-                                    className="prose prose-sm dark:prose-invert max-w-none text-slate-700 dark:text-slate-300 leading-relaxed"
-                                    dangerouslySetInnerHTML={{ __html: policyContent?.content?.replace(/\n/g, '<br/>') || '' }}
+                                <MarkdownRenderer
+                                    content={policyContent?.content || ''}
+                                    className="text-slate-700 dark:text-slate-300 leading-relaxed"
                                 />
                             )}
                         </div>
