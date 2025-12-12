@@ -885,14 +885,14 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                                 <span className="text-xs font-mono bg-amber-500/20 px-2 rounded text-amber-300">{currentTab.durationSeconds}秒</span>
                                             </div>
                                             <input
-                                                type="range" min="4" max="8" step="1"
+                                                type="range" min="1" max="25" step="1"
                                                 value={currentTab.durationSeconds}
                                                 onChange={(e) => updateTab(activeTab as any, { durationSeconds: parseInt(e.target.value) })}
                                                 className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-amber-500"
                                             />
                                             <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                                                <span>4秒</span>
-                                                <span>8秒</span>
+                                                <span>1秒</span>
+                                                <span>25秒</span>
                                             </div>
                                         </div>
                                     </div>

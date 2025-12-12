@@ -1411,8 +1411,8 @@ export const generateVideo = async (
             resolution: config?.resolution || '720p'
         };
 
-        // Add durationSeconds if provided and valid (Veo accepts 4-8 seconds)
-        if (config?.durationSeconds && config.durationSeconds >= 4 && config.durationSeconds <= 8) {
+        // Add durationSeconds if provided (let API handle validation)
+        if (config?.durationSeconds && config.durationSeconds > 0) {
             videoConfig.durationSeconds = config.durationSeconds;
         }
 

@@ -160,14 +160,20 @@ export default function Announcements() {
         }
 
         try {
-            // Convert local datetime to UTC ISO format
-            // This ensures consistent storage and retrieval across timezones
+            // Convert local datetime to MySQL TIMESTAMP format
+            // MySQL accepts 'YYYY-MM-DD HH:mm:ss' format
             const formatDateTime = (dt: string) => {
                 if (!dt) return null;
                 // datetime-local format: "2025-12-03T22:45"
-                // Convert to UTC ISO format
+                // Convert to MySQL TIMESTAMP format: "YYYY-MM-DD HH:mm:ss"
                 const localDate = new Date(dt);
-                return localDate.toISOString();
+                const year = localDate.getFullYear();
+                const month = String(localDate.getMonth() + 1).padStart(2, '0');
+                const day = String(localDate.getDate()).padStart(2, '0');
+                const hours = String(localDate.getHours()).padStart(2, '0');
+                const minutes = String(localDate.getMinutes()).padStart(2, '0');
+                const seconds = '00';
+                return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`;
             };
 
             const data = {
