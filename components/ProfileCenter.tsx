@@ -324,8 +324,8 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                             alert('网络错误，请稍后重试');
                                         }
                                     } else {
-                                        // Bind QQ - redirect to OAuth
-                                        window.location.href = `${API_BASE}/api/auth/qq?action=bind`;
+                                        // Bind QQ - redirect to OAuth with token for authentication
+                                        window.location.href = `${API_BASE}/api/auth/qq?action=bind&token=${token}`;
                                     }
                                 }}
                             >

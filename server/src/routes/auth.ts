@@ -328,11 +328,22 @@ setInterval(() => {
 }, 60000);
 
 // Optional auth middleware - validates token if present but doesn't require it
+// Supports both Authorization header and query param 'token' (for redirect scenarios)
 const optionalAuthMiddleware = async (req: Request, res: Response, next: () => void) => {
     const authHeader = req.headers.authorization;
+    const queryToken = req.query.token as string | undefined;
+
+    // Check header first
     if (authHeader && authHeader.startsWith('Bearer ')) {
         return authMiddleware(req as any, res, next as any);
     }
+
+    // Check query param (for redirect scenarios like QQ bind)
+    if (queryToken) {
+        req.headers.authorization = `Bearer ${queryToken}`;
+        return authMiddleware(req as any, res, next as any);
+    }
+
     next();
 };
 
