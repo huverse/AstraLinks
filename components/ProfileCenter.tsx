@@ -338,7 +338,9 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                             {profile.hasQQ ? '解绑QQ' : '绑定QQ'}
                                         </p>
                                         <p className="text-xs text-gray-500">
-                                            {profile.hasQQ ? '已绑定 - 点击解绑' : '未绑定 - 点击绑定'}
+                                            {profile.hasQQ
+                                                ? `已绑定: ${(profile as any).qqNickname || 'QQ用户'} - 点击解绑`
+                                                : '未绑定 - 点击绑定'}
                                         </p>
                                     </div>
                                 </div>

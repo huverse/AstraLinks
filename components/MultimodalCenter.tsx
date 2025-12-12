@@ -44,6 +44,7 @@ interface TabState {
     fps: number;
     durationSeconds: number;
     customParams: string; // JSON string for additional API parameters
+    customParamsEnabled: boolean; // Toggle for custom params
 }
 
 interface HistoryItem {
@@ -74,7 +75,8 @@ const initialTabData: TabState = {
     resolution: '720p',
     fps: 24,
     durationSeconds: 5,
-    customParams: '{}'
+    customParams: '{}',
+    customParamsEnabled: false
 };
 
 const DEFAULT_MODELS = {
@@ -248,15 +250,29 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
         const systemPrompt = `你是一个多模态 AI 配置助手。用户会描述他们想要生成的内容和效果，你需要根据他们的需求推荐最佳的 API 参数配置。
 
 当前用户正在使用的标签: ${activeTab}
-支持的自定义参数包括:
+
+你可以调整以下滑块参数(返回 sliderParams 对象):
+- temperature: 0.0-2.0 (创造性, 默认0.7)
+- guidanceScale: 1-30 (引导强度, 默认7.5)
+- fps: 12-30 (视频帧率, 默认24)
+- durationSeconds: 4-8 (视频时长, 仅VIDEO)
+- seed: 0+ (随机种子, 0=随机)
+
+自定义API参数(返回 customParams 对象):
 - personGeneration: "DONT_ALLOW" | "ALLOW_ADULT" (是否允许生成人物)
 - numberOfImages: 1-4 (生成图片数量)
 - includeRaiReason: true | false (是否包含安全过滤原因)
-- durationSeconds: 4-8 (视频时长，仅限VIDEO)
 - aspectRatio: "1:1" | "16:9" | "9:16" | "4:3" (画面比例)
 - safetyFilterLevel: "BLOCK_NONE" | "BLOCK_LOW_AND_ABOVE" | "BLOCK_MEDIUM_AND_ABOVE"
 
-请根据用户描述，返回一个 JSON 对象，包含推荐的参数配置。只返回 JSON，不要其他解释。`;
+请返回一个包含以下结构的 JSON:
+{
+  "sliderParams": { "temperature": 0.8, "fps": 24, ... },
+  "customParams": { "personGeneration": "ALLOW_ADULT", ... },
+  "explanation": "简短解释"
+}
+
+只返回 JSON，不要其他解释。`;
 
         try {
             const apiKey = globalConfig.apiKey;
@@ -305,15 +321,64 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
     const applyAiSuggestion = () => {
         try {
             const parsed = JSON.parse(aiResponse);
-            // Merge with existing customParams
-            const existingParams = JSON.parse(currentTab.customParams || '{}');
-            const merged = { ...existingParams, ...parsed };
-            updateTab(activeTab as any, { customParams: JSON.stringify(merged, null, 2) });
+
+            // Apply slider parameters if present
+            if (parsed.sliderParams) {
+                const sliderUpdates: Partial<TabState> = {};
+                if (typeof parsed.sliderParams.temperature === 'number') {
+                    sliderUpdates.temperature = Math.max(0, Math.min(2, parsed.sliderParams.temperature));
+                }
+                if (typeof parsed.sliderParams.guidanceScale === 'number') {
+                    sliderUpdates.guidanceScale = Math.max(1, Math.min(30, parsed.sliderParams.guidanceScale));
+                }
+                if (typeof parsed.sliderParams.fps === 'number') {
+                    sliderUpdates.fps = Math.max(12, Math.min(30, parsed.sliderParams.fps));
+                }
+                if (typeof parsed.sliderParams.durationSeconds === 'number') {
+                    sliderUpdates.durationSeconds = Math.max(4, Math.min(8, parsed.sliderParams.durationSeconds));
+                }
+                if (typeof parsed.sliderParams.seed === 'number') {
+                    sliderUpdates.seed = Math.max(0, parsed.sliderParams.seed);
+                }
+                if (Object.keys(sliderUpdates).length > 0) {
+                    updateTab(activeTab as any, sliderUpdates);
+                }
+            }
+
+            // Apply custom params if present (and enable them)
+            if (parsed.customParams && Object.keys(parsed.customParams).length > 0) {
+                const existingParams = JSON.parse(currentTab.customParams || '{}');
+                const merged = { ...existingParams, ...parsed.customParams };
+                updateTab(activeTab as any, {
+                    customParams: JSON.stringify(merged, null, 2),
+                    customParamsEnabled: true
+                });
+            }
+
             setShowAiAssistant(false);
             setAiQuery('');
             setAiResponse('');
+
+            // Show explanation if provided
+            if (parsed.explanation) {
+                alert(`AI 建议已应用: ${parsed.explanation}`);
+            }
         } catch (e) {
-            alert('无法应用 AI 建议，请检查 JSON 格式');
+            // Fallback: try to apply as raw customParams
+            try {
+                const existingParams = JSON.parse(currentTab.customParams || '{}');
+                const parsed = JSON.parse(aiResponse);
+                const merged = { ...existingParams, ...parsed };
+                updateTab(activeTab as any, {
+                    customParams: JSON.stringify(merged, null, 2),
+                    customParamsEnabled: true
+                });
+                setShowAiAssistant(false);
+                setAiQuery('');
+                setAiResponse('');
+            } catch {
+                alert('无法应用 AI 建议，请检查 JSON 格式');
+            }
         }
     };
 
@@ -352,12 +417,14 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
             const baseUrl = globalConfig.baseUrl;
             const provider = globalConfig.provider || ProviderType.GEMINI; // Use provider from config
 
-            // Parse custom parameters
+            // Parse custom parameters only if enabled
             let parsedCustomParams = {};
-            try {
-                parsedCustomParams = JSON.parse(customParams || '{}');
-            } catch (e) {
-                console.warn('Failed to parse custom params:', e);
+            if (currentState.customParamsEnabled) {
+                try {
+                    parsedCustomParams = JSON.parse(customParams || '{}');
+                } catch (e) {
+                    console.warn('Failed to parse custom params:', e);
+                }
             }
 
             const configOverrides = {
@@ -913,37 +980,47 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                 </div>
 
                                 {/* Custom Parameters Section */}
-                                <div className="mt-6 p-4 bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-xl border border-purple-500/20">
+                                <div className={`mt-6 p-4 bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-xl border ${currentTab.customParamsEnabled ? 'border-purple-500/40' : 'border-purple-500/20'}`}>
                                     <div className="flex items-center justify-between mb-3">
                                         <label className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2">
+                                            <input
+                                                type="checkbox"
+                                                checked={currentTab.customParamsEnabled}
+                                                onChange={(e) => updateTab(activeTab as any, { customParamsEnabled: e.target.checked })}
+                                                className="w-4 h-4 rounded accent-purple-500"
+                                            />
                                             <Code size={12} /> 自定义参数 (JSON)
                                         </label>
-                                        <button
-                                            type="button"
-                                            onClick={() => updateTab(activeTab as any, {
-                                                customParams: JSON.stringify({
-                                                    personGeneration: "ALLOW_ADULT",
-                                                    numberOfImages: 1,
-                                                    includeRaiReason: false
-                                                }, null, 2)
-                                            })}
-                                            className="text-xs text-purple-400 hover:text-purple-300 px-2 py-1 bg-purple-500/20 rounded hover:bg-purple-500/30 transition-colors"
-                                        >
-                                            加载示例
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowAiAssistant(true)}
-                                            className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors flex items-center gap-1"
-                                        >
-                                            <Sparkles size={10} /> AI 助手
-                                        </button>
+                                        <div className="flex gap-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => updateTab(activeTab as any, {
+                                                    customParams: JSON.stringify({
+                                                        personGeneration: "ALLOW_ADULT",
+                                                        numberOfImages: 1,
+                                                        includeRaiReason: false
+                                                    }, null, 2),
+                                                    customParamsEnabled: true
+                                                })}
+                                                className="text-xs text-purple-400 hover:text-purple-300 px-2 py-1 bg-purple-500/20 rounded hover:bg-purple-500/30 transition-colors"
+                                            >
+                                                加载示例
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => setShowAiAssistant(true)}
+                                                className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors flex items-center gap-1"
+                                            >
+                                                <Sparkles size={10} /> AI 助手
+                                            </button>
+                                        </div>
                                     </div>
                                     <textarea
                                         value={currentTab.customParams}
                                         onChange={(e) => updateTab(activeTab as any, { customParams: e.target.value })}
                                         placeholder='{"personGeneration": "ALLOW_ADULT", "numberOfImages": 1}'
-                                        className="w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 outline-none focus:border-purple-500 font-mono h-24 resize-none"
+                                        disabled={!currentTab.customParamsEnabled}
+                                        className={`w-full bg-black/30 border border-white/10 rounded-lg px-3 py-2 text-sm text-white placeholder:text-slate-600 outline-none focus:border-purple-500 font-mono h-24 resize-none ${!currentTab.customParamsEnabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                                     />
                                     <p className="text-xs text-slate-500 mt-2">
                                         提示: 可添加 API 特定参数如 personGeneration, numberOfImages, includeRaiReason 等。点击 AI 助手可获取智能推荐。
