@@ -1180,6 +1180,28 @@ const App: React.FC = () => {
           handleUpdateGameMode(map[cmd.args.mode]);
         }
       }
+      else if (cmd.tool === 'mcp_trends' && cmd.args?.platform) {
+        // Fetch MCP trends and inject into conversation
+        const platform = cmd.args.platform;
+        const apiBase = (import.meta as any).env?.VITE_PROXY_API_BASE || 'http://localhost:3001';
+        fetch(`${apiBase}/api/mcp/trends/${platform}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.data && data.data.length > 0) {
+              const trendsText = data.data.slice(0, 10).map((t: any, i: number) => `${i + 1}. ${t.title}`).join('\n');
+              const systemMsg: Message = {
+                id: crypto.randomUUID(),
+                senderId: 'system',
+                content: `📰 **${data.name || platform} 实时热搜 (${new Date().toLocaleTimeString()}):**\n\n${trendsText}\n\n> 数据来源: MCP Trends Hub`,
+                timestamp: Date.now()
+              };
+              updateActiveSession({
+                messages: [...activeSession.messages, systemMsg]
+              });
+            }
+          })
+          .catch(err => console.error('[MCP] Trends fetch failed:', err));
+      }
     });
   };
 
