@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { hashPassword, verifyPassword, generateDeviceFingerprint } from '../utils/crypto';
 import { generateToken, authMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import axios from 'axios';
 
 const router = Router();
 
@@ -416,8 +417,8 @@ router.get('/qq/callback', async (req: Request, res: Response) => {
         tokenUrl.searchParams.set('redirect_uri', QQ_REDIRECT_URI);
         tokenUrl.searchParams.set('fmt', 'json');
 
-        const tokenRes = await fetch(tokenUrl.toString());
-        const tokenData = await tokenRes.json() as { error?: number; access_token?: string };
+        const tokenRes = await axios.get(tokenUrl.toString());
+        const tokenData = tokenRes.data as { error?: number; access_token?: string };
 
         if (tokenData.error || !tokenData.access_token) {
             console.error('QQ token error:', tokenData);
@@ -429,8 +430,8 @@ router.get('/qq/callback', async (req: Request, res: Response) => {
 
         // Get OpenID
         const meUrl = `https://graph.qq.com/oauth2.0/me?access_token=${accessToken}&fmt=json`;
-        const meRes = await fetch(meUrl);
-        const meData = await meRes.json() as { error?: number; openid?: string };
+        const meRes = await axios.get(meUrl);
+        const meData = meRes.data as { error?: number; openid?: string };
 
         if (meData.error || !meData.openid) {
             console.error('QQ openid error:', meData);
@@ -442,8 +443,8 @@ router.get('/qq/callback', async (req: Request, res: Response) => {
 
         // Get user info
         const userInfoUrl = `https://graph.qq.com/user/get_user_info?access_token=${accessToken}&oauth_consumer_key=${QQ_APP_ID}&openid=${openid}`;
-        const userInfoRes = await fetch(userInfoUrl);
-        const userInfo = await userInfoRes.json() as {
+        const userInfoRes = await axios.get(userInfoUrl);
+        const userInfo = userInfoRes.data as {
             nickname?: string;
             figureurl_qq_2?: string;
             figureurl_qq_1?: string;
