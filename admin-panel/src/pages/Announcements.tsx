@@ -45,21 +45,18 @@ const priorityLabels = {
     urgent: '紧急'
 };
 
-// Format time string for display without timezone conversion
-// Server returns time in Beijing timezone, so we parse and display directly
+// Format time string for display - convert to local time
 const formatDisplayTime = (isoString: string | null): string => {
     if (!isoString) return '-';
     try {
-        // Extract date and time parts from ISO string (e.g., "2025-12-03T22:45:00.000Z")
-        // Remove the Z suffix to treat as local time
-        const cleanStr = isoString.replace('Z', '').replace('.000', '');
-        const [datePart, timePart] = cleanStr.split('T');
-        if (!datePart || !timePart) return isoString;
-
-        const [year, month, day] = datePart.split('-');
-        const [hour, minute] = timePart.split(':');
-
-        return `${year}/${month}/${day} ${hour}:${minute}`;
+        const date = new Date(isoString);
+        return date.toLocaleString('zh-CN', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
     } catch {
         return isoString;
     }
@@ -163,15 +160,14 @@ export default function Announcements() {
         }
 
         try {
-            // Convert local datetime-local values to ISO format with timezone
-            // datetime-local gives us local time, we need to send it as-is to preserve user intent
-            // The backend should store it directly and compare with server local time
+            // Convert local datetime to UTC ISO format
+            // This ensures consistent storage and retrieval across timezones
             const formatDateTime = (dt: string) => {
                 if (!dt) return null;
                 // datetime-local format: "2025-12-03T22:45"
-                // Convert to full ISO with Z suffix is wrong, keep local time
-                // Just append :00 for seconds if needed
-                return dt.includes(':') && dt.split(':').length === 2 ? dt + ':00' : dt;
+                // Convert to UTC ISO format
+                const localDate = new Date(dt);
+                return localDate.toISOString();
             };
 
             const data = {
