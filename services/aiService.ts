@@ -1404,13 +1404,35 @@ export const generateVideo = async (
     if (provider === ProviderType.GEMINI) {
         const model = modelName || 'veo-3.1-fast-generate-preview';
 
+        // Build video config with all parameters
+        const videoConfig: any = {
+            numberOfVideos: 1,
+            aspectRatio,
+            resolution: config?.resolution || '720p'
+        };
+
+        // Add durationSeconds if provided and valid (Veo accepts 4-8 seconds)
+        if (config?.durationSeconds && config.durationSeconds >= 4 && config.durationSeconds <= 8) {
+            videoConfig.durationSeconds = config.durationSeconds;
+        }
+
+        // Add fps if provided
+        if (config?.fps) {
+            videoConfig.fps = config.fps;
+        }
+
+        // Add seed if provided
+        if (config?.seed && config.seed > 0) {
+            videoConfig.seed = config.seed;
+        }
+
         if (USE_BACKEND_PROXY) {
             // Route through backend proxy
             const initResponse = await callGeminiVideosViaProxy(
                 apiKey,
                 model,
                 prompt,
-                { numberOfVideos: 1, aspectRatio, resolution: config?.resolution || '720p' },
+                videoConfig,
                 baseUrl
             );
 
@@ -1437,11 +1459,7 @@ export const generateVideo = async (
             let operation = await ai.models.generateVideos({
                 model,
                 prompt,
-                config: {
-                    numberOfVideos: 1,
-                    aspectRatio,
-                    resolution: (config?.resolution || '720p') as any
-                }
+                config: videoConfig
             });
 
             while (!operation.done) {
