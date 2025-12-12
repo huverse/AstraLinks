@@ -510,9 +510,10 @@ router.get('/qq/callback', async (req: Request, res: Response) => {
         // Redirect to frontend with token
         res.redirect(`${FRONTEND_URL}?token=${token}&qq_login=success`);
 
-    } catch (error) {
+    } catch (error: any) {
         console.error('QQ callback error:', error);
-        res.redirect(`${FRONTEND_URL}?error=callback_failed`);
+        const errorMsg = encodeURIComponent(error.message || 'Unknown error');
+        res.redirect(`${FRONTEND_URL}?error=callback_failed&detail=${errorMsg}`);
     }
 });
 
