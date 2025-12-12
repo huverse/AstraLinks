@@ -45,6 +45,26 @@ const priorityLabels = {
     urgent: '紧急'
 };
 
+// Format time string for display without timezone conversion
+// Server returns time in Beijing timezone, so we parse and display directly
+const formatDisplayTime = (isoString: string | null): string => {
+    if (!isoString) return '-';
+    try {
+        // Extract date and time parts from ISO string (e.g., "2025-12-03T22:45:00.000Z")
+        // Remove the Z suffix to treat as local time
+        const cleanStr = isoString.replace('Z', '').replace('.000', '');
+        const [datePart, timePart] = cleanStr.split('T');
+        if (!datePart || !timePart) return isoString;
+
+        const [year, month, day] = datePart.split('-');
+        const [hour, minute] = timePart.split(':');
+
+        return `${year}/${month}/${day} ${hour}:${minute}`;
+    } catch {
+        return isoString;
+    }
+};
+
 export default function Announcements() {
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);
@@ -237,17 +257,17 @@ export default function Announcements() {
                                             <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-2">{item.content}</p>
                                             <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
                                                 <span>创建者: {item.created_by_username}</span>
-                                                <span>创建时间: {new Date(item.created_at).toLocaleString()}</span>
+                                                <span>创建时间: {formatDisplayTime(item.created_at)}</span>
                                                 {item.start_time && (
                                                     <span className="flex items-center gap-1">
                                                         <Clock size={12} />
-                                                        开始: {new Date(item.start_time).toLocaleString()}
+                                                        开始: {formatDisplayTime(item.start_time)}
                                                     </span>
                                                 )}
                                                 {item.end_time && (
                                                     <span className="flex items-center gap-1">
                                                         <Clock size={12} />
-                                                        结束: {new Date(item.end_time).toLocaleString()}
+                                                        结束: {formatDisplayTime(item.end_time)}
                                                     </span>
                                                 )}
                                             </div>
