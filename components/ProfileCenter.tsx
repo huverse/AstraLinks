@@ -351,20 +351,44 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                         {/* MCP Link (Reserved for Ultra) */}
                         {profile.user_tier === 'ultra' && (
                             <div className="space-y-3">
-                                <h3 className="font-semibold text-gray-900 dark:text-white">MCP 链接</h3>
-                                <button
-                                    className="w-full flex items-center justify-between p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800"
-                                    onClick={() => alert('MCP链接功能即将推出')}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <Link2 size={20} className="text-amber-500" />
-                                        <div className="text-left">
-                                            <p className="font-medium text-gray-900 dark:text-white">配置 MCP 服务器</p>
-                                            <p className="text-xs text-gray-500">即将推出</p>
+                                <h3 className="font-semibold text-gray-900 dark:text-white">MCP 热点服务</h3>
+                                <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                                    <div className="flex items-center gap-3 mb-3">
+                                        <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                                            <Zap size={20} className="text-amber-500" />
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-900 dark:text-white">实时热点趋势</p>
+                                            <p className="text-xs text-gray-500">获取微博、知乎、B站等平台热搜</p>
                                         </div>
                                     </div>
-                                    <ChevronRight size={20} className="text-gray-400" />
-                                </button>
+                                    <div className="flex flex-wrap gap-2 mb-3">
+                                        {['微博', '知乎', '百度', 'B站', '抖音', '头条', '掘金', 'GitHub'].map(p => (
+                                            <span key={p} className="px-2 py-1 text-xs bg-white/60 dark:bg-slate-700/60 rounded-full text-gray-600 dark:text-gray-300">
+                                                {p}
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-gray-500 mb-2">在对话中说"最近有什么新闻"，AI会自动获取热点</p>
+                                    <button
+                                        onClick={async () => {
+                                            try {
+                                                const res = await fetch(`${API_BASE}/api/mcp/platforms`);
+                                                if (res.ok) {
+                                                    const data = await res.json();
+                                                    alert(`✅ MCP服务正常\n\n支持 ${data.platforms.length} 个平台:\n${data.platforms.map((p: any) => `${p.icon} ${p.name}`).join('\n')}`);
+                                                } else {
+                                                    alert('❌ MCP服务连接失败');
+                                                }
+                                            } catch (e) {
+                                                alert('❌ 无法连接MCP服务');
+                                            }
+                                        }}
+                                        className="w-full py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                                    >
+                                        测试连接
+                                    </button>
+                                </div>
                             </div>
                         )}
 
