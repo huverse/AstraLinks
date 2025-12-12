@@ -1447,8 +1447,19 @@ export const generateVideo = async (
 
             if (operation.error) throw new Error(operation.error.message);
 
-            const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
-            if (!uri) throw new Error("No video URI returned");
+            // Debug: Log the full response structure
+            console.log('Video operation response:', JSON.stringify(operation, null, 2));
+
+            // Try multiple paths for URI extraction (API structure may vary)
+            let uri = operation.response?.generatedVideos?.[0]?.video?.uri
+                || operation.response?.videos?.[0]?.uri
+                || operation.generatedVideos?.[0]?.video?.uri
+                || operation.videos?.[0]?.uri;
+
+            if (!uri) {
+                console.error('Video generation failed - no URI in response:', operation);
+                throw new Error("No video URI returned. Response: " + JSON.stringify(operation.response || operation).slice(0, 500));
+            }
 
             // Return proxied URI for China users
             return `${URI_PREFIX}${PROXY_API_BASE}/api/proxy/fetch-uri?uri=${encodeURIComponent(uri + '&key=' + apiKey)}`;
@@ -1469,8 +1480,16 @@ export const generateVideo = async (
 
             if (operation.error) throw new Error((operation.error as any).message);
 
-            const uri = operation.response?.generatedVideos?.[0]?.video?.uri;
-            if (!uri) throw new Error("No video URI returned");
+            // Try multiple paths for URI extraction (API structure may vary)
+            let uri = operation.response?.generatedVideos?.[0]?.video?.uri
+                || operation.response?.videos?.[0]?.uri
+                || (operation as any).generatedVideos?.[0]?.video?.uri
+                || (operation as any).videos?.[0]?.uri;
+
+            if (!uri) {
+                console.error('Video generation failed - no URI in response:', operation);
+                throw new Error("No video URI returned");
+            }
 
             return `${URI_PREFIX}${uri}&key=${apiKey}`;
         }
