@@ -488,7 +488,7 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                         method: 'POST',
                                         headers: {
                                             'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                            'Authorization': `Bearer ${localStorage.getItem('galaxyous_token')}`
                                         },
                                         body: JSON.stringify({ oldPassword, newPassword })
                                     })
@@ -527,7 +527,7 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                         method: 'DELETE',
                                         headers: {
                                             'Content-Type': 'application/json',
-                                            'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                            'Authorization': `Bearer ${localStorage.getItem('galaxyous_token')}`
                                         },
                                         body: JSON.stringify({ password })
                                     })
