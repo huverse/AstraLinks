@@ -12,7 +12,8 @@ export const pool = mysql.createPool({
   database: process.env.DB_NAME || 'galaxyous_new',
   waitForConnections: true,
   connectionLimit: 10,
-  queueLimit: 0
+  queueLimit: 0,
+  timezone: '+08:00' // China Standard Time (UTC+8)
 });
 
 // Old WordPress database connection (for sync)
