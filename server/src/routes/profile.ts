@@ -15,7 +15,7 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
 
         const [users] = await pool.execute<RowDataPacket[]>(`
             SELECT id, username, email, phone, avatar_url, user_tier, is_admin,
-                   created_at, last_login, split_tree_id, split_codes_generated
+                   created_at, last_login, split_tree_id, split_codes_generated, qq_openid, qq_nickname
             FROM users WHERE id = ?
         `, [userId]);
 
@@ -36,7 +36,8 @@ router.get('/', authMiddleware, async (req: Request, res: Response) => {
         res.json({
             ...user,
             tierInfo: tierInfo[user.user_tier as keyof typeof tierInfo] || tierInfo.free,
-            hasQQ: false, // Reserved for future
+            hasQQ: !!user.qq_openid,
+            qqNickname: user.qq_nickname || null,
             hasPhone: !!user.phone
         });
     } catch (error: any) {
