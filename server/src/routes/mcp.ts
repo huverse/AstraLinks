@@ -19,7 +19,7 @@ interface TrendItem {
 }
 
 // DailyHotApi base URL - you can self-host or use a public instance
-const DAILY_HOT_API_BASE = 'https://hot.imsyy.top';
+const DAILY_HOT_API_BASE = 'http://localhost:6688';
 
 // Platform configuration with DailyHotApi endpoints
 const PLATFORMS = {
