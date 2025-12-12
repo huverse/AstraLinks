@@ -136,6 +136,7 @@ router.get('/active', authMiddleware, async (req: Request, res: Response) => {
         const userId = (req as any).user?.id;
         const displayType = req.query.type as string || 'global'; // global, login, register
 
+        // Use UTC_TIMESTAMP for timezone-independent comparison
         let query = `
             SELECT a.* FROM announcements a
             WHERE a.is_active = TRUE
@@ -158,6 +159,7 @@ router.get('/active', authMiddleware, async (req: Request, res: Response) => {
 
         query += ` ORDER BY 
             CASE a.priority 
+                WHEN 'critical' THEN 1
                 WHEN 'urgent' THEN 1 
                 WHEN 'high' THEN 2 
                 WHEN 'normal' THEN 3 
@@ -167,6 +169,9 @@ router.get('/active', authMiddleware, async (req: Request, res: Response) => {
 
         const params = userId ? [displayType, userId, userId] : [displayType, null];
         const [announcements] = await pool.execute<RowDataPacket[]>(query, params);
+
+        // Debug log
+        console.log(`[Announcements] Active query for user ${userId}, type: ${displayType}, found: ${(announcements as any[]).length} announcements`);
 
         res.json({ announcements });
     } catch (error: any) {

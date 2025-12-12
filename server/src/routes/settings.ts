@@ -14,7 +14,7 @@ const router = Router();
 router.get('/public/terms', async (req: Request, res: Response) => {
     try {
         const [settings] = await pool.execute<RowDataPacket[]>(
-            `SELECT setting_value FROM site_settings WHERE setting_key = 'terms_of_service'`
+            `SELECT setting_value FROM site_settings WHERE setting_key = 'user_agreement'`
         );
 
         if (settings.length === 0 || !settings[0].setting_value) {
