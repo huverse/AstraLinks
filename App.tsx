@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Settings, Users, Trash2, Menu, ImagePlus, BrainCircuit, X, Gavel, BookOpen, AlertTriangle, Share2, Download, Copy, Check, Plus, MessageSquare, MoreHorizontal, FileJson, Square, Handshake, Lock, Upload, User, Zap, Cpu, Sparkles, Coffee, Vote, Edit2, BarChart2, Wand2, RefreshCw, Hammer, Loader2, FileText, Book, ChevronDown, ChevronUp, UserX, LogIn, UserCheck } from 'lucide-react';
+import { Send, Settings, Users, Trash2, Menu, ImagePlus, BrainCircuit, X, Gavel, BookOpen, AlertTriangle, Share2, Download, Copy, Check, Plus, MessageSquare, MoreHorizontal, FileJson, Square, Handshake, Lock, Upload, User, Zap, Cpu, Sparkles, Coffee, Vote, Edit2, BarChart2, Wand2, RefreshCw, Hammer, Loader2, FileText, Book, ChevronDown, ChevronUp, UserX, LogIn, UserCheck, Layers } from 'lucide-react';
 import { DEFAULT_PARTICIPANTS, USER_ID } from './constants';
 import { Message, Participant, ParticipantConfig, GameMode, Session, ProviderType, TokenUsage, RefereeContext, VoteState } from './types';
 import ChatMessage from './components/ChatMessage';
@@ -1671,7 +1671,18 @@ const App: React.FC = () => {
           })}
         </div>
 
-        <div className="pt-4 border-t border-slate-200 dark:border-white/10">
+        <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-2">
+          {/* Workspace Switch Button - 仅桌面端显示 */}
+          <button
+            onClick={() => { setAppMode(appMode === 'CHAT' ? 'WORKSPACE' : 'CHAT'); setIsSidebarOpen(false); }}
+            className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl transition-all text-sm font-medium ${appMode === 'WORKSPACE'
+              ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20'
+              : 'bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300'
+              }`}
+          >
+            <Layers size={18} />
+            {appMode === 'WORKSPACE' ? '返回对话' : '工作区'}
+          </button>
           <button
             onClick={() => { setIsSettingsOpen(true); setIsSidebarOpen(false); }}
             className="w-full flex items-center justify-center gap-2 p-3 bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300 rounded-xl transition-all text-sm font-medium"
@@ -1698,8 +1709,7 @@ const App: React.FC = () => {
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-3 -ml-3 text-slate-600 dark:text-slate-300 active:scale-90 transition-transform">
               <Menu size={24} />
             </button>
-            {/* Mode Switch */}
-            <WorkspaceSwitch mode={appMode} onModeChange={(mode) => { setAppMode(mode); if (mode === 'CHAT') setSelectedWorkspaceId(null); }} />
+            {/* Mode Switch removed from header - now in sidebar */}
             <div className="flex flex-col">
               <div className="flex items-center gap-2 overflow-hidden max-w-[180px] md:max-w-md">
                 <span
