@@ -92,18 +92,18 @@ export const executeEndNode: NodeExecutor = async (node, input, context) => {
 // ============================================
 
 export const executeAINode: NodeExecutor = async (node, input, context) => {
-    const { model, provider, systemPrompt, temperature, maxTokens } = node.data;
+    const { model, provider, systemPrompt, temperature, maxTokens, apiKey, baseUrl } = node.data;
 
     context.logs.push({
         timestamp: Date.now(),
         nodeId: node.id,
         level: 'info',
-        message: `调用 AI 模型: ${provider || 'OpenAI'}/${model || 'gpt-4'}`,
+        message: `调用 AI 模型: ${provider || 'OpenAI'}/${model || 'gpt-4o-mini'}`,
     });
 
     try {
         // 构建消息
-        const messages = [];
+        const messages: { role: string; content: string }[] = [];
         if (systemPrompt) {
             messages.push({ role: 'system', content: systemPrompt });
         }
@@ -114,31 +114,55 @@ export const executeAINode: NodeExecutor = async (node, input, context) => {
             : JSON.stringify(input, null, 2);
         messages.push({ role: 'user', content: userMessage });
 
-        // TODO: 实际调用 AI API
-        // 这里是模拟执行
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        // 使用后端代理直接调用 AI API
+        const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+            ? 'https://astralinks.xyz'
+            : 'http://localhost:3001';
 
-        const response = {
-            content: `[AI模拟响应] 收到输入: ${userMessage.slice(0, 100)}...`,
-            model: model || 'gpt-4',
-            usage: {
-                promptTokens: Math.floor(userMessage.length / 4),
-                completionTokens: 50,
-                totalTokens: Math.floor(userMessage.length / 4) + 50,
-            },
+        const response = await fetch(`${API_BASE}/api/proxy/openai`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                apiKey: apiKey || '',
+                baseUrl: baseUrl || '',
+                model: model || 'gpt-4o-mini',
+                messages,
+                temperature: temperature ?? 0.7,
+                maxTokens: maxTokens ?? 2048,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Request failed' }));
+            throw new Error(error.error || `API Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const responseContent = data.choices?.[0]?.message?.content || '';
+
+        // 使用实际 token 或估算
+        const actualUsage = data.usage;
+        const estimatedTokens = actualUsage ? {
+            promptTokens: actualUsage.prompt_tokens || 0,
+            completionTokens: actualUsage.completion_tokens || 0,
+            totalTokens: actualUsage.total_tokens || 0,
+        } : {
+            promptTokens: Math.ceil(userMessage.length / 4),
+            completionTokens: Math.ceil(responseContent.length / 4),
+            totalTokens: Math.ceil((userMessage.length + responseContent.length) / 4),
         };
 
         // 记录 token 使用
-        context.nodeStates[node.id].tokenUsage = response.usage;
+        context.nodeStates[node.id].tokenUsage = estimatedTokens;
 
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'info',
-            message: `AI 响应完成, tokens: ${response.usage.totalTokens}`,
+            message: `AI 响应完成, tokens: ${estimatedTokens.totalTokens}`,
         });
 
-        return response.content;
+        return responseContent;
     } catch (error: any) {
         context.logs.push({
             timestamp: Date.now(),

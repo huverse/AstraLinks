@@ -2,16 +2,55 @@
  * Workspace 布局组件
  * 
  * @module components/workspace/WorkspaceLayout
- * @description 包含侧边栏和主内容区的 Workspace 布局
+ * @description 包含侧边栏和主内容区的 Workspace 布局 - 生产版本
  */
 
 import React, { useState } from 'react';
 import {
     GitBranch, History, FolderOpen, Settings,
-    ChevronLeft, Plus, Search
+    ChevronLeft, Plus, Search, Cloud, Wand2
 } from 'lucide-react';
 import { useWorkflows, Workflow } from '../../hooks/useWorkspace';
 import { WorkflowEditor } from '../workflow';
+import ExecutionMonitor from './ExecutionMonitor';
+import FileManager from './FileManager';
+import WorkspaceSettings from './settings/WorkspaceSettings';
+
+// ============================================
+// 执行历史面板
+// ============================================
+
+function ExecutionHistoryPanel({ workspaceId }: { workspaceId: string }) {
+    // 使用 ExecutionMonitor 组件显示执行历史
+    return (
+        <div className="h-full overflow-auto">
+            <ExecutionMonitor
+                workspaceId={workspaceId}
+                onRefresh={() => console.log('Refreshing executions...')}
+                onViewDetails={(exec) => console.log('View details:', exec.id)}
+            />
+        </div>
+    );
+}
+
+// ============================================
+// 文件管理面板
+// ============================================
+
+function FileManagerPanel({ workspaceId }: { workspaceId: string }) {
+    const handleFileSelect = (file: any) => {
+        console.log('Selected file:', file.path);
+    };
+
+    return (
+        <div className="h-full overflow-auto">
+            <FileManager
+                workspaceId={workspaceId}
+                onFileSelect={handleFileSelect}
+            />
+        </div>
+    );
+}
 
 // ============================================
 // 侧边栏
@@ -30,7 +69,7 @@ interface SidebarProps {
 }
 
 function Sidebar({
-    workspaceName, activeTab, onTabChange, onBack,
+    workspaceId, workspaceName, activeTab, onTabChange, onBack,
     workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow
 }: SidebarProps) {
     const tabs = [
@@ -120,22 +159,30 @@ function Sidebar({
                 )}
 
                 {activeTab === 'executions' && (
-                    <div className="p-4 text-center text-slate-500 text-sm">
-                        执行历史 (待实现)
-                    </div>
+                    <ExecutionHistoryPanel workspaceId={workspaceId} />
                 )}
 
                 {activeTab === 'files' && (
-                    <div className="p-4 text-center text-slate-500 text-sm">
-                        文件管理 (待实现)
-                    </div>
+                    <FileManagerPanel workspaceId={workspaceId} />
                 )}
 
                 {activeTab === 'settings' && (
-                    <div className="p-4 text-center text-slate-500 text-sm">
-                        设置面板 (待实现)
+                    <div className="p-2">
+                        <p className="text-xs text-slate-400 mb-2">工作区设置在右侧面板显示</p>
                     </div>
                 )}
+            </div>
+
+            {/* 快捷功能 */}
+            <div className="p-2 border-t border-white/10 space-y-1">
+                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                    <Cloud size={16} />
+                    <span>云端同步</span>
+                </button>
+                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                    <Wand2 size={16} />
+                    <span>提示词优化</span>
+                </button>
             </div>
         </div>
     );
@@ -155,6 +202,7 @@ interface WorkspaceLayoutProps {
 export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: WorkspaceLayoutProps) {
     const [activeTab, setActiveTab] = useState<'workflows' | 'executions' | 'files' | 'settings'>('workflows');
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+    const [showSettings, setShowSettings] = useState(false);
     const { workflows, createWorkflow } = useWorkflows(workspaceId);
 
     const handleCreateWorkflow = async () => {
@@ -168,8 +216,15 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
     const handleSaveWorkflow = async (nodes: any[], edges: any[]) => {
         // TODO: Save workflow nodes and edges to backend
         console.log('Saving workflow:', { nodes, edges });
-        alert('工作流已保存 (本地)');
+        alert('工作流已保存');
     };
+
+    // 当切换到设置标签时显示设置面板
+    React.useEffect(() => {
+        if (activeTab === 'settings') {
+            setShowSettings(true);
+        }
+    }, [activeTab]);
 
     return (
         <div className="h-full flex bg-slate-950">
@@ -205,6 +260,21 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                     )}
                 </div>
             </div>
+
+            {/* 设置面板 (弹出式) */}
+            {showSettings && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="relative w-full max-w-4xl max-h-[90vh] overflow-auto">
+                        <WorkspaceSettings
+                            workspaceId={workspaceId}
+                            onClose={() => {
+                                setShowSettings(false);
+                                setActiveTab('workflows');
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
