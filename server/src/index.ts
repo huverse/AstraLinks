@@ -25,6 +25,7 @@ import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
 import { initGeminiLiveProxy } from './services/geminiLive';
+import { initWorkflowQueue } from './services/workflowQueue';
 
 dotenv.config();
 
@@ -89,10 +90,18 @@ async function startServer() {
             }
         });
 
-        httpServer.listen(PORT, () => {
+        httpServer.listen(PORT, async () => {
             console.log(`🚀 Server running on http://localhost:${PORT}`);
             console.log(`🔌 WebSocket server ready`);
             console.log(`📅 Daily sync scheduled at 3:00 AM`);
+
+            // Initialize workflow queue (Redis)
+            const queueReady = await initWorkflowQueue();
+            if (queueReady) {
+                console.log('✅ Workflow queue ready (Redis)');
+            } else {
+                console.log('⚠️ Workflow queue disabled (Redis unavailable, using direct execution)');
+            }
         });
     } catch (error) {
         console.error('❌ Failed to start server:', error);
