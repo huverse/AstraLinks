@@ -621,28 +621,52 @@ export const generateSessionTitle = async (
         const options = sanitizeOptions(apiKey, baseUrl);
         const ai = new GoogleGenAI(options);
 
-        const prompt = `
-            Task: Generate a VIVID, VISUAL, and CONCISE title (Max 8 chars).
-            User: "${firstUserMessage.slice(0, 300)}"
-            AI: "${firstAiResponse.slice(0, 300)}"
-            Output: RAW TITLE ONLY. No prefixes. If input is Chinese, output Chinese.
-        `;
+        const prompt = `You are a conversation title generator like ChatGPT and Gemini.
+
+Generate a SHORT, DESCRIPTIVE title (2-6 words) that captures the main topic or intent of this conversation.
+
+Rules:
+- Output ONLY the title, nothing else
+- 2-6 words maximum (not 2-6 characters)
+- No emojis, quotes, or punctuation
+- Capture the core topic or question
+- If input is Chinese, output Chinese title
+- Be specific: "React组件渲染问题" > "编程问题"
+- Be concise: "旅行签证咨询" > "关于旅行签证的详细咨询"
+
+User: "${firstUserMessage.slice(0, 500)}"
+AI: "${firstAiResponse.slice(0, 300)}"
+
+Title:`;
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: { parts: [{ text: prompt }] },
-            config: { maxOutputTokens: 40 }
+            config: { maxOutputTokens: 60, temperature: 0.3 }
         });
 
         let title = response.text?.trim() || '';
-        title = title.replace(/^(Title|Subject|Topic|标题|主题)[:：]\s*/i, '');
-        title = title.replace(/[\*\[\]\(\)（）"''“”‘’《》。，、！\?]/g, '').trim();
+        // Clean up any unwanted prefixes or formatting
+        title = title.replace(/^(Title|Subject|Topic|标题|主题|会话标题)[:：]\s*/i, '');
+        title = title.replace(/[\*\[\]\(\)（）"''""''《》。，、！？\?\:]/g, '').trim();
+        title = title.replace(/^["']|["']$/g, ''); // Remove surrounding quotes
 
-        if (!title) throw new Error("Empty title");
-        return title.slice(0, 10);
+        if (!title || title.length < 2) throw new Error("Empty title");
+
+        // Limit to reasonable length (max 20 chars for Chinese, 30 for English)
+        const isChinese = /[\u4e00-\u9fa5]/.test(title);
+        const maxLen = isChinese ? 20 : 30;
+        return title.slice(0, maxLen);
     } catch (error) {
+        // Fallback: extract key words from user message
         const cleanUserMsg = firstUserMessage.replace(/[\s\r\n]+/g, ' ').trim();
-        return cleanUserMsg ? cleanUserMsg.slice(0, 6) : '新聚会';
+        if (cleanUserMsg) {
+            // Try to get first meaningful phrase
+            const words = cleanUserMsg.split(/[,，。！？\?\!\.\s]+/).filter(w => w.length > 0);
+            const fallback = words.slice(0, 3).join('');
+            return fallback.slice(0, 15) || '新对话';
+        }
+        return '新对话';
     }
 }
 
