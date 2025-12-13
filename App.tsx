@@ -294,6 +294,42 @@ const App: React.FC = () => {
     scrollToBottom();
   }, [activeSession.messages, activeSession.currentTurnParticipantId]);
 
+  // Auto-generate session title after first AI response
+  const titleGeneratedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const session = activeSession;
+    // Only generate if: has 2+ messages, name starts with "聚会", and not already generated
+    if (
+      session.messages.length >= 2 &&
+      session.name.startsWith('聚会') &&
+      !titleGeneratedRef.current.has(session.id)
+    ) {
+      // Find first user message and first AI response
+      const userMsg = session.messages.find(m => m.senderId === 'USER');
+      const aiMsg = session.messages.find(m => m.senderId !== 'USER' && m.senderId !== 'SYSTEM');
+
+      if (userMsg && aiMsg) {
+        // Mark as generating to prevent duplicate calls
+        titleGeneratedRef.current.add(session.id);
+
+        // Get API key from first participant with one
+        const apiParticipant = participants.find(p => p.config.apiKey);
+        if (apiParticipant) {
+          generateSessionTitle(
+            userMsg.content,
+            aiMsg.content,
+            apiParticipant.config.apiKey!,
+            apiParticipant.config.baseUrl
+          ).then(newTitle => {
+            updateActiveSession({ name: newTitle });
+          }).catch(err => {
+            console.error('Failed to generate session title:', err);
+          });
+        }
+      }
+    }
+  }, [activeSession.messages.length, activeSession.id]);
+
   useEffect(() => {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';

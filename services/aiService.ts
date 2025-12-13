@@ -9,6 +9,15 @@ const REQUEST_TIMEOUT = 300000; // 5 Minutes for Video/Image Gen
 export const URI_PREFIX = 'URI_REF:';
 
 // ==================================================================================
+//  MULTIMODAL DEFAULT CONSTANTS
+// ==================================================================================
+export const DEFAULT_VIDEO_DURATION = 8; // seconds
+export const DEFAULT_VIDEO_MODEL = 'veo-3.1-fast-generate-preview';
+export const DEFAULT_IMAGE_MODEL = 'imagen-3.0-generate-002';
+export const DEFAULT_SPEECH_MODEL = 'Gemini Live';
+export const DEFAULT_VOICE = 'Kore';
+
+// ==================================================================================
 //  PROXY CONFIGURATION (For China users)
 // ==================================================================================
 
@@ -210,6 +219,22 @@ const SAFETY_SETTINGS_BLOCK_NONE: any = [
     { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_NONE' },
     { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_NONE' },
 ];
+
+/**
+ * Utility: Extract video URI from various API response structures
+ * Handles multiple fallback paths for different API versions
+ */
+const extractVideoUri = (operation: any): string | null => {
+    const paths = [
+        operation.response?.generatedVideos?.[0]?.video?.uri,
+        operation.response?.videos?.[0]?.uri,
+        operation.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri,
+        operation.generatedVideos?.[0]?.video?.uri,
+        operation.videos?.[0]?.uri,
+        operation.generateVideoResponse?.generatedSamples?.[0]?.video?.uri,
+    ];
+    return paths.find(uri => !!uri) || null;
+};
 
 /**
  * Utility: Wait for a specific amount of time.
@@ -1462,21 +1487,15 @@ export const generateVideo = async (
     provider: ProviderType = ProviderType.GEMINI
 ): Promise<string> => {
     if (provider === ProviderType.GEMINI) {
-        const model = modelName || 'veo-3.1-fast-generate-preview';
+        const model = modelName || DEFAULT_VIDEO_MODEL;
 
         // Build video config with all parameters
         const videoConfig: any = {
             numberOfVideos: 1,
             aspectRatio,
-            resolution: config?.resolution || '720p'
+            resolution: config?.resolution || '720p',
+            durationSeconds: config?.durationSeconds > 0 ? config.durationSeconds : DEFAULT_VIDEO_DURATION
         };
-
-        // Add durationSeconds - default to 8s if not provided
-        if (config?.durationSeconds && config.durationSeconds > 0) {
-            videoConfig.durationSeconds = config.durationSeconds;
-        } else {
-            videoConfig.durationSeconds = 8; // Default 8 seconds
-        }
 
         // Add fps if provided
         if (config?.fps) {
@@ -1512,13 +1531,8 @@ export const generateVideo = async (
             // Debug: Log the full response structure
             console.log('Video operation response:', JSON.stringify(operation, null, 2));
 
-            // Try multiple paths for URI extraction (API structure may vary)
-            let uri = operation.response?.generatedVideos?.[0]?.video?.uri
-                || operation.response?.videos?.[0]?.uri
-                || operation.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri
-                || operation.generatedVideos?.[0]?.video?.uri
-                || operation.videos?.[0]?.uri
-                || (operation as any).generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+            // Extract URI using unified helper function
+            const uri = extractVideoUri(operation);
 
             if (!uri) {
                 console.error('Video generation failed - no URI in response:', operation);
@@ -1544,13 +1558,8 @@ export const generateVideo = async (
 
             if (operation.error) throw new Error((operation.error as any).message);
 
-            // Try multiple paths for URI extraction (API structure may vary)
-            let uri = (operation.response as any)?.generatedVideos?.[0]?.video?.uri
-                || (operation.response as any)?.videos?.[0]?.uri
-                || (operation.response as any)?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri
-                || (operation as any).generatedVideos?.[0]?.video?.uri
-                || (operation as any).videos?.[0]?.uri
-                || (operation as any).generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
+            // Extract URI using unified helper function
+            const uri = extractVideoUri(operation);
 
             if (!uri) {
                 console.error('Video generation failed - no URI in response:', operation);
