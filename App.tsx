@@ -1312,6 +1312,24 @@ const App: React.FC = () => {
       }
     }
 
+    // @workflow trigger detection
+    const workflowMatch = inputText.match(/@(?:workflow|wf):?(\S+)?\s*(.*)/i);
+    if (workflowMatch) {
+      const [, workflowName, workflowInput] = workflowMatch;
+      // Switch to Workspace mode
+      setAppMode('WORKSPACE');
+      // Store workflow trigger data for workspace to pickup
+      sessionStorage.setItem('workflowTrigger', JSON.stringify({
+        workflowName: workflowName || 'default',
+        input: workflowInput,
+        autoStart: true,
+        timestamp: Date.now()
+      }));
+      setInputText('');
+      return;
+    }
+
+
     const targetSessionId = activeSessionId;
     const userMessage: Message = {
       id: Date.now().toString(),

@@ -20,6 +20,7 @@ import mcpRoutes from './routes/mcp';
 import mcpRegistryRoutes from './routes/mcpRegistry';
 import workspacesRoutes from './routes/workspaces';
 import workflowsRoutes from './routes/workflows';
+import syncRoutes from './routes/sync';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
@@ -57,6 +58,7 @@ app.use('/api/mcp', mcpRoutes);
 app.use('/api/mcp-registry', mcpRegistryRoutes);
 app.use('/api/workspaces', workspacesRoutes);
 app.use('/api/workflows', workflowsRoutes);
+app.use('/api/sync', syncRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
