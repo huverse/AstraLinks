@@ -675,23 +675,22 @@ export const generateSessionTitle = async (
         const options = sanitizeOptions(apiKey, baseUrl);
         const ai = new GoogleGenAI(options);
 
-        const prompt = `You are a conversation title generator like ChatGPT and Gemini.
+        const prompt = `你是一个对话标题生成器，类似于 ChatGPT 和 Gemini。
 
-Generate a SHORT, DESCRIPTIVE title (2-6 words) that captures the main topic or intent of this conversation.
+请为这段对话生成一个简短、描述性的中文标题 (2-6个词)，准确概括对话的主题或意图。
 
-Rules:
-- Output ONLY the title, nothing else
-- 2-6 words maximum (not 2-6 characters)
-- No emojis, quotes, or punctuation
-- Capture the core topic or question
-- If input is Chinese, output Chinese title
-- Be specific: "React组件渲染问题" > "编程问题"
-- Be concise: "旅行签证咨询" > "关于旅行签证的详细咨询"
+规则：
+- 只输出标题，不要有任何其他内容
+- 2-6个词（不是2-6个字符）
+- 不要使用表情符号、引号或标点符号
+- 优先使用中文标题，即使输入是英文
+- 具体明确："React组件渲染问题" > "编程问题"
+- 简洁扼要："旅行签证咨询" > "关于旅行签证的详细咨询"
 
-User: "${firstUserMessage.slice(0, 500)}"
-AI: "${firstAiResponse.slice(0, 300)}"
+用户消息: "${firstUserMessage.slice(0, 500)}"
+AI回复: "${firstAiResponse.slice(0, 300)}"
 
-Title:`;
+标题:`;
 
         const response = await ai.models.generateContent({
             model: 'gemini-2.5-flash',
