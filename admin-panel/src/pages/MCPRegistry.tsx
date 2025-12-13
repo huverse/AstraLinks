@@ -5,8 +5,8 @@
  * @description MCP 注册中心管理
  */
 
-import React, { useState } from 'react';
-import { Plug, Check, X, Clock, RefreshCw, Search, Plus, Trash2, Eye, AlertCircle } from 'lucide-react';
+import { useState } from 'react';
+import { Plug, Check, X, Clock, RefreshCw, Search, Trash2, Eye, AlertCircle } from 'lucide-react';
 
 // ============================================
 // 类型定义
@@ -216,8 +216,8 @@ export default function MCPRegistry() {
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
                         className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-                                ? 'text-blue-600 border-blue-600'
-                                : 'text-gray-500 border-transparent hover:text-gray-700'
+                            ? 'text-blue-600 border-blue-600'
+                            : 'text-gray-500 border-transparent hover:text-gray-700'
                             }`}
                     >
                         {tab.label}

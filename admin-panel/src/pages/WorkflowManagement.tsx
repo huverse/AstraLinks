@@ -5,8 +5,8 @@
  * @description 管理员工作流监控和管理
  */
 
-import React, { useState, useEffect } from 'react';
-import { Activity, Play, Pause, Trash2, Eye, RefreshCw, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { Activity, Play, Pause, Trash2, Eye, RefreshCw, AlertCircle, XCircle, Clock } from 'lucide-react';
 
 // ============================================
 // 类型定义
@@ -142,7 +142,7 @@ function QueueMonitor({ executions }: { executions: ExecutionItem[] }) {
 // ============================================
 
 export default function WorkflowManagement() {
-    const [stats, setStats] = useState<WorkflowStats>({
+    const [stats] = useState<WorkflowStats>({
         totalWorkflows: 156,
         todayExecutions: 423,
         runningExecutions: 12,
@@ -155,7 +155,7 @@ export default function WorkflowManagement() {
         { id: '3', name: '报告生成器', workspaceId: 'ws-3', ownerName: '王五', executions: 45, status: 'disabled', createdAt: '2024-03-10' },
     ]);
 
-    const [executions, setExecutions] = useState<ExecutionItem[]>([
+    const [executions] = useState<ExecutionItem[]>([
         { id: 'e1', workflowName: '数据处理流程', status: 'running', progress: 65, startedAt: new Date(Date.now() - 120000).toISOString() },
         { id: 'e2', workflowName: 'AI 分析任务', status: 'queued', progress: 0, startedAt: new Date().toISOString() },
     ]);
