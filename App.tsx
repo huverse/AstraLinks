@@ -1700,7 +1700,7 @@ const App: React.FC = () => {
             <button
               title={activeSession.isAutoLoop ? "停止自动循环 (Auto Loop ON)" : "开启自动循环 (Auto Loop OFF)"}
               onClick={() => updateActiveSession({ isAutoLoop: !activeSession.isAutoLoop, isAutoPlayStopped: false })}
-              className={`p-3 md:p-2 rounded-full transition-colors ${activeSession.isAutoLoop ? 'text-pink-500 bg-pink-50 dark:bg-pink-900/20 animate-pulse' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+              className={`p-3 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isAutoLoop ? 'text-pink-500 bg-pink-50 dark:bg-pink-900/20 animate-pulse' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
             >
               <RefreshCw size={20} className={activeSession.isAutoLoop ? 'animate-spin-slow' : ''} />
             </button>
@@ -1716,7 +1716,7 @@ const App: React.FC = () => {
                     isHumanMode: false,
                     isSocialMode: false // Mutually Exclusive
                   })}
-                  className={`p-3 md:p-2 rounded-full transition-colors ${activeSession.isLogicMode ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+                  className={`p-3 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isLogicMode ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
                   <Cpu size={20} />
                 </button>
@@ -1727,7 +1727,7 @@ const App: React.FC = () => {
                     isHumanMode: false, // Social mode supersedes standard human mode
                     isLogicMode: false
                   })}
-                  className={`p-3 md:p-2 rounded-full transition-colors ${activeSession.isSocialMode ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+                  className={`p-3 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isSocialMode ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
                   <Coffee size={20} />
                 </button>
@@ -1738,7 +1738,7 @@ const App: React.FC = () => {
                     isLogicMode: false,
                     isSocialMode: false
                   })}
-                  className={`p-3 md:p-2 rounded-full transition-colors ${activeSession.isHumanMode ? 'text-green-500 bg-green-50 dark:bg-green-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+                  className={`p-3 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isHumanMode ? 'text-green-500 bg-green-50 dark:bg-green-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
                   <User size={20} />
                 </button>
@@ -1754,14 +1754,14 @@ const App: React.FC = () => {
             <button
               title="深度思考开关 - 仅当前会话"
               onClick={() => updateActiveSession({ isDeepThinking: !activeSession.isDeepThinking })}
-              className={`p-3 md:p-2 rounded-full transition-colors ${activeSession.isDeepThinking ? 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+              className={`p-3 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isDeepThinking ? 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
             >
               <BrainCircuit size={20} />
             </button>
             <button
               title="清空记录"
               onClick={clearHistory}
-              className="p-3 md:p-2 text-slate-400 hover:text-red-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full"
+              className="p-3 md:p-2 text-slate-400 hover:text-red-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full flex items-center justify-center"
             >
               <Trash2 size={20} />
             </button>
@@ -1771,7 +1771,7 @@ const App: React.FC = () => {
               <button
                 onClick={() => setIsProfileOpen(true)}
                 title={`个人中心: ${user?.username}`}
-                className="p-3 md:p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors rounded-full relative"
+                className="p-3 md:p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors rounded-full relative flex items-center justify-center"
               >
                 <UserCheck size={20} />
                 <span className="absolute bottom-1 right-1 w-2 h-2 bg-green-500 rounded-full ring-2 ring-white dark:ring-slate-800"></span>
@@ -1780,7 +1780,7 @@ const App: React.FC = () => {
               <button
                 onClick={() => setIsLoginOpen(true)}
                 title="登录/注册"
-                className="p-3 md:p-2 text-slate-400 hover:text-blue-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full"
+                className="p-3 md:p-2 text-slate-400 hover:text-blue-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full flex items-center justify-center"
               >
                 <LogIn size={20} />
               </button>
