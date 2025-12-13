@@ -2,10 +2,10 @@
  * 工作流可视化编辑器
  * 
  * @module components/workflow/WorkflowEditor
- * @description 基于 React Flow 的工作流可视化编辑器
+ * @description 基于 React Flow 的工作流可视化编辑器，支持执行和状态查看
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import ReactFlow, {
     Background,
     Controls,
@@ -21,10 +21,12 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import {
-    Plus, Bot, GitBranch, Play, Square, FileInput,
-    FileOutput, Zap, Code, Save, Undo, Redo, Trash2, ZoomIn, ZoomOut
+    Bot, GitBranch, Play, Square, FileInput,
+    FileOutput, Zap, Code, Save, Trash2, StopCircle,
+    Loader2, CheckCircle, XCircle, AlertCircle
 } from 'lucide-react';
 import { nodeTypes, NodeType } from './nodes';
+import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
 
 // ============================================
 // 节点工具栏配置
@@ -85,6 +87,10 @@ export function WorkflowEditor({
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+    const [showLogs, setShowLogs] = useState(false);
+
+    // 执行引擎 Hook
+    const execution = useWorkflowExecution(workflowId, nodes, edges);
 
     // 连接边回调
     const onConnect = useCallback(
@@ -145,8 +151,34 @@ export function WorkflowEditor({
         onSave?.(nodes, edges);
     }, [nodes, edges, onSave]);
 
+    // 执行工作流
+    const handleExecute = useCallback(async () => {
+        const input = prompt('输入数据 (可选, JSON格式):');
+        let parsedInput;
+        if (input) {
+            try {
+                parsedInput = JSON.parse(input);
+            } catch {
+                parsedInput = input;
+            }
+        }
+        setShowLogs(true);
+        await execution.execute(parsedInput);
+    }, [execution]);
+
     // MiniMap 节点颜色
     const nodeColor = useCallback((node: Node) => {
+        // 如果有执行状态，根据状态显示颜色
+        const state = execution.nodeStates[node.id];
+        if (state) {
+            switch (state.status) {
+                case 'running': return '#eab308'; // yellow
+                case 'completed': return '#22c55e'; // green
+                case 'failed': return '#ef4444'; // red
+                case 'skipped': return '#6b7280'; // gray
+            }
+        }
+
         switch (node.type) {
             case 'ai': return '#8b5cf6';
             case 'condition': return '#f59e0b';
@@ -158,7 +190,23 @@ export function WorkflowEditor({
             case 'code': return '#475569';
             default: return '#64748b';
         }
-    }, []);
+    }, [execution.nodeStates]);
+
+    // 获取状态图标
+    const getStatusIcon = () => {
+        switch (execution.status) {
+            case 'running':
+                return <Loader2 size={16} className="animate-spin text-yellow-400" />;
+            case 'completed':
+                return <CheckCircle size={16} className="text-green-400" />;
+            case 'failed':
+                return <XCircle size={16} className="text-red-400" />;
+            case 'cancelled':
+                return <AlertCircle size={16} className="text-orange-400" />;
+            default:
+                return null;
+        }
+    };
 
     return (
         <div className="h-full w-full bg-slate-950 relative">
@@ -210,6 +258,7 @@ export function WorkflowEditor({
                                     onClick={() => addNode(item.type)}
                                     className={`flex flex-col items-center gap-1 p-2 rounded-xl hover:bg-white/10 transition-colors group`}
                                     title={item.label}
+                                    disabled={execution.status === 'running'}
                                 >
                                     <div className={`p-2 ${item.color} rounded-lg text-white group-hover:scale-110 transition-transform`}>
                                         {item.icon}
@@ -224,7 +273,7 @@ export function WorkflowEditor({
                 {/* 操作工具栏 */}
                 <Panel position="top-right" className="!m-4">
                     <div className="flex gap-2">
-                        {selectedNode && (
+                        {selectedNode && execution.status !== 'running' && (
                             <button
                                 onClick={deleteSelectedNode}
                                 className="flex items-center gap-2 px-3 py-2 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-colors shadow-lg"
@@ -235,13 +284,111 @@ export function WorkflowEditor({
                         )}
                         <button
                             onClick={handleSave}
-                            className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-xl hover:bg-purple-500 transition-colors shadow-lg"
+                            disabled={execution.status === 'running'}
+                            className="flex items-center gap-2 px-4 py-2 bg-slate-700 text-white rounded-xl hover:bg-slate-600 transition-colors shadow-lg disabled:opacity-50"
                         >
                             <Save size={16} />
                             <span className="text-sm">保存</span>
                         </button>
+                        {execution.status === 'running' ? (
+                            <button
+                                onClick={execution.cancel}
+                                className="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-xl hover:bg-red-500 transition-colors shadow-lg"
+                            >
+                                <StopCircle size={16} />
+                                <span className="text-sm">停止</span>
+                            </button>
+                        ) : (
+                            <button
+                                onClick={handleExecute}
+                                className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-xl hover:bg-green-500 transition-colors shadow-lg"
+                            >
+                                <Play size={16} />
+                                <span className="text-sm">运行</span>
+                            </button>
+                        )}
                     </div>
                 </Panel>
+
+                {/* 执行状态面板 */}
+                {execution.status !== 'idle' && (
+                    <Panel position="bottom-left" className="!m-4">
+                        <div className="bg-slate-800/90 backdrop-blur-sm border border-slate-700 rounded-2xl p-4 shadow-xl min-w-[280px] max-w-[400px]">
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    {getStatusIcon()}
+                                    <span className="text-sm font-medium text-white">
+                                        {execution.status === 'running' ? '执行中...' :
+                                            execution.status === 'completed' ? '执行完成' :
+                                                execution.status === 'failed' ? '执行失败' :
+                                                    execution.status === 'cancelled' ? '已取消' : ''}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => setShowLogs(!showLogs)}
+                                    className="text-xs text-slate-400 hover:text-white"
+                                >
+                                    {showLogs ? '隐藏日志' : '显示日志'}
+                                </button>
+                            </div>
+
+                            {/* 统计信息 */}
+                            <div className="grid grid-cols-3 gap-2 text-center mb-3">
+                                <div className="bg-white/5 rounded-lg p-2">
+                                    <div className="text-xs text-slate-500">时长</div>
+                                    <div className="text-sm text-white font-mono">{(execution.duration / 1000).toFixed(1)}s</div>
+                                </div>
+                                <div className="bg-white/5 rounded-lg p-2">
+                                    <div className="text-xs text-slate-500">Tokens</div>
+                                    <div className="text-sm text-white font-mono">{execution.totalTokens}</div>
+                                </div>
+                                <div className="bg-white/5 rounded-lg p-2">
+                                    <div className="text-xs text-slate-500">节点</div>
+                                    <div className="text-sm text-white font-mono">
+                                        {Object.values(execution.nodeStates).filter(s => s.status === 'completed').length}/{nodes.length}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* 日志 */}
+                            {showLogs && (
+                                <div className="max-h-[200px] overflow-y-auto bg-black/30 rounded-lg p-2">
+                                    {execution.logs.length === 0 ? (
+                                        <p className="text-xs text-slate-500 text-center py-2">暂无日志</p>
+                                    ) : (
+                                        execution.logs.map((log, i) => (
+                                            <div key={i} className={`text-xs py-0.5 font-mono ${log.level === 'error' ? 'text-red-400' :
+                                                    log.level === 'warn' ? 'text-yellow-400' :
+                                                        log.level === 'info' ? 'text-blue-400' : 'text-slate-400'
+                                                }`}>
+                                                <span className="text-slate-600">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
+                                                {log.nodeId && <span className="text-purple-400"> [{log.nodeId}]</span>}
+                                                {' '}{log.message}
+                                            </div>
+                                        ))
+                                    )}
+                                </div>
+                            )}
+
+                            {/* 错误信息 */}
+                            {execution.error && (
+                                <div className="mt-2 p-2 bg-red-900/30 border border-red-800 rounded-lg">
+                                    <p className="text-xs text-red-400">{execution.error}</p>
+                                </div>
+                            )}
+
+                            {/* 输出结果 */}
+                            {execution.status === 'completed' && execution.output && (
+                                <div className="mt-2 p-2 bg-green-900/30 border border-green-800 rounded-lg">
+                                    <div className="text-[10px] text-green-500 mb-1">输出结果:</div>
+                                    <pre className="text-xs text-green-300 font-mono whitespace-pre-wrap break-all max-h-[100px] overflow-auto">
+                                        {typeof execution.output === 'string' ? execution.output : JSON.stringify(execution.output, null, 2)}
+                                    </pre>
+                                </div>
+                            )}
+                        </div>
+                    </Panel>
+                )}
 
                 {/* 选中节点信息 */}
                 {selectedNode && (
@@ -272,8 +419,21 @@ export function WorkflowEditor({
                                             setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, label: e.target.value } });
                                         }}
                                         className="w-full mt-1 px-2 py-1 bg-slate-700 border border-slate-600 rounded-lg text-xs text-white focus:outline-none focus:border-purple-500"
+                                        disabled={execution.status === 'running'}
                                     />
                                 </div>
+                                {/* 节点执行状态 */}
+                                {execution.nodeStates[selectedNode.id] && (
+                                    <div>
+                                        <span className="text-[10px] text-slate-500">执行状态</span>
+                                        <p className={`text-xs font-medium ${execution.nodeStates[selectedNode.id].status === 'completed' ? 'text-green-400' :
+                                                execution.nodeStates[selectedNode.id].status === 'failed' ? 'text-red-400' :
+                                                    execution.nodeStates[selectedNode.id].status === 'running' ? 'text-yellow-400' : 'text-slate-400'
+                                            }`}>
+                                            {execution.nodeStates[selectedNode.id].status}
+                                        </p>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </Panel>
