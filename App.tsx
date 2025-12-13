@@ -305,8 +305,8 @@ const App: React.FC = () => {
       !titleGeneratedRef.current.has(session.id)
     ) {
       // Find first user message and first AI response
-      const userMsg = session.messages.find(m => m.senderId === 'USER');
-      const aiMsg = session.messages.find(m => m.senderId !== 'USER' && m.senderId !== 'SYSTEM');
+      const userMsg = session.messages.find(m => m.senderId === 'user');
+      const aiMsg = session.messages.find(m => m.senderId !== 'user' && m.senderId !== 'SYSTEM');
 
       if (userMsg && aiMsg) {
         // Mark as generating to prevent duplicate calls
