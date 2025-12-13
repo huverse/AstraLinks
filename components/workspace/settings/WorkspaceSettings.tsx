@@ -479,11 +479,11 @@ function CloudSyncPanel({ workspaceId }: { workspaceId: string }) {
 // ============================================
 
 export function WorkspaceSettings({ workspaceId, onClose }: WorkspaceSettingsProps) {
-    const [activeTab, setActiveTab] = useState<'model' | 'mcp' | 'features' | 'sync'>('model');
+    const [activeTab, setActiveTab] = useState<'mcp' | 'features' | 'sync'>('mcp');
     const [saving, setSaving] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
 
     const tabs = [
-        { id: 'model', label: '模型配置', icon: Bot },
         { id: 'mcp', label: 'MCP 工具', icon: Plug },
         { id: 'features', label: '功能设置', icon: SettingsIcon },
         { id: 'sync', label: '云端同步', icon: Cloud },
@@ -491,23 +491,48 @@ export function WorkspaceSettings({ workspaceId, onClose }: WorkspaceSettingsPro
 
     const handleSave = async () => {
         setSaving(true);
-        await new Promise(r => setTimeout(r, 1000));
-        setSaving(false);
+        try {
+            // TODO: 实际保存逻辑
+            await new Promise(r => setTimeout(r, 800));
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 2000);
+        } finally {
+            setSaving(false);
+        }
     };
 
     return (
-        <div className="h-full flex flex-col bg-slate-900">
+        <div className="h-full flex flex-col bg-slate-900 rounded-xl border border-white/10 max-w-2xl">
             {/* 头部 */}
             <div className="p-4 border-b border-white/10 flex items-center justify-between">
                 <h2 className="text-lg font-bold text-white">Workspace 设置</h2>
-                <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition-colors disabled:opacity-50"
-                >
-                    {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                    <span>{saving ? '保存中...' : '保存设置'}</span>
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={handleSave}
+                        disabled={saving}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${saveSuccess
+                                ? 'bg-green-600 text-white'
+                                : 'bg-purple-600 hover:bg-purple-500 text-white'
+                            }`}
+                    >
+                        {saving ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : saveSuccess ? (
+                            <Check size={16} />
+                        ) : (
+                            <Save size={16} />
+                        )}
+                        <span>{saving ? '保存中...' : saveSuccess ? '已保存' : '保存'}</span>
+                    </button>
+                    {onClose && (
+                        <button
+                            onClick={onClose}
+                            className="p-2 text-slate-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                        >
+                            ✕
+                        </button>
+                    )}
+                </div>
             </div>
 
             {/* 标签页 */}
@@ -529,10 +554,16 @@ export function WorkspaceSettings({ workspaceId, onClose }: WorkspaceSettingsPro
 
             {/* 内容区 */}
             <div className="flex-1 overflow-y-auto p-6">
-                {activeTab === 'model' && <ModelConfigPanel workspaceId={workspaceId} />}
                 {activeTab === 'mcp' && <MCPConfigPanel workspaceId={workspaceId} />}
                 {activeTab === 'features' && <FeatureTogglePanel workspaceId={workspaceId} />}
                 {activeTab === 'sync' && <CloudSyncPanel workspaceId={workspaceId} />}
+            </div>
+
+            {/* 底部提示 */}
+            <div className="p-3 border-t border-white/10 bg-white/5">
+                <p className="text-xs text-slate-500 text-center">
+                    💡 AI 模型配置请使用侧边栏的「AI 配置中心」按钮
+                </p>
             </div>
         </div>
     );

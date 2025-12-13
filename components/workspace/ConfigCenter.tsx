@@ -73,8 +73,8 @@ function ConfigCard({
 }) {
     return (
         <div className={`p-4 rounded-xl border transition-all ${config.isActive
-                ? 'bg-purple-900/30 border-purple-500/50'
-                : 'bg-white/5 border-white/10 hover:border-white/20'
+            ? 'bg-purple-900/30 border-purple-500/50'
+            : 'bg-white/5 border-white/10 hover:border-white/20'
             }`}>
             <div className="flex items-start justify-between mb-3">
                 <div className="flex items-center gap-3">
@@ -152,8 +152,8 @@ function ConfigForm({
 }) {
     const [form, setForm] = useState({
         name: initialConfig?.name || '',
-        provider: initialConfig?.provider || 'openai',
-        model: initialConfig?.model || 'gpt-4o-mini',
+        provider: initialConfig?.provider || 'custom',
+        model: initialConfig?.model || '',
         apiKey: '',
         baseUrl: initialConfig?.baseUrl || '',
         temperature: initialConfig?.temperature ?? 0.7,
