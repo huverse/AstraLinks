@@ -8,9 +8,10 @@
 import React, { useState } from 'react';
 import {
     GitBranch, History, FolderOpen, Settings,
-    ChevronLeft, Play, Plus, Search
+    ChevronLeft, Plus, Search
 } from 'lucide-react';
 import { useWorkflows, Workflow } from '../../hooks/useWorkspace';
+import { WorkflowEditor } from '../workflow';
 
 // ============================================
 // 侧边栏
@@ -60,8 +61,8 @@ function Sidebar({
                         key={tab.id}
                         onClick={() => onTabChange(tab.id)}
                         className={`flex-1 py-3 flex flex-col items-center gap-1 text-xs transition-colors ${activeTab === tab.id
-                                ? 'text-purple-400 border-b-2 border-purple-500'
-                                : 'text-slate-500 hover:text-slate-300'
+                            ? 'text-purple-400 border-b-2 border-purple-500'
+                            : 'text-slate-500 hover:text-slate-300'
                             }`}
                     >
                         <tab.icon size={18} />
@@ -102,8 +103,8 @@ function Sidebar({
                                         key={wf.id}
                                         onClick={() => onSelectWorkflow(wf.id)}
                                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedWorkflowId === wf.id
-                                                ? 'bg-purple-600/20 text-purple-400'
-                                                : 'text-slate-300 hover:bg-white/5'
+                                            ? 'bg-purple-600/20 text-purple-400'
+                                            : 'text-slate-300 hover:bg-white/5'
                                             }`}
                                     >
                                         <div className="flex items-center gap-2">
@@ -151,7 +152,7 @@ interface WorkspaceLayoutProps {
     children?: React.ReactNode;
 }
 
-export function WorkspaceLayout({ workspaceId, workspaceName, onBack, children }: WorkspaceLayoutProps) {
+export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: WorkspaceLayoutProps) {
     const [activeTab, setActiveTab] = useState<'workflows' | 'executions' | 'files' | 'settings'>('workflows');
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
     const { workflows, createWorkflow } = useWorkflows(workspaceId);
@@ -162,6 +163,12 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack, children }
             const wf = await createWorkflow({ name });
             setSelectedWorkflowId(wf.id);
         }
+    };
+
+    const handleSaveWorkflow = async (nodes: any[], edges: any[]) => {
+        // TODO: Save workflow nodes and edges to backend
+        console.log('Saving workflow:', { nodes, edges });
+        alert('工作流已保存 (本地)');
     };
 
     return (
@@ -181,41 +188,13 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack, children }
 
             {/* 主内容区 */}
             <div className="flex-1 flex flex-col overflow-hidden">
-                {/* 工具栏 */}
-                {selectedWorkflowId && (
-                    <div className="h-12 px-4 border-b border-white/10 flex items-center justify-between bg-slate-900/30">
-                        <div className="flex items-center gap-3">
-                            <span className="text-white font-medium">
-                                {workflows.find(w => w.id === selectedWorkflowId)?.name || '未命名'}
-                            </span>
-                            <span className="text-xs text-slate-500 bg-white/5 px-2 py-0.5 rounded">
-                                v{workflows.find(w => w.id === selectedWorkflowId)?.version || 1}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <button className="px-3 py-1.5 text-sm bg-white/5 text-slate-300 rounded-lg hover:bg-white/10 transition-colors">
-                                保存
-                            </button>
-                            <button className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors">
-                                <Play size={14} />
-                                运行
-                            </button>
-                        </div>
-                    </div>
-                )}
-
                 {/* 内容区 */}
-                <div className="flex-1 overflow-auto">
+                <div className="flex-1 overflow-hidden">
                     {selectedWorkflowId ? (
-                        children || (
-                            <div className="h-full flex items-center justify-center text-slate-500">
-                                <div className="text-center">
-                                    <GitBranch size={48} className="mx-auto mb-4 opacity-50" />
-                                    <p>工作流编辑器</p>
-                                    <p className="text-sm mt-1">(React Flow 待实现)</p>
-                                </div>
-                            </div>
-                        )
+                        <WorkflowEditor
+                            workflowId={selectedWorkflowId}
+                            onSave={handleSaveWorkflow}
+                        />
                     ) : (
                         <div className="h-full flex items-center justify-center text-slate-500">
                             <div className="text-center">
