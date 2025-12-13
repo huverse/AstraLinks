@@ -184,11 +184,17 @@ function Sidebar({
                     <Key size={16} />
                     <span>AI 配置中心</span>
                 </button>
-                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                <button
+                    onClick={() => onTabChange('settings')}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                >
                     <Cloud size={16} />
                     <span>云端同步</span>
                 </button>
-                <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
+                <button
+                    onClick={() => alert('提示词优化助手正在开发中，敬请期待！\n\n开启后，工作流中的 AI 节点将自动应用智能提示词优化。')}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
+                >
                     <Wand2 size={16} />
                     <span>提示词优化</span>
                 </button>
