@@ -12,6 +12,8 @@ import LoginModal from './components/LoginModal';
 import FeedbackWidget from './components/FeedbackWidget';
 import ProfileCenter from './components/ProfileCenter';
 import AnnouncementBanner from './components/AnnouncementBanner';
+import { WorkspaceSwitch, WorkspaceList, WorkspaceLayout, AppMode } from './components/workspace';
+import { useWorkspace } from './hooks/useWorkspace';
 import { useAuth } from './contexts/AuthContext';
 import { generateResponse, generateSessionTitle, detectRefereeIntent, summarizeHistory } from './services/aiService';
 
@@ -242,6 +244,11 @@ const App: React.FC = () => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
+
+  // Workspace Mode State
+  const [appMode, setAppMode] = useState<AppMode>('CHAT');
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const { workspace } = useWorkspace(selectedWorkspaceId);
 
   // Auth Context
   const { user, token, isAuthenticated, logout } = useAuth();
@@ -1673,6 +1680,8 @@ const App: React.FC = () => {
             <button onClick={() => setIsSidebarOpen(true)} className="lg:hidden p-3 -ml-3 text-slate-600 dark:text-slate-300 active:scale-90 transition-transform">
               <Menu size={24} />
             </button>
+            {/* Mode Switch */}
+            <WorkspaceSwitch mode={appMode} onModeChange={(mode) => { setAppMode(mode); if (mode === 'CHAT') setSelectedWorkspaceId(null); }} />
             <div className="flex flex-col">
               <div className="flex items-center gap-2 overflow-hidden max-w-[180px] md:max-w-md">
                 <span
@@ -2158,6 +2167,33 @@ const App: React.FC = () => {
         isOpen={isAnnouncementOpen}
         onClose={() => setIsAnnouncementOpen(false)}
       />
+
+      {/* Workspace Full Screen Overlay */}
+      {appMode === 'WORKSPACE' && (
+        <div className="fixed inset-0 z-[100] bg-slate-950">
+          {selectedWorkspaceId && workspace ? (
+            <WorkspaceLayout
+              workspaceId={selectedWorkspaceId}
+              workspaceName={workspace.name}
+              onBack={() => setSelectedWorkspaceId(null)}
+            />
+          ) : (
+            <div className="h-full flex flex-col">
+              {/* Workspace Header */}
+              <div className="h-16 bg-[#1c1c1e]/80 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-4">
+                <div className="flex items-center gap-3">
+                  <WorkspaceSwitch mode={appMode} onModeChange={(mode) => { setAppMode(mode); if (mode === 'CHAT') setSelectedWorkspaceId(null); }} />
+                  <span className="font-bold text-white">工作区</span>
+                </div>
+              </div>
+              {/* Workspace Content */}
+              <div className="flex-1 overflow-auto">
+                <WorkspaceList onSelectWorkspace={(id) => setSelectedWorkspaceId(id)} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
     </div>
   );
