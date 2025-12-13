@@ -12,8 +12,16 @@ import crypto from 'crypto';
 
 const router = Router();
 
-// 加密密钥 (生产环境应使用环境变量)
-const ENCRYPTION_KEY = process.env.SYNC_ENCRYPTION_KEY || 'astralinks-sync-key-32bytes!!';
+// 加密密钥配置
+const ENCRYPTION_KEY = (() => {
+    const key = process.env.SYNC_ENCRYPTION_KEY;
+    if (!key && process.env.NODE_ENV === 'production') {
+        console.error('[Sync] SYNC_ENCRYPTION_KEY 未配置，同步功能禁用');
+        return null;
+    }
+    // 开发环境使用默认密钥
+    return (key || 'astralinks-dev-sync-key-32byte').padEnd(32).slice(0, 32);
+})();
 const IV_LENGTH = 16;
 
 // ============================================
@@ -21,15 +29,21 @@ const IV_LENGTH = 16;
 // ============================================
 
 function encrypt(data: string): { encrypted: string; iv: string } {
+    if (!ENCRYPTION_KEY) {
+        throw new Error('Sync encryption not configured');
+    }
     const iv = crypto.randomBytes(IV_LENGTH);
-    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.padEnd(32).slice(0, 32)), iv);
+    const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
     let encrypted = cipher.update(data, 'utf8', 'hex');
     encrypted += cipher.final('hex');
     return { encrypted, iv: iv.toString('hex') };
 }
 
 function decrypt(encrypted: string, iv: string): string {
-    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY.padEnd(32).slice(0, 32)), Buffer.from(iv, 'hex'));
+    if (!ENCRYPTION_KEY) {
+        throw new Error('Sync encryption not configured');
+    }
+    const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), Buffer.from(iv, 'hex'));
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
     return decrypted;

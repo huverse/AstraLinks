@@ -14,6 +14,8 @@ import FeedbackManagement from './pages/FeedbackManagement';
 import Announcements from './pages/Announcements';
 import Settings from './pages/Settings';
 import ConfigTemplates from './pages/ConfigTemplates';
+import WorkflowManagement from './pages/WorkflowManagement';
+import MCPRegistry from './pages/MCPRegistry';
 import Layout from './components/Layout';
 import './index.css';
 
@@ -46,6 +48,8 @@ function App() {
           <Route path="/announcements" element={<Announcements />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/config-templates" element={<ConfigTemplates />} />
+          <Route path="/workflows" element={<WorkflowManagement />} />
+          <Route path="/mcp-registry" element={<MCPRegistry />} />
         </Routes>
       </Layout>
     </BrowserRouter>
