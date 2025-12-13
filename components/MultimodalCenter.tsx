@@ -992,7 +992,7 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
 
                                 {/* Custom Parameters Section */}
                                 <div className={`mt-6 p-4 bg-gradient-to-br from-purple-900/20 to-blue-900/20 rounded-xl border ${currentTab.customParamsEnabled ? 'border-purple-500/40' : 'border-purple-500/20'}`}>
-                                    <div className="flex items-center justify-between mb-3">
+                                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3">
                                         <label className="text-xs font-bold text-purple-400 uppercase tracking-wider flex items-center gap-2">
                                             <input
                                                 type="checkbox"
@@ -1000,9 +1000,9 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                                 onChange={(e) => updateTab(activeTab as any, { customParamsEnabled: e.target.checked })}
                                                 className="w-4 h-4 rounded accent-purple-500"
                                             />
-                                            <Code size={12} /> 自定义参数 (JSON)
+                                            <Code size={12} /> 自定义参数
                                         </label>
-                                        <div className="flex gap-2">
+                                        <div className="flex gap-2 flex-wrap">
                                             <button
                                                 type="button"
                                                 onClick={() => updateTab(activeTab as any, {
@@ -1013,14 +1013,14 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                                     }, null, 2),
                                                     customParamsEnabled: true
                                                 })}
-                                                className="text-xs text-purple-400 hover:text-purple-300 px-2 py-1 bg-purple-500/20 rounded hover:bg-purple-500/30 transition-colors"
+                                                className="text-xs text-purple-400 hover:text-purple-300 px-3 py-1.5 bg-purple-500/20 rounded-lg hover:bg-purple-500/30 transition-colors whitespace-nowrap"
                                             >
                                                 加载示例
                                             </button>
                                             <button
                                                 type="button"
                                                 onClick={() => setShowAiAssistant(true)}
-                                                className="text-xs text-blue-400 hover:text-blue-300 px-2 py-1 bg-blue-500/20 rounded hover:bg-blue-500/30 transition-colors flex items-center gap-1"
+                                                className="text-xs text-blue-400 hover:text-blue-300 px-3 py-1.5 bg-blue-500/20 rounded-lg hover:bg-blue-500/30 transition-colors flex items-center gap-1 whitespace-nowrap"
                                             >
                                                 <Sparkles size={10} /> AI 助手
                                             </button>
