@@ -1270,10 +1270,10 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                     <button
                                         key={tab.id}
                                         onClick={() => setActiveTab(tab.id as TabId)}
-                                        className={`w-full group flex items-center gap-4 p-3 rounded-2xl transition-all relative overflow-hidden ${activeTab === tab.id ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 opacity-60 hover:opacity-100'}`}
+                                        className={`w-full group flex items-center justify-center md:justify-start gap-4 p-3 rounded-2xl transition-all relative overflow-hidden ${activeTab === tab.id ? 'bg-white/10 border border-white/20 shadow-lg' : 'hover:bg-white/5 opacity-60 hover:opacity-100'}`}
                                     >
                                         {isTabProcessing && activeTab !== tab.id && <div className="absolute inset-0 bg-blue-500/10 animate-pulse"></div>}
-                                        <div className="relative">
+                                        <div className="relative flex items-center justify-center">
                                             <tab.icon size={24} className={activeTab === tab.id ? 'text-purple-400' : 'text-slate-400'} />
                                             {isTabProcessing && <div className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-blue-500 rounded-full border border-black animate-ping"></div>}
                                         </div>
