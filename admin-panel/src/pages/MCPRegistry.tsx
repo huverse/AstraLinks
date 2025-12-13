@@ -101,7 +101,7 @@ function MCPList({
         <div className="space-y-3">
             {mcps.map(mcp => (
                 <div key={mcp.id} className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
-                    <div className="p-3 bg-white dark:bg-slate-800 rounded-xl">
+                    <div className="p-3 bg-white dark:bg-slate-600 rounded-xl shadow-sm">
                         <Plug size={24} className="text-purple-500" />
                     </div>
 
@@ -272,14 +272,14 @@ export default function MCPRegistry() {
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
                         className={`px-4 py-3 text-sm font-medium border-b-2 transition-colors ${activeTab === tab.id
-                                ? 'text-blue-600 border-blue-600 dark:text-blue-400 dark:border-blue-400'
-                                : 'text-gray-500 border-transparent hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
+                            ? 'text-blue-600 border-blue-600 dark:text-blue-400 dark:border-blue-400'
+                            : 'text-gray-500 border-transparent hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-300'
                             }`}
                     >
                         {tab.label}
                         <span className={`ml-2 px-2 py-0.5 rounded-full text-xs ${activeTab === tab.id
-                                ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
-                                : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400'
+                            ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'
+                            : 'bg-gray-100 text-gray-600 dark:bg-slate-800 dark:text-slate-400'
                             }`}>
                             {tab.count}
                         </span>
