@@ -17,6 +17,8 @@ import configTemplatesRoutes from './routes/configTemplates';
 import splitInvitationRoutes from './routes/splitInvitation';
 import profileRoutes from './routes/profile';
 import mcpRoutes from './routes/mcp';
+import workspacesRoutes from './routes/workspaces';
+import workflowsRoutes from './routes/workflows';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
@@ -51,6 +53,8 @@ app.use('/api/config-templates', configTemplatesRoutes);
 app.use('/api/split-invitation', splitInvitationRoutes);
 app.use('/api/profile', profileRoutes);
 app.use('/api/mcp', mcpRoutes);
+app.use('/api/workspaces', workspacesRoutes);
+app.use('/api/workflows', workflowsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
