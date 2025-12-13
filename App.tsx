@@ -1702,7 +1702,7 @@ const App: React.FC = () => {
               onClick={() => updateActiveSession({ isAutoLoop: !activeSession.isAutoLoop, isAutoPlayStopped: false })}
               className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isAutoLoop ? 'text-pink-500 bg-pink-50 dark:bg-pink-900/20 animate-pulse' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
             >
-              <RefreshCw size={32} className={activeSession.isAutoLoop ? 'animate-spin-slow' : ''} />
+              <RefreshCw size={38} className={activeSession.isAutoLoop ? 'animate-spin-slow' : ''} />
             </button>
 
             <div className="w-px h-6 bg-slate-300 dark:bg-white/20 mx-1 self-center"></div>
@@ -1718,7 +1718,7 @@ const App: React.FC = () => {
                   })}
                   className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isLogicMode ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
-                  <Cpu size={32} />
+                  <Cpu size={38} />
                 </button>
                 <button
                   title="完全拟人社会模式 (Social Infinite Loop) - 仅当前会话"
@@ -1729,7 +1729,7 @@ const App: React.FC = () => {
                   })}
                   className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isSocialMode ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
-                  <Coffee size={32} />
+                  <Coffee size={38} />
                 </button>
                 <button
                   title="真人模式开关 (Human/Slang) - 仅当前会话"
@@ -1740,7 +1740,7 @@ const App: React.FC = () => {
                   })}
                   className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isHumanMode ? 'text-green-500 bg-green-50 dark:bg-green-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
-                  <User size={32} />
+                  <User size={38} />
                 </button>
               </>
             )}
@@ -1756,14 +1756,14 @@ const App: React.FC = () => {
               onClick={() => updateActiveSession({ isDeepThinking: !activeSession.isDeepThinking })}
               className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isDeepThinking ? 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
             >
-              <BrainCircuit size={32} />
+              <BrainCircuit size={38} />
             </button>
             <button
               title="清空记录"
               onClick={clearHistory}
               className="p-2.5 md:p-2 text-slate-400 hover:text-red-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full flex items-center justify-center"
             >
-              <Trash2 size={32} />
+              <Trash2 size={38} />
             </button>
 
             {/* Auth Button */}
@@ -1773,7 +1773,7 @@ const App: React.FC = () => {
                 title={`个人中心: ${user?.username}`}
                 className="p-2.5 md:p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors rounded-full relative flex items-center justify-center"
               >
-                <UserCheck size={32} />
+                <UserCheck size={38} />
                 <span className="absolute bottom-0.5 right-0.5 w-2 h-2 bg-green-500 rounded-full ring-2 ring-white dark:ring-slate-800"></span>
               </button>
             ) : (
@@ -1782,7 +1782,7 @@ const App: React.FC = () => {
                 title="登录/注册"
                 className="p-2.5 md:p-2 text-slate-400 hover:text-blue-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full flex items-center justify-center"
               >
-                <LogIn size={32} />
+                <LogIn size={38} />
               </button>
             )}
           </div>
