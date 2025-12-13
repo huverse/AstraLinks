@@ -45,6 +45,7 @@ export class WorkflowEngine {
     private edges: Edge[];
     private context: ExecutionContext;
     private status: WorkflowExecutionStatus = 'idle';
+    private visitedNodes: Set<string> = new Set();
     private onStatusChange?: (status: WorkflowExecutionStatus, nodeId?: string) => void;
     private onLogAdd?: (log: ExecutionLog) => void;
 
@@ -205,6 +206,12 @@ export class WorkflowEngine {
      * 递归执行节点链
      */
     private async executeNodeChain(node: Node, input: any): Promise<any> {
+        // 循环检测
+        if (this.visitedNodes.has(node.id)) {
+            throw new Error(`检测到工作流循环: 节点 ${node.id} 被重复访问`);
+        }
+        this.visitedNodes.add(node.id);
+
         // 执行当前节点
         const output = await this.executeNode(node, input);
 
