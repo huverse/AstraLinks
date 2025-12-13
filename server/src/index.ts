@@ -21,6 +21,8 @@ import mcpRegistryRoutes from './routes/mcpRegistry';
 import workspacesRoutes from './routes/workspaces';
 import workflowsRoutes from './routes/workflows';
 import syncRoutes from './routes/sync';
+import adminWorkflowsRoutes from './routes/admin-workflows';
+import adminMcpRoutes from './routes/admin-mcp';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
@@ -45,6 +47,8 @@ app.use(express.json({ limit: '50mb' }));
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/admin/workflows', adminWorkflowsRoutes);
+app.use('/api/admin/mcp-registry', adminMcpRoutes);
 app.use('/api/proxy', proxyRoutes);
 app.use('/api/debug', debugRoutes);
 app.use('/api/configs', configRoutes);
