@@ -8,8 +8,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../utils/api';
 
-// 获取 token 的辅助函数
-const getToken = () => localStorage.getItem('token');
+// 获取 token 的辅助函数 (使用与 AuthContext 相同的 key)
+const getToken = () => localStorage.getItem('galaxyous_token');
 
 // 封装 API 调用
 const fetchAPI = async <T = any>(endpoint: string, options: RequestInit = {}): Promise<T> => {
