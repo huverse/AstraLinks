@@ -17,6 +17,35 @@ export const DEFAULT_IMAGE_MODEL = 'imagen-3.0-generate-002';
 export const DEFAULT_SPEECH_MODEL = 'Gemini Live';
 export const DEFAULT_VOICE = 'Kore';
 
+/**
+ * Get model-specific default video duration
+ * Based on each model's typical/recommended duration range
+ */
+export const getDefaultVideoDuration = (modelName?: string): number => {
+    const model = (modelName || '').toLowerCase();
+
+    // Veo models: 4-8s, default 5s (middle)
+    if (model.includes('veo')) return 5;
+
+    // Runway Gen-3: default 10s
+    if (model.includes('runway') || model.includes('gen-3') || model.includes('gen3')) return 10;
+
+    // Pika: default 4s (typical 3-4s)
+    if (model.includes('pika')) return 4;
+
+    // Sora: default 10s (supports 5-20s)
+    if (model.includes('sora')) return 10;
+
+    // Kling AI: default 5s
+    if (model.includes('kling')) return 5;
+
+    // Minimax: default 6s
+    if (model.includes('minimax')) return 6;
+
+    // Default fallback (Veo-compatible)
+    return DEFAULT_VIDEO_DURATION;
+};
+
 // ==================================================================================
 //  PROXY CONFIGURATION (For China users)
 // ==================================================================================
@@ -1494,7 +1523,7 @@ export const generateVideo = async (
             numberOfVideos: 1,
             aspectRatio,
             resolution: config?.resolution || '720p',
-            durationSeconds: config?.durationSeconds > 0 ? config.durationSeconds : DEFAULT_VIDEO_DURATION
+            durationSeconds: config?.durationSeconds > 0 ? config.durationSeconds : getDefaultVideoDuration(model)
         };
 
         // Add fps if provided
