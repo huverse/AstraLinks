@@ -1157,8 +1157,8 @@ const App: React.FC = () => {
 
           // Execute Agent Commands if present
           if (newMessage.agentCommands && newMessage.agentCommands.length > 0) {
-            // Execute in next tick to allow state update
-            setTimeout(() => executeAgentCommands(newMessage.agentCommands!), 0);
+            // Execute in next tick to allow state update, pass sender ID for proper identity
+            setTimeout(() => executeAgentCommands(newMessage.agentCommands!, newMessage.senderId), 0);
           }
         }
       }
@@ -1187,9 +1187,9 @@ const App: React.FC = () => {
   };
 
   // --- AGENT COMMAND EXECUTOR ---
-  const executeAgentCommands = (commands: any[]) => {
+  const executeAgentCommands = (commands: any[], callerId?: string) => {
     commands.forEach(cmd => {
-      console.log(`[AGENT EXEC] ${cmd.tool}`, cmd.args);
+      console.log(`[AGENT EXEC] ${cmd.tool}`, cmd.args, `(by: ${callerId || 'unknown'})`);
       // Feedback Toast? (Simplified for now)
 
       if (cmd.tool === 'browser_open' && cmd.args?.url) {
@@ -1217,22 +1217,29 @@ const App: React.FC = () => {
         }
       }
       else if (cmd.tool === 'mcp_trends' && cmd.args?.platform) {
-        // Fetch MCP trends and inject into conversation
+        // Fetch MCP trends and inject as caller's message continuation
         const platform = cmd.args.platform;
         const apiBase = (import.meta as any).env?.VITE_PROXY_API_BASE || 'http://localhost:3001';
+
+        // Use the caller's ID if available, otherwise find first enabled participant
+        const messageSenderId = callerId || participantsRef.current.find(p => p.config.enabled)?.id || 'gemini';
+        const callerName = participantsRef.current.find(p => p.id === messageSenderId)?.name || 'AI';
+
         fetch(`${apiBase}/api/mcp/trends/${platform}`)
           .then(res => res.json())
           .then(data => {
             if (data.data && data.data.length > 0) {
               const trendsText = data.data.slice(0, 10).map((t: any, i: number) => `${i + 1}. ${t.title}`).join('\n');
-              const systemMsg: Message = {
+
+              // Format as natural AI message instead of system message
+              const mcpMsg: Message = {
                 id: crypto.randomUUID(),
-                senderId: 'system',
+                senderId: messageSenderId,
                 content: `📰 **${data.name || platform} 实时热搜 (${new Date().toLocaleTimeString()}):**\n\n${trendsText}\n\n> 数据来源: MCP Trends Hub`,
                 timestamp: Date.now()
               };
               updateActiveSession({
-                messages: [...activeSession.messages, systemMsg]
+                messages: [...activeSession.messages, mcpMsg]
               });
             }
           })
