@@ -5,7 +5,7 @@
  * @description 模型配置、MCP 设置、功能开关、云端同步
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Bot, Plug, Settings as SettingsIcon, Cloud,
     Save, Loader2, Check, Plus, Trash2, RefreshCw
@@ -33,39 +33,70 @@ interface WorkspaceSettingsProps {
 }
 
 // ============================================
-// 模型配置面板
+// 模型配置面板 (使用 ConfigCenter API)
 // ============================================
 
 function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
-    const [configs, setConfigs] = useState<ModelConfig[]>([
-        {
-            id: '1',
-            name: '默认配置',
-            provider: 'OPENAI',
-            apiKey: '********',
-            modelName: 'gpt-4o-mini',
-            temperature: 0.7,
-            maxTokens: 4096,
-            isDefault: true,
-        },
-    ]);
-    const [editing, setEditing] = useState<string | null>(null);
+    const [configs, setConfigs] = useState<ModelConfig[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
 
-    const addConfig = () => {
+    // 从 API 加载配置
+    useEffect(() => {
+        const loadConfigs = async () => {
+            try {
+                const token = localStorage.getItem('galaxyous_token');
+                const response = await fetch(`/api/workspace-config/${workspaceId}/ai`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    // 映射 API 数据到本地格式
+                    const mapped = (data.configs || []).map((c: any) => ({
+                        id: c.id,
+                        name: c.name || '',
+                        provider: c.provider?.toUpperCase() || 'CUSTOM',
+                        apiKey: c.hasApiKey ? '••••••••' : '',
+                        baseUrl: c.baseUrl || '',
+                        modelName: c.model || '',
+                        temperature: c.temperature,
+                        maxTokens: c.maxTokens,
+                        isDefault: c.isActive || false,
+                    }));
+                    setConfigs(mapped);
+                }
+            } catch (e) {
+                console.error('Failed to load configs:', e);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadConfigs();
+    }, [workspaceId]);
+
+    const addConfig = async () => {
         const newConfig: ModelConfig = {
             id: Date.now().toString(),
-            name: `配置 ${configs.length + 1}`,
-            provider: 'OPENAI',
+            name: '',
+            provider: 'CUSTOM',
             apiKey: '',
             modelName: '',
-            isDefault: false,
+            isDefault: configs.length === 0,
         };
         setConfigs([...configs, newConfig]);
-        setEditing(newConfig.id);
     };
 
-    const deleteConfig = (id: string) => {
-        setConfigs(configs.filter(c => c.id !== id));
+    const deleteConfig = async (id: string) => {
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            await fetch(`/api/workspace-config/${workspaceId}/ai/${id}`, {
+                method: 'DELETE',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+            setConfigs(configs.filter(c => c.id !== id));
+        } catch (e) {
+            console.error('Failed to delete config:', e);
+        }
     };
 
     const setDefault = (id: string) => {
@@ -75,11 +106,54 @@ function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
         })));
     };
 
+    const saveConfigs = async () => {
+        setSaving(true);
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            // 转换为 API 格式
+            const apiConfigs = configs.map(c => ({
+                id: c.id,
+                name: c.name || `${c.provider} - ${c.modelName}`,
+                provider: c.provider.toLowerCase(),
+                model: c.modelName,
+                apiKey: c.apiKey.startsWith('••') ? undefined : c.apiKey,
+                baseUrl: c.baseUrl,
+                temperature: c.temperature ?? 0.7,
+                maxTokens: c.maxTokens ?? 4096,
+                isActive: c.isDefault,
+            }));
+
+            await fetch(`/api/workspace-config/${workspaceId}/ai`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ configs: apiConfigs }),
+            });
+        } catch (e) {
+            console.error('Failed to save configs:', e);
+            alert('保存失败');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return <div className="text-center py-8 text-slate-400">加载中...</div>;
+    }
+
     return (
         <div className="space-y-4">
             {/* 配置列表 */}
             <div className="space-y-2">
-                {configs.map(config => (
+                {configs.length === 0 ? (
+                    <div className="text-center py-8 text-slate-400">
+                        <Bot size={32} className="mx-auto mb-2 opacity-50" />
+                        <p>暂无模型配置</p>
+                        <p className="text-sm">点击下方按钮添加第一个配置</p>
+                    </div>
+                ) : configs.map(config => (
                     <div
                         key={config.id}
                         className={`p-4 rounded-xl border ${config.isDefault
@@ -90,7 +164,17 @@ function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
                         <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2">
                                 <Bot size={16} className="text-purple-400" />
-                                <span className="font-medium text-white">{config.name}</span>
+                                <input
+                                    type="text"
+                                    value={config.name}
+                                    onChange={(e) => {
+                                        setConfigs(configs.map(c =>
+                                            c.id === config.id ? { ...c, name: e.target.value } : c
+                                        ));
+                                    }}
+                                    placeholder="配置名称 (自定义)"
+                                    className="bg-transparent text-white font-medium focus:outline-none border-b border-transparent hover:border-white/20 focus:border-purple-500"
+                                />
                                 {config.isDefault && (
                                     <span className="text-[10px] bg-purple-600 px-2 py-0.5 rounded-full">默认</span>
                                 )}
@@ -115,7 +199,7 @@ function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
 
                         <div className="grid grid-cols-2 gap-3 text-sm">
                             <div>
-                                <label className="text-xs text-slate-500">Provider</label>
+                                <label className="text-xs text-slate-500">Provider (可选)</label>
                                 <select
                                     value={config.provider}
                                     onChange={(e) => {
@@ -128,11 +212,12 @@ function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
                                     <option value="OPENAI">OpenAI</option>
                                     <option value="ANTHROPIC">Anthropic</option>
                                     <option value="GEMINI">Google Gemini</option>
+                                    <option value="DEEPSEEK">DeepSeek</option>
                                     <option value="CUSTOM">自定义</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="text-xs text-slate-500">模型</label>
+                                <label className="text-xs text-slate-500">模型名称 (自定义)</label>
                                 <input
                                     type="text"
                                     value={config.modelName}
@@ -141,7 +226,7 @@ function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
                                             c.id === config.id ? { ...c, modelName: e.target.value } : c
                                         ));
                                     }}
-                                    placeholder="gpt-4o"
+                                    placeholder="输入任意模型名称"
                                     className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500"
                                 />
                             </div>
@@ -155,39 +240,49 @@ function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
                                             c.id === config.id ? { ...c, apiKey: e.target.value } : c
                                         ));
                                     }}
-                                    placeholder="sk-..."
+                                    placeholder="输入 API Key"
                                     className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500"
                                 />
                             </div>
-                            {config.provider === 'CUSTOM' && (
-                                <div className="col-span-2">
-                                    <label className="text-xs text-slate-500">Base URL</label>
-                                    <input
-                                        type="text"
-                                        value={config.baseUrl || ''}
-                                        onChange={(e) => {
-                                            setConfigs(configs.map(c =>
-                                                c.id === config.id ? { ...c, baseUrl: e.target.value } : c
-                                            ));
-                                        }}
-                                        placeholder="https://api.example.com/v1"
-                                        className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500"
-                                    />
-                                </div>
-                            )}
+                            <div className="col-span-2">
+                                <label className="text-xs text-slate-500">Base URL (可选)</label>
+                                <input
+                                    type="text"
+                                    value={config.baseUrl || ''}
+                                    onChange={(e) => {
+                                        setConfigs(configs.map(c =>
+                                            c.id === config.id ? { ...c, baseUrl: e.target.value } : c
+                                        ));
+                                    }}
+                                    placeholder="https://api.openai.com/v1 或自定义端点"
+                                    className="w-full mt-1 px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-white focus:outline-none focus:border-purple-500"
+                                />
+                            </div>
                         </div>
                     </div>
                 ))}
             </div>
 
-            {/* 添加配置 */}
-            <button
-                onClick={addConfig}
-                className="w-full py-2 border border-dashed border-white/20 rounded-xl text-slate-400 hover:text-white hover:border-white/40 transition-colors flex items-center justify-center gap-2"
-            >
-                <Plus size={16} />
-                <span>添加模型配置</span>
-            </button>
+            {/* 操作按钮 */}
+            <div className="flex gap-2">
+                <button
+                    onClick={addConfig}
+                    className="flex-1 py-2 border border-dashed border-white/20 rounded-xl text-slate-400 hover:text-white hover:border-white/40 transition-colors flex items-center justify-center gap-2"
+                >
+                    <Plus size={16} />
+                    <span>添加模型配置</span>
+                </button>
+                {configs.length > 0 && (
+                    <button
+                        onClick={saveConfigs}
+                        disabled={saving}
+                        className="px-6 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-xl transition-colors disabled:opacity-50 flex items-center gap-2"
+                    >
+                        {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                        <span>保存</span>
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
