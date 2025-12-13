@@ -1471,9 +1471,11 @@ export const generateVideo = async (
             resolution: config?.resolution || '720p'
         };
 
-        // Add durationSeconds if provided (let API handle validation)
+        // Add durationSeconds - default to 8s if not provided
         if (config?.durationSeconds && config.durationSeconds > 0) {
             videoConfig.durationSeconds = config.durationSeconds;
+        } else {
+            videoConfig.durationSeconds = 8; // Default 8 seconds
         }
 
         // Add fps if provided
@@ -1513,8 +1515,10 @@ export const generateVideo = async (
             // Try multiple paths for URI extraction (API structure may vary)
             let uri = operation.response?.generatedVideos?.[0]?.video?.uri
                 || operation.response?.videos?.[0]?.uri
+                || operation.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri
                 || operation.generatedVideos?.[0]?.video?.uri
-                || operation.videos?.[0]?.uri;
+                || operation.videos?.[0]?.uri
+                || (operation as any).generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
 
             if (!uri) {
                 console.error('Video generation failed - no URI in response:', operation);
@@ -1543,8 +1547,10 @@ export const generateVideo = async (
             // Try multiple paths for URI extraction (API structure may vary)
             let uri = (operation.response as any)?.generatedVideos?.[0]?.video?.uri
                 || (operation.response as any)?.videos?.[0]?.uri
+                || (operation.response as any)?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri
                 || (operation as any).generatedVideos?.[0]?.video?.uri
-                || (operation as any).videos?.[0]?.uri;
+                || (operation as any).videos?.[0]?.uri
+                || (operation as any).generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
 
             if (!uri) {
                 console.error('Video generation failed - no URI in response:', operation);
