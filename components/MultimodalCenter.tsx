@@ -952,15 +952,26 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                                                 <span className="text-xs font-mono bg-amber-500/20 px-2 rounded text-amber-300">{currentTab.durationSeconds}秒</span>
                                             </div>
                                             <input
-                                                type="range" min="4" max="8" step="1"
-                                                value={Math.max(4, Math.min(8, currentTab.durationSeconds))}
+                                                type="range" min="1" max="60" step="1"
+                                                value={currentTab.durationSeconds}
                                                 onChange={(e) => updateTab(activeTab as any, { durationSeconds: parseInt(e.target.value) })}
                                                 className="w-full h-2 bg-white/10 rounded-lg appearance-none cursor-pointer accent-amber-500"
                                             />
                                             <div className="flex justify-between text-[10px] text-slate-500 mt-1">
-                                                <span>4秒</span>
-                                                <span className="text-amber-500">Veo API 限制: 4-8秒</span>
-                                                <span>8秒</span>
+                                                <span>1秒</span>
+                                                <span className="text-amber-500">
+                                                    {(() => {
+                                                        const model = (currentTab.customModel || globalConfig.modelName || '').toLowerCase();
+                                                        if (model.includes('veo-3') || model.includes('veo3')) return '推荐: 4-8秒 (Veo 3)';
+                                                        if (model.includes('veo-2') || model.includes('veo2')) return '推荐: 5-8秒 (Veo 2)';
+                                                        if (model.includes('veo')) return '推荐: 4-8秒 (Veo)';
+                                                        if (model.includes('runway')) return '推荐: 4-16秒 (Runway)';
+                                                        if (model.includes('pika')) return '推荐: 3-4秒 (Pika)';
+                                                        if (model.includes('sora')) return '推荐: 5-20秒 (Sora)';
+                                                        return '自定义时长';
+                                                    })()}
+                                                </span>
+                                                <span>60秒</span>
                                             </div>
                                         </div>
                                     </div>
