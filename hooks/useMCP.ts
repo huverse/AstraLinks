@@ -8,6 +8,15 @@
 import { useState, useEffect, useCallback } from 'react';
 import { authFetch } from '../utils/api';
 
+// 获取 token 的辅助函数 (使用与 AuthContext 相同的 key)
+const getToken = () => localStorage.getItem('galaxyous_token');
+
+// 封装 API 调用
+const fetchAPI = async <T = any>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+    const token = getToken();
+    return authFetch<T>(endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`, token, options);
+};
+
 // ============================================
 // 类型定义
 // ============================================
@@ -50,12 +59,10 @@ export function useMCPList() {
 
         try {
             // 先获取内置 MCP
-            const builtinRes = await authFetch('/api/mcp-registry/builtin');
-            const builtinData = await builtinRes.json();
+            const builtinData = await fetchAPI<{ data: MCP[] }>('/api/mcp-registry/builtin');
 
             // 再获取自定义 MCP
-            const customRes = await authFetch('/api/mcp-registry');
-            const customData = await customRes.json();
+            const customData = await fetchAPI<{ data: MCP[] }>('/api/mcp-registry');
 
             const allMcps = [
                 ...(builtinData.data || []),
@@ -93,13 +100,14 @@ export function useMCPCall() {
         setCalling(true);
 
         try {
-            const res = await authFetch(`/api/mcp-registry/${mcpId}/call`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ tool, params }),
-            });
-
-            const data = await res.json();
+            const data = await fetchAPI<{ success: boolean; result?: any; error?: string; metadata?: { duration?: number } }>(
+                `/api/mcp-registry/${mcpId}/call`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tool, params }),
+                }
+            );
 
             const result: MCPCallResult = {
                 success: data.success,
@@ -136,13 +144,11 @@ export function useMCPRegister() {
         setRegistering(true);
 
         try {
-            const res = await authFetch('/api/mcp-registry', {
+            const data = await fetchAPI<{ data?: { id: string } }>('/api/mcp-registry', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(mcp),
             });
-
-            const data = await res.json();
             return { id: data.data?.id };
         } catch (err: any) {
             return { error: err.message };
@@ -153,7 +159,7 @@ export function useMCPRegister() {
 
     const unregister = useCallback(async (mcpId: string): Promise<boolean> => {
         try {
-            await authFetch(`/api/mcp-registry/${mcpId}`, { method: 'DELETE' });
+            await fetchAPI(`/api/mcp-registry/${mcpId}`, { method: 'DELETE' });
             return true;
         } catch {
             return false;
