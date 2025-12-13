@@ -163,11 +163,12 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             };
         });
 
-        // 使用 UPSERT 确保记录存在
+        // 使用 UPSERT 确保记录存在 (MySQL 8.0.20+ 兼容语法)
         await pool.execute(
-            `INSERT INTO workspace_configs (id, workspace_id, model_configs, updated_at)
-             VALUES (?, ?, ?, NOW())
-             ON DUPLICATE KEY UPDATE model_configs = VALUES(model_configs), updated_at = NOW()`,
+            `INSERT INTO workspace_configs (id, workspace_id, model_configs)
+             VALUES (?, ?, ?)
+             AS new_values
+             ON DUPLICATE KEY UPDATE model_configs = new_values.model_configs`,
             [uuidv4(), workspaceId, JSON.stringify(encryptedConfigs)]
         );
 
@@ -217,11 +218,12 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
 
         existingConfigs.push(newConfig);
 
-        // 使用 UPSERT 确保记录存在
+        // 使用 UPSERT 确保记录存在 (MySQL 8.0.20+ 兼容语法)
         await pool.execute(
-            `INSERT INTO workspace_configs (id, workspace_id, model_configs, updated_at)
-             VALUES (?, ?, ?, NOW())
-             ON DUPLICATE KEY UPDATE model_configs = VALUES(model_configs), updated_at = NOW()`,
+            `INSERT INTO workspace_configs (id, workspace_id, model_configs)
+             VALUES (?, ?, ?)
+             AS new_values
+             ON DUPLICATE KEY UPDATE model_configs = new_values.model_configs`,
             [uuidv4(), workspaceId, JSON.stringify(existingConfigs)]
         );
 
