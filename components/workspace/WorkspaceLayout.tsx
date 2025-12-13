@@ -224,9 +224,27 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
     };
 
     const handleSaveWorkflow = async (nodes: any[], edges: any[]) => {
-        // TODO: Save workflow nodes and edges to backend
-        console.log('Saving workflow:', { nodes, edges });
-        alert('工作流已保存');
+        if (!selectedWorkflowId) return;
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            const response = await fetch(`/api/workflows/${selectedWorkflowId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ nodes, edges }),
+            });
+
+            if (response.ok) {
+                console.log('Workflow saved successfully');
+            } else {
+                throw new Error('Save failed');
+            }
+        } catch (error) {
+            console.error('Save workflow error:', error);
+            alert('保存失败');
+        }
     };
 
     // 当切换到设置标签时显示设置面板

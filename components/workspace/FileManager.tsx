@@ -5,7 +5,7 @@
  * @description Workspace 内的文件管理器
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
     Folder, File, FileText, FileCode, Image, Upload,
     Trash2, Download, FolderPlus, ChevronRight, ChevronDown,
@@ -145,46 +145,41 @@ function formatFileSize(bytes: number): string {
 // ============================================
 
 export function FileManager({ workspaceId, onFileSelect, onFileUpload }: FileManagerProps) {
-    const [files, setFiles] = useState<FileItem[]>([
-        // 模拟数据
-        {
-            id: '1',
-            name: 'workflows',
-            type: 'folder',
-            path: '/workflows',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            children: [
-                { id: '1-1', name: 'main.json', type: 'file', mimeType: 'application/json', size: 2048, path: '/workflows/main.json', parentId: '1', createdAt: '', updatedAt: '' },
-                { id: '1-2', name: 'backup.json', type: 'file', mimeType: 'application/json', size: 1024, path: '/workflows/backup.json', parentId: '1', createdAt: '', updatedAt: '' },
-            ],
-        },
-        {
-            id: '2',
-            name: 'data',
-            type: 'folder',
-            path: '/data',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-            children: [
-                { id: '2-1', name: 'input.txt', type: 'file', mimeType: 'text/plain', size: 512, path: '/data/input.txt', parentId: '2', createdAt: '', updatedAt: '' },
-            ],
-        },
-        {
-            id: '3',
-            name: 'README.md',
-            type: 'file',
-            mimeType: 'text/markdown',
-            size: 1536,
-            path: '/README.md',
-            createdAt: new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        },
-    ]);
-
+    const [files, setFiles] = useState<FileItem[]>([]);
+    const [loading, setLoading] = useState(true);
     const [selectedId, setSelectedId] = useState<string | null>(null);
-    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['1', '2']));
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
     const [searchQuery, setSearchQuery] = useState('');
+
+    // 获取真实文件列表
+    useEffect(() => {
+        const fetchFiles = async () => {
+            setLoading(true);
+            try {
+                const token = localStorage.getItem('galaxyous_token');
+                const response = await fetch(`/api/workspace-config/${workspaceId}/files`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setFiles(data.files || []);
+                    // 自动展开文件夹
+                    const folderIds = (data.files || [])
+                        .filter((f: FileItem) => f.type === 'folder')
+                        .map((f: FileItem) => f.id);
+                    setExpandedIds(new Set(folderIds));
+                }
+            } catch (error) {
+                console.error('Failed to fetch files:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchFiles();
+    }, [workspaceId]);
+
 
     const handleSelect = useCallback((item: FileItem) => {
         setSelectedId(item.id);

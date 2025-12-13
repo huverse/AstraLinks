@@ -83,8 +83,8 @@ function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
                     <div
                         key={config.id}
                         className={`p-4 rounded-xl border ${config.isDefault
-                                ? 'border-purple-500/50 bg-purple-900/20'
-                                : 'border-white/10 bg-white/5'
+                            ? 'border-purple-500/50 bg-purple-900/20'
+                            : 'border-white/10 bg-white/5'
                             }`}
                     >
                         <div className="flex items-center justify-between mb-3">
@@ -218,8 +218,8 @@ function MCPConfigPanel({ workspaceId }: { workspaceId: string }) {
                 <div
                     key={mcp.id}
                     className={`p-4 rounded-xl border cursor-pointer transition-colors ${enabledMCPs.includes(mcp.id)
-                            ? 'border-green-500/50 bg-green-900/20'
-                            : 'border-white/10 bg-white/5 hover:bg-white/10'
+                        ? 'border-green-500/50 bg-green-900/20'
+                        : 'border-white/10 bg-white/5 hover:bg-white/10'
                         }`}
                     onClick={() => toggleMCP(mcp.id)}
                 >
@@ -232,8 +232,8 @@ function MCPConfigPanel({ workspaceId }: { workspaceId: string }) {
                             </div>
                         </div>
                         <div className={`w-4 h-4 rounded-full border-2 ${enabledMCPs.includes(mcp.id)
-                                ? 'bg-green-500 border-green-500'
-                                : 'border-slate-500'
+                            ? 'bg-green-500 border-green-500'
+                            : 'border-slate-500'
                             }`}>
                             {enabledMCPs.includes(mcp.id) && <Check size={12} className="text-white" />}
                         </div>
@@ -279,14 +279,14 @@ function FeatureTogglePanel({ workspaceId }: { workspaceId: string }) {
                     <button
                         onClick={() => toggleFeature(feature.key as keyof typeof features)}
                         className={`w-12 h-6 rounded-full transition-colors ${features[feature.key as keyof typeof features]
-                                ? 'bg-purple-600'
-                                : 'bg-slate-600'
+                            ? 'bg-purple-600'
+                            : 'bg-slate-600'
                             }`}
                     >
                         <div
                             className={`w-5 h-5 rounded-full bg-white transition-transform ${features[feature.key as keyof typeof features]
-                                    ? 'translate-x-6'
-                                    : 'translate-x-0.5'
+                                ? 'translate-x-6'
+                                : 'translate-x-0.5'
                                 }`}
                         />
                     </button>
@@ -306,10 +306,38 @@ function CloudSyncPanel({ workspaceId }: { workspaceId: string }) {
 
     const handleSync = async () => {
         setSyncing(true);
-        // TODO: 调用同步 API
-        await new Promise(r => setTimeout(r, 2000));
-        setLastSync(new Date().toISOString());
-        setSyncing(false);
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            // 获取工作区数据
+            const wsResponse = await fetch(`/api/workspaces/${workspaceId}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+            const wsData = await wsResponse.json();
+
+            // 上传到云端
+            const syncResponse = await fetch('/api/sync/upload', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({
+                    workspaceId,
+                    data: wsData,
+                }),
+            });
+
+            if (syncResponse.ok) {
+                setLastSync(new Date().toISOString());
+            } else {
+                throw new Error('Sync failed');
+            }
+        } catch (error) {
+            console.error('Sync error:', error);
+            alert('同步失败，请检查网络连接');
+        } finally {
+            setSyncing(false);
+        }
     };
 
     return (
@@ -394,8 +422,8 @@ export function WorkspaceSettings({ workspaceId, onClose }: WorkspaceSettingsPro
                         key={tab.id}
                         onClick={() => setActiveTab(tab.id as any)}
                         className={`flex-1 py-3 flex items-center justify-center gap-2 text-sm transition-colors ${activeTab === tab.id
-                                ? 'text-purple-400 border-b-2 border-purple-500'
-                                : 'text-slate-400 hover:text-white'
+                            ? 'text-purple-400 border-b-2 border-purple-500'
+                            : 'text-slate-400 hover:text-white'
                             }`}
                     >
                         <tab.icon size={16} />
