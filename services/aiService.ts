@@ -11,7 +11,7 @@ export const URI_PREFIX = 'URI_REF:';
 // ==================================================================================
 //  MULTIMODAL DEFAULT CONSTANTS
 // ==================================================================================
-export const DEFAULT_VIDEO_DURATION = 8; // seconds
+export const DEFAULT_VIDEO_DURATION = 5; // seconds (5s is middle of Veo's 4-8s range)
 export const DEFAULT_VIDEO_MODEL = 'veo-3.1-fast-generate-preview';
 export const DEFAULT_IMAGE_MODEL = 'imagen-3.0-generate-002';
 export const DEFAULT_SPEECH_MODEL = 'Gemini Live';
