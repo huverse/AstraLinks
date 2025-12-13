@@ -330,10 +330,28 @@ export function ConfigCenter({ workspaceId, onClose }: ConfigCenterProps) {
         try {
             if (editingConfig) {
                 // 更新现有配置
+                // 处理 API Key 的特殊情况：
+                // - 如果有新的 apiKey，使用新的
+                // - 如果 apiKey 为空但原配置有 key，发送 __PRESERVE__ 标记让后端保留原来的
+                // - 如果 apiKey 为空且原配置也没有，发送空字符串
+                let apiKeyToSend = formData.apiKey;
+                if (!formData.apiKey && editingConfig.hasApiKey) {
+                    apiKeyToSend = '__PRESERVE__';
+                }
+
                 const updatedConfigs = configs.map(c =>
                     c.id === editingConfig.id
-                        ? { ...c, ...formData, apiKey: formData.apiKey || c.hasApiKey ? c.id : '' }
-                        : c
+                        ? {
+                            ...c,
+                            name: formData.name,
+                            provider: formData.provider,
+                            model: formData.model,
+                            baseUrl: formData.baseUrl,
+                            temperature: formData.temperature,
+                            maxTokens: formData.maxTokens,
+                            apiKey: apiKeyToSend,
+                        }
+                        : { ...c, apiKey: c.hasApiKey ? '__PRESERVE__' : '' }
                 );
                 await fetchAPI(`/api/workspace-config/${workspaceId}/ai`, {
                     method: 'PUT',

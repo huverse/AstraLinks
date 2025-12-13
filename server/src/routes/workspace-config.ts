@@ -125,13 +125,43 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             return;
         }
 
-        // 加密 API Keys
-        const encryptedConfigs = configs.map((config: any) => ({
-            ...config,
-            apiKey: config.apiKey && !config.apiKey.startsWith('••••')
-                ? encrypt(config.apiKey)
-                : config.apiKey, // 保持已加密的
-        }));
+        // 获取现有配置以保留加密的 API Keys
+        const [existingRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT model_configs FROM workspace_configs WHERE workspace_id = ?`,
+            [workspaceId]
+        );
+
+        const existingConfigs: Record<string, any> = {};
+        if (existingRows.length > 0 && existingRows[0].model_configs) {
+            const parsed = typeof existingRows[0].model_configs === 'string'
+                ? JSON.parse(existingRows[0].model_configs)
+                : existingRows[0].model_configs;
+            parsed.forEach((c: any) => {
+                existingConfigs[c.id] = c;
+            });
+        }
+
+        // 处理 API Keys
+        const encryptedConfigs = configs.map((config: any) => {
+            let apiKeyToStore = '';
+
+            if (config.apiKey === '__PRESERVE__') {
+                // 保留现有的加密 key
+                apiKeyToStore = existingConfigs[config.id]?.apiKey || '';
+            } else if (config.apiKey && !config.apiKey.startsWith('••••')) {
+                // 新的 API Key，需要加密
+                apiKeyToStore = encrypt(config.apiKey);
+            } else if (config.apiKey?.startsWith('••••')) {
+                // 遮罩的 key，保留现有加密的
+                apiKeyToStore = existingConfigs[config.id]?.apiKey || '';
+            }
+            // 如果 apiKey 是空字符串或未定义，存储空字符串
+
+            return {
+                ...config,
+                apiKey: apiKeyToStore,
+            };
+        });
 
         await pool.execute(
             `UPDATE workspace_configs SET model_configs = ? WHERE workspace_id = ?`,
