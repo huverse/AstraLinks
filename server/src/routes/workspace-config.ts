@@ -163,14 +163,25 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             };
         });
 
-        // 使用 UPSERT 确保记录存在 (MySQL 8.0.20+ 兼容语法)
-        await pool.execute(
-            `INSERT INTO workspace_configs (id, workspace_id, model_configs)
-             VALUES (?, ?, ?)
-             AS new_values
-             ON DUPLICATE KEY UPDATE model_configs = new_values.model_configs`,
-            [uuidv4(), workspaceId, JSON.stringify(encryptedConfigs)]
+        // 检查记录是否存在，然后 INSERT 或 UPDATE
+        const [existingRecord] = await pool.execute<RowDataPacket[]>(
+            `SELECT id FROM workspace_configs WHERE workspace_id = ?`,
+            [workspaceId]
         );
+
+        if (existingRecord.length === 0) {
+            // 记录不存在，INSERT
+            await pool.execute(
+                `INSERT INTO workspace_configs (id, workspace_id, model_configs) VALUES (?, ?, ?)`,
+                [uuidv4(), workspaceId, JSON.stringify(encryptedConfigs)]
+            );
+        } else {
+            // 记录存在，UPDATE
+            await pool.execute(
+                `UPDATE workspace_configs SET model_configs = ? WHERE workspace_id = ?`,
+                [JSON.stringify(encryptedConfigs), workspaceId]
+            );
+        }
 
         res.json({ success: true });
     } catch (error: any) {
@@ -218,14 +229,25 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
 
         existingConfigs.push(newConfig);
 
-        // 使用 UPSERT 确保记录存在 (MySQL 8.0.20+ 兼容语法)
-        await pool.execute(
-            `INSERT INTO workspace_configs (id, workspace_id, model_configs)
-             VALUES (?, ?, ?)
-             AS new_values
-             ON DUPLICATE KEY UPDATE model_configs = new_values.model_configs`,
-            [uuidv4(), workspaceId, JSON.stringify(existingConfigs)]
+        // 检查记录是否存在，然后 INSERT 或 UPDATE
+        const [existingRecord] = await pool.execute<RowDataPacket[]>(
+            `SELECT id FROM workspace_configs WHERE workspace_id = ?`,
+            [workspaceId]
         );
+
+        if (existingRecord.length === 0) {
+            // 记录不存在，INSERT
+            await pool.execute(
+                `INSERT INTO workspace_configs (id, workspace_id, model_configs) VALUES (?, ?, ?)`,
+                [uuidv4(), workspaceId, JSON.stringify(existingConfigs)]
+            );
+        } else {
+            // 记录存在，UPDATE
+            await pool.execute(
+                `UPDATE workspace_configs SET model_configs = ? WHERE workspace_id = ?`,
+                [JSON.stringify(existingConfigs), workspaceId]
+            );
+        }
 
         res.status(201).json({
             id: newConfig.id,
