@@ -8,13 +8,14 @@
 import React, { useState } from 'react';
 import {
     GitBranch, History, FolderOpen, Settings,
-    ChevronLeft, Plus, Search, Cloud, Wand2
+    ChevronLeft, Plus, Search, Cloud, Wand2, Key
 } from 'lucide-react';
 import { useWorkflows, Workflow } from '../../hooks/useWorkspace';
 import { WorkflowEditor } from '../workflow';
 import ExecutionMonitor from './ExecutionMonitor';
 import FileManager from './FileManager';
 import WorkspaceSettings from './settings/WorkspaceSettings';
+import ConfigCenter from './ConfigCenter';
 
 // ============================================
 // 执行历史面板
@@ -66,11 +67,12 @@ interface SidebarProps {
     selectedWorkflowId: string | null;
     onSelectWorkflow: (id: string) => void;
     onCreateWorkflow: () => void;
+    onOpenConfigCenter: () => void;
 }
 
 function Sidebar({
     workspaceId, workspaceName, activeTab, onTabChange, onBack,
-    workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow
+    workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow, onOpenConfigCenter
 }: SidebarProps) {
     const tabs = [
         { id: 'workflows' as const, icon: GitBranch, label: '工作流' },
@@ -175,6 +177,13 @@ function Sidebar({
 
             {/* 快捷功能 */}
             <div className="p-2 border-t border-white/10 space-y-1">
+                <button
+                    onClick={onOpenConfigCenter}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-purple-400 hover:text-white hover:bg-purple-500/20 rounded-lg transition-colors"
+                >
+                    <Key size={16} />
+                    <span>AI 配置中心</span>
+                </button>
                 <button className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors">
                     <Cloud size={16} />
                     <span>云端同步</span>
@@ -203,6 +212,7 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
     const [activeTab, setActiveTab] = useState<'workflows' | 'executions' | 'files' | 'settings'>('workflows');
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
     const [showSettings, setShowSettings] = useState(false);
+    const [showConfigCenter, setShowConfigCenter] = useState(false);
     const { workflows, createWorkflow } = useWorkflows(workspaceId);
 
     const handleCreateWorkflow = async () => {
@@ -239,6 +249,7 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                 selectedWorkflowId={selectedWorkflowId}
                 onSelectWorkflow={setSelectedWorkflowId}
                 onCreateWorkflow={handleCreateWorkflow}
+                onOpenConfigCenter={() => setShowConfigCenter(true)}
             />
 
             {/* 主内容区 */}
@@ -273,6 +284,16 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                             }}
                         />
                     </div>
+                </div>
+            )}
+
+            {/* 配置中心 (弹出式) */}
+            {showConfigCenter && (
+                <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                    <ConfigCenter
+                        workspaceId={workspaceId}
+                        onClose={() => setShowConfigCenter(false)}
+                    />
                 </div>
             )}
         </div>

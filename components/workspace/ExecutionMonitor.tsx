@@ -5,7 +5,7 @@
  * @description 工作流执行历史和实时监控
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Clock, CheckCircle, XCircle, Loader2, AlertCircle,
     ChevronRight, ChevronDown, Zap, Bot, RefreshCw
@@ -85,8 +85,8 @@ interface ExecutionCardProps {
 function ExecutionCard({ execution, isExpanded, onToggle, onViewDetails }: ExecutionCardProps) {
     return (
         <div className={`bg-white/5 rounded-xl border ${execution.status === 'running' ? 'border-yellow-500/50' :
-                execution.status === 'failed' ? 'border-red-500/30' :
-                    'border-white/10'
+            execution.status === 'failed' ? 'border-red-500/30' :
+                'border-white/10'
             } overflow-hidden`}>
             {/* 卡片头部 */}
             <div
@@ -149,7 +149,7 @@ function ExecutionCard({ execution, isExpanded, onToggle, onViewDetails }: Execu
                         <div className="h-1.5 bg-white/10 rounded-full overflow-hidden">
                             <div
                                 className={`h-full transition-all ${execution.status === 'failed' ? 'bg-red-500' :
-                                        execution.status === 'running' ? 'bg-yellow-500' : 'bg-green-500'
+                                    execution.status === 'running' ? 'bg-yellow-500' : 'bg-green-500'
                                     }`}
                                 style={{ width: `${execution.completedNodes / execution.nodeCount * 100}%` }}
                             />
@@ -168,7 +168,7 @@ function ExecutionCard({ execution, isExpanded, onToggle, onViewDetails }: Execu
                         <div className="max-h-[100px] overflow-y-auto bg-black/30 rounded-lg p-2">
                             {execution.logs.slice(-5).map((log, i) => (
                                 <div key={i} className={`text-xs font-mono ${log.level === 'error' ? 'text-red-400' :
-                                        log.level === 'warn' ? 'text-yellow-400' : 'text-slate-400'
+                                    log.level === 'warn' ? 'text-yellow-400' : 'text-slate-400'
                                     }`}>
                                     <span className="text-slate-600">[{new Date(log.timestamp).toLocaleTimeString()}]</span>
                                     {' '}{log.message}
@@ -187,51 +187,56 @@ function ExecutionCard({ execution, isExpanded, onToggle, onViewDetails }: Execu
 // ============================================
 
 export function ExecutionMonitor({ workspaceId, executions: propExecutions, onRefresh, onViewDetails }: ExecutionMonitorProps) {
-    // 模拟数据
-    const [executions] = useState<ExecutionRecord[]>(propExecutions || [
-        {
-            id: 'exec-001',
-            workflowId: 'wf-1',
-            workflowName: '数据处理流程',
-            status: 'completed',
-            startTime: new Date(Date.now() - 300000).toISOString(),
-            endTime: new Date(Date.now() - 280000).toISOString(),
-            duration: 20000,
-            totalTokens: 1250,
-            nodeCount: 5,
-            completedNodes: 5,
-        },
-        {
-            id: 'exec-002',
-            workflowId: 'wf-2',
-            workflowName: 'AI 分析任务',
-            status: 'running',
-            startTime: new Date(Date.now() - 10000).toISOString(),
-            duration: 10000,
-            totalTokens: 320,
-            nodeCount: 8,
-            completedNodes: 3,
-            logs: [
-                { timestamp: Date.now() - 8000, level: 'info', message: '开始执行节点: AI分析' },
-                { timestamp: Date.now() - 5000, level: 'info', message: 'AI调用完成, tokens: 180' },
-                { timestamp: Date.now() - 2000, level: 'info', message: '执行条件判断...' },
-            ],
-        },
-        {
-            id: 'exec-003',
-            workflowId: 'wf-1',
-            workflowName: '数据处理流程',
-            status: 'failed',
-            startTime: new Date(Date.now() - 600000).toISOString(),
-            endTime: new Date(Date.now() - 590000).toISOString(),
-            duration: 10000,
-            nodeCount: 5,
-            completedNodes: 2,
-            error: 'AI节点调用失败: 超时',
-        },
-    ]);
+    const [executions, setExecutions] = useState<ExecutionRecord[]>(propExecutions || []);
+    const [loading, setLoading] = useState(!propExecutions);
+    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
-    const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['exec-002']));
+    // 获取真实执行历史
+    useEffect(() => {
+        if (propExecutions) return; // 如果有传入的数据就不请求
+
+        const fetchExecutions = async () => {
+            setLoading(true);
+            try {
+                const token = localStorage.getItem('galaxyous_token');
+                const response = await fetch(`/api/workspace-config/${workspaceId}/executions`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    setExecutions(data.executions || []);
+                    // 自动展开运行中的任务
+                    const runningIds = (data.executions || [])
+                        .filter((e: ExecutionRecord) => e.status === 'running')
+                        .map((e: ExecutionRecord) => e.id);
+                    setExpandedIds(new Set(runningIds));
+                }
+            } catch (error) {
+                console.error('Failed to fetch executions:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        fetchExecutions();
+    }, [workspaceId, propExecutions]);
+
+    const handleRefresh = () => {
+        if (onRefresh) {
+            onRefresh();
+        } else {
+            // 重新获取数据
+            setLoading(true);
+            const token = localStorage.getItem('galaxyous_token');
+            fetch(`/api/workspace-config/${workspaceId}/executions`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            })
+                .then(res => res.json())
+                .then(data => setExecutions(data.executions || []))
+                .finally(() => setLoading(false));
+        }
+    };
 
     const toggleExpand = (id: string) => {
         setExpandedIds(prev => {
@@ -259,10 +264,11 @@ export function ExecutionMonitor({ workspaceId, executions: propExecutions, onRe
                     <span className="font-medium text-white">执行监控</span>
                 </div>
                 <button
-                    onClick={onRefresh}
+                    onClick={handleRefresh}
                     className="p-1.5 text-slate-400 hover:text-white transition-colors"
+                    disabled={loading}
                 >
-                    <RefreshCw size={16} />
+                    <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
                 </button>
             </div>
 

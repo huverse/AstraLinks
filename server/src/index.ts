@@ -21,6 +21,7 @@ import mcpRegistryRoutes from './routes/mcpRegistry';
 import workspacesRoutes from './routes/workspaces';
 import workflowsRoutes from './routes/workflows';
 import syncRoutes from './routes/sync';
+import workspaceConfigRoutes from './routes/workspace-config';
 import adminWorkflowsRoutes from './routes/admin-workflows';
 import adminMcpRoutes from './routes/admin-mcp';
 import { initDatabase, initTimezone } from './config/database';
@@ -64,6 +65,7 @@ app.use('/api/mcp-registry', mcpRegistryRoutes);
 app.use('/api/workspaces', workspacesRoutes);
 app.use('/api/workflows', workflowsRoutes);
 app.use('/api/sync', syncRoutes);
+app.use('/api/workspace-config', workspaceConfigRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
