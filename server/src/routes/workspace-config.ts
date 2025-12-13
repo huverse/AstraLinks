@@ -163,9 +163,12 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             };
         });
 
+        // 使用 UPSERT 确保记录存在
         await pool.execute(
-            `UPDATE workspace_configs SET model_configs = ? WHERE workspace_id = ?`,
-            [JSON.stringify(encryptedConfigs), workspaceId]
+            `INSERT INTO workspace_configs (id, workspace_id, model_configs, updated_at)
+             VALUES (?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE model_configs = VALUES(model_configs), updated_at = NOW()`,
+            [uuidv4(), workspaceId, JSON.stringify(encryptedConfigs)]
         );
 
         res.json({ success: true });
@@ -214,9 +217,12 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
 
         existingConfigs.push(newConfig);
 
+        // 使用 UPSERT 确保记录存在
         await pool.execute(
-            `UPDATE workspace_configs SET model_configs = ? WHERE workspace_id = ?`,
-            [JSON.stringify(existingConfigs), workspaceId]
+            `INSERT INTO workspace_configs (id, workspace_id, model_configs, updated_at)
+             VALUES (?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE model_configs = VALUES(model_configs), updated_at = NOW()`,
+            [uuidv4(), workspaceId, JSON.stringify(existingConfigs)]
         );
 
         res.status(201).json({
