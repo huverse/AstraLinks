@@ -16,6 +16,9 @@ import * as path from 'path';
 
 const router = Router();
 
+// 所有路由需要认证
+router.use(authMiddleware);
+
 // 加密密钥 (生产环境从环境变量获取)
 const ENCRYPTION_KEY = process.env.CONFIG_ENCRYPTION_KEY || 'astralinks-config-key-2024';
 
