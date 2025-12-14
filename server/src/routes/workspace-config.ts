@@ -54,10 +54,26 @@ router.use(authMiddleware);
 
 const verifyOwnership = async (workspaceId: string, userId: number): Promise<boolean> => {
     const [rows] = await pool.execute<RowDataPacket[]>(
-        `SELECT id FROM workspaces WHERE id = ? AND owner_id = ? AND is_deleted = FALSE`,
-        [workspaceId, userId]
+        `SELECT id, owner_id FROM workspaces WHERE id = ? AND is_deleted = FALSE`,
+        [workspaceId]
     );
-    return rows.length > 0;
+
+    if (rows.length === 0) {
+        console.log('[WorkspaceConfig] verifyOwnership: workspace not found:', workspaceId);
+        return false;
+    }
+
+    const workspace = rows[0];
+    const ownerId = workspace.owner_id;
+
+    // 支持字符串和数字比较
+    const isOwner = ownerId == userId || ownerId === String(userId) || String(ownerId) === String(userId);
+
+    if (!isOwner) {
+        console.log('[WorkspaceConfig] verifyOwnership failed:', { workspaceId, ownerId, userId, ownerIdType: typeof ownerId, userIdType: typeof userId });
+    }
+
+    return isOwner;
 };
 
 // ============================================
