@@ -13,6 +13,9 @@ import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
 
+// 所有路由需要认证
+router.use(authMiddleware);
+
 // ============================================
 // 类型定义
 // ============================================
