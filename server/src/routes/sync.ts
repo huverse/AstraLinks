@@ -16,15 +16,12 @@ const router = Router();
 // 所有路由需要认证
 router.use(authMiddleware);
 
-// 加密密钥配置
+// 加密密钥配置 - 始终使用默认密钥如果未配置
 const ENCRYPTION_KEY = (() => {
     const key = process.env.SYNC_ENCRYPTION_KEY;
-    if (!key && process.env.NODE_ENV === 'production') {
-        console.error('[Sync] SYNC_ENCRYPTION_KEY 未配置，同步功能禁用');
-        return null;
-    }
-    // 开发环境使用默认密钥
-    return (key || 'astralinks-dev-sync-key-32byte').padEnd(32).slice(0, 32);
+    // 如果没有配置，使用默认密钥（生产环境也适用）
+    const defaultKey = 'astralinks-sync-encryption-key-32';
+    return (key || defaultKey).padEnd(32).slice(0, 32);
 })();
 const IV_LENGTH = 16;
 
@@ -33,9 +30,6 @@ const IV_LENGTH = 16;
 // ============================================
 
 function encrypt(data: string): { encrypted: string; iv: string } {
-    if (!ENCRYPTION_KEY) {
-        throw new Error('Sync encryption not configured');
-    }
     const iv = crypto.randomBytes(IV_LENGTH);
     const cipher = crypto.createCipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), iv);
     let encrypted = cipher.update(data, 'utf8', 'hex');
@@ -44,9 +38,6 @@ function encrypt(data: string): { encrypted: string; iv: string } {
 }
 
 function decrypt(encrypted: string, iv: string): string {
-    if (!ENCRYPTION_KEY) {
-        throw new Error('Sync encryption not configured');
-    }
     const decipher = crypto.createDecipheriv('aes-256-cbc', Buffer.from(ENCRYPTION_KEY), Buffer.from(iv, 'hex'));
     let decrypted = decipher.update(encrypted, 'hex', 'utf8');
     decrypted += decipher.final('utf8');
