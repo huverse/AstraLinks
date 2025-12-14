@@ -9,8 +9,12 @@ import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
 import { v4 as uuidv4 } from 'uuid';
 import crypto from 'crypto';
+import { authMiddleware } from '../middleware/auth';
 
 const router = Router();
+
+// 所有路由需要认证
+router.use(authMiddleware);
 
 // 加密密钥配置
 const ENCRYPTION_KEY = (() => {
@@ -59,7 +63,7 @@ function checksum(data: string): string {
 
 router.post('/upload', async (req: Request, res: Response) => {
     try {
-        const userId = (req as any).userId;
+        const userId = (req as any).user.id;
         if (!userId) {
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
@@ -111,7 +115,7 @@ router.post('/upload', async (req: Request, res: Response) => {
 
 router.post('/download', async (req: Request, res: Response) => {
     try {
-        const userId = (req as any).userId;
+        const userId = (req as any).user.id;
         if (!userId) {
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
@@ -156,7 +160,7 @@ router.post('/download', async (req: Request, res: Response) => {
 
 router.get('/history', async (req: Request, res: Response) => {
     try {
-        const userId = (req as any).userId;
+        const userId = (req as any).user.id;
         if (!userId) {
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
@@ -181,7 +185,7 @@ router.get('/history', async (req: Request, res: Response) => {
 
 router.delete('/:syncId', async (req: Request, res: Response) => {
     try {
-        const userId = (req as any).userId;
+        const userId = (req as any).user.id;
         if (!userId) {
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
@@ -203,7 +207,7 @@ router.delete('/:syncId', async (req: Request, res: Response) => {
 
 router.get('/latest', async (req: Request, res: Response) => {
     try {
-        const userId = (req as any).userId;
+        const userId = (req as any).user.id;
         if (!userId) {
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
