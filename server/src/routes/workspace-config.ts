@@ -203,7 +203,10 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
         const { workspaceId } = req.params;
         const { name, provider, model, apiKey, baseUrl, temperature, maxTokens } = req.body;
 
+        console.log('[WorkspaceConfig] POST /ai request:', { workspaceId, userId, name, model, hasApiKey: !!apiKey });
+
         if (!await verifyOwnership(workspaceId, userId)) {
+            console.log('[WorkspaceConfig] POST /ai ownership check failed:', { workspaceId, userId });
             res.status(403).json({ error: '无权访问' });
             return;
         }

@@ -403,6 +403,27 @@ function CloudSyncPanel({ workspaceId }: { workspaceId: string }) {
     const [syncing, setSyncing] = useState(false);
     const [lastSync, setLastSync] = useState<string | null>(null);
 
+    // 加载最后同步时间
+    useEffect(() => {
+        const loadLastSync = async () => {
+            try {
+                const token = localStorage.getItem('galaxyous_token');
+                const response = await fetch(`/api/sync/latest?workspaceId=${workspaceId}`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.data?.createdAt) {
+                        setLastSync(data.data.createdAt);
+                    }
+                }
+            } catch (error) {
+                console.error('Failed to load last sync:', error);
+            }
+        };
+        loadLastSync();
+    }, [workspaceId]);
+
     const handleSync = async () => {
         setSyncing(true);
         try {
