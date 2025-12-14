@@ -360,24 +360,39 @@ router.put('/:id/config', async (req: Request, res: Response): Promise<void> => 
             return;
         }
 
-        // Upsert 配置
-        await pool.execute(
-            `INSERT INTO workspace_configs (id, workspace_id, model_configs, default_model_id, enabled_mcps, features)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON DUPLICATE KEY UPDATE 
-         model_configs = VALUES(model_configs),
-         default_model_id = VALUES(default_model_id),
-         enabled_mcps = VALUES(enabled_mcps),
-         features = VALUES(features)`,
-            [
-                uuidv4(),
-                id,
-                JSON.stringify(modelConfigs || []),
-                defaultModelId || null,
-                JSON.stringify(enabledMCPs || []),
-                JSON.stringify(features || { promptOptimization: false, autoSave: true, versionHistory: true })
-            ]
+        // 检查配置记录是否存在
+        const [existingConfig] = await pool.execute<RowDataPacket[]>(
+            `SELECT id FROM workspace_configs WHERE workspace_id = ?`,
+            [id]
         );
+
+        if (existingConfig.length === 0) {
+            // 记录不存在，INSERT
+            await pool.execute(
+                `INSERT INTO workspace_configs (id, workspace_id, model_configs, default_model_id, enabled_mcps, features)
+                 VALUES (?, ?, ?, ?, ?, ?)`,
+                [
+                    uuidv4(),
+                    id,
+                    JSON.stringify(modelConfigs || []),
+                    defaultModelId || null,
+                    JSON.stringify(enabledMCPs || []),
+                    JSON.stringify(features || { promptOptimization: false, autoSave: true, versionHistory: true })
+                ]
+            );
+        } else {
+            // 记录存在，UPDATE
+            await pool.execute(
+                `UPDATE workspace_configs 
+                 SET enabled_mcps = ?, features = ?
+                 WHERE workspace_id = ?`,
+                [
+                    JSON.stringify(enabledMCPs || []),
+                    JSON.stringify(features || { promptOptimization: false, autoSave: true, versionHistory: true }),
+                    id
+                ]
+            );
+        }
 
         res.json({ success: true });
     } catch (error: any) {

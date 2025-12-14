@@ -291,9 +291,13 @@ function ModelConfigPanel({ workspaceId }: { workspaceId: string }) {
 // MCP 配置面板
 // ============================================
 
-function MCPConfigPanel({ workspaceId }: { workspaceId: string }) {
-    const [enabledMCPs, setEnabledMCPs] = useState(['mcp-web-search', 'mcp-http']);
-
+function MCPConfigPanel({
+    enabledMCPs,
+    setEnabledMCPs
+}: {
+    enabledMCPs: string[];
+    setEnabledMCPs: React.Dispatch<React.SetStateAction<string[]>>;
+}) {
     const availableMCPs = [
         { id: 'mcp-web-search', name: 'Web Search', description: '网页搜索' },
         { id: 'mcp-file-system', name: 'File System', description: '文件操作' },
@@ -343,13 +347,13 @@ function MCPConfigPanel({ workspaceId }: { workspaceId: string }) {
 // 功能开关面板
 // ============================================
 
-function FeatureTogglePanel({ workspaceId }: { workspaceId: string }) {
-    const [features, setFeatures] = useState({
-        promptOptimization: false,
-        autoSave: true,
-        versionHistory: true,
-    });
-
+function FeatureTogglePanel({
+    features,
+    setFeatures
+}: {
+    features: { promptOptimization: boolean; autoSave: boolean; versionHistory: boolean };
+    setFeatures: React.Dispatch<React.SetStateAction<{ promptOptimization: boolean; autoSave: boolean; versionHistory: boolean }>>;
+}) {
     const toggleFeature = (key: keyof typeof features) => {
         setFeatures(prev => ({ ...prev, [key]: !prev[key] }));
     };
@@ -482,6 +486,15 @@ export function WorkspaceSettings({ workspaceId, onClose }: WorkspaceSettingsPro
     const [activeTab, setActiveTab] = useState<'mcp' | 'features' | 'sync'>('mcp');
     const [saving, setSaving] = useState(false);
     const [saveSuccess, setSaveSuccess] = useState(false);
+    const [loading, setLoading] = useState(true);
+
+    // 全局状态
+    const [enabledMCPs, setEnabledMCPs] = useState<string[]>(['mcp-web-search', 'mcp-http']);
+    const [features, setFeatures] = useState({
+        promptOptimization: false,
+        autoSave: true,
+        versionHistory: true,
+    });
 
     const tabs = [
         { id: 'mcp', label: 'MCP 工具', icon: Plug },
@@ -489,13 +502,53 @@ export function WorkspaceSettings({ workspaceId, onClose }: WorkspaceSettingsPro
         { id: 'sync', label: '云端同步', icon: Cloud },
     ];
 
+    // 加载配置
+    useEffect(() => {
+        const loadConfig = async () => {
+            try {
+                const token = localStorage.getItem('galaxyous_token');
+                const response = await fetch(`/api/workspaces/${workspaceId}/config`, {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.enabledMCPs) setEnabledMCPs(data.enabledMCPs);
+                    if (data.features) setFeatures(data.features);
+                }
+            } catch (error) {
+                console.error('Failed to load config:', error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadConfig();
+    }, [workspaceId]);
+
     const handleSave = async () => {
         setSaving(true);
         try {
-            // TODO: 实际保存逻辑
-            await new Promise(r => setTimeout(r, 800));
+            const token = localStorage.getItem('galaxyous_token');
+            const response = await fetch(`/api/workspaces/${workspaceId}/config`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({
+                    enabledMCPs,
+                    features,
+                }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Save failed');
+            }
+
             setSaveSuccess(true);
             setTimeout(() => setSaveSuccess(false), 2000);
+        } catch (error) {
+            console.error('Save failed:', error);
+            alert('保存失败，请稍后重试');
         } finally {
             setSaving(false);
         }
@@ -511,8 +564,8 @@ export function WorkspaceSettings({ workspaceId, onClose }: WorkspaceSettingsPro
                         onClick={handleSave}
                         disabled={saving}
                         className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors disabled:opacity-50 ${saveSuccess
-                                ? 'bg-green-600 text-white'
-                                : 'bg-purple-600 hover:bg-purple-500 text-white'
+                            ? 'bg-green-600 text-white'
+                            : 'bg-purple-600 hover:bg-purple-500 text-white'
                             }`}
                     >
                         {saving ? (
@@ -554,8 +607,8 @@ export function WorkspaceSettings({ workspaceId, onClose }: WorkspaceSettingsPro
 
             {/* 内容区 */}
             <div className="flex-1 overflow-y-auto p-6">
-                {activeTab === 'mcp' && <MCPConfigPanel workspaceId={workspaceId} />}
-                {activeTab === 'features' && <FeatureTogglePanel workspaceId={workspaceId} />}
+                {activeTab === 'mcp' && <MCPConfigPanel enabledMCPs={enabledMCPs} setEnabledMCPs={setEnabledMCPs} />}
+                {activeTab === 'features' && <FeatureTogglePanel features={features} setFeatures={setFeatures} />}
                 {activeTab === 'sync' && <CloudSyncPanel workspaceId={workspaceId} />}
             </div>
 
