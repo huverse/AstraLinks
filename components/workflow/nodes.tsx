@@ -522,6 +522,39 @@ export const SubWorkflowNode = memo(({ data, selected }: NodeProps<SubWorkflowNo
 SubWorkflowNode.displayName = 'SubWorkflowNode';
 
 // ============================================
+// 知识库检索节点 (RAG)
+// ============================================
+
+interface KnowledgeNodeData {
+    label: string;
+    query?: string;
+    topK?: number;
+}
+
+export const KnowledgeNode = memo(({ data, selected }: NodeProps<KnowledgeNodeData>) => (
+    <div className={`${baseNodeStyle} bg-gradient-to-br from-blue-500/90 to-cyan-600/90 border-blue-400/50 ${selected ? 'ring-2 ring-blue-400' : ''}`}>
+        <Handle type="target" position={Position.Top} style={handleStyle} className="!bg-blue-300" />
+
+        <div className="p-3">
+            <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 bg-white/20 rounded-lg">
+                    <Database size={16} className="text-white" />
+                </div>
+                <span className="font-semibold text-white text-sm">{data.label || '知识库检索'}</span>
+                <span className="text-xs bg-white/20 px-1.5 py-0.5 rounded">RAG</span>
+            </div>
+            <div className="text-xs text-blue-200 bg-white/10 px-2 py-1 rounded-lg">
+                {data.query ? `"${data.query.slice(0, 20)}..."` : '语义检索'} · Top {data.topK || 5}
+            </div>
+        </div>
+
+        <Handle type="source" position={Position.Bottom} style={handleStyle} className="!bg-blue-300" />
+    </div>
+));
+
+KnowledgeNode.displayName = 'KnowledgeNode';
+
+// ============================================
 // 导出节点类型映射
 // ============================================
 
@@ -531,6 +564,8 @@ export const nodeTypes = {
     end: EndNode,
     // AI 节点
     ai: AINode,
+    // 知识库节点 (RAG)
+    knowledge: KnowledgeNode,
     // 控制流节点
     condition: ConditionNode,
     loop: LoopNode,
@@ -551,3 +586,4 @@ export const nodeTypes = {
 };
 
 export type NodeType = keyof typeof nodeTypes;
+

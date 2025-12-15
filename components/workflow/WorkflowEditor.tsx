@@ -46,6 +46,8 @@ const nodeToolItems: NodeToolItem[] = [
     { type: 'end', label: '结束', icon: <Square size={16} />, color: 'bg-red-500' },
     // AI 节点
     { type: 'ai', label: 'AI', icon: <Bot size={16} />, color: 'bg-purple-500' },
+    // 知识库节点 (RAG)
+    { type: 'knowledge', label: '知识库', icon: <Database size={16} />, color: 'bg-blue-500' },
     // 控制流节点
     { type: 'condition', label: '条件', icon: <GitBranch size={16} />, color: 'bg-amber-500' },
     { type: 'loop', label: '循环', icon: <Repeat size={16} />, color: 'bg-yellow-500' },
@@ -816,8 +818,8 @@ export function WorkflowEditor({
                                     <div className="pt-2 border-t border-slate-700">
                                         <span className="text-xs text-slate-500">执行状态: </span>
                                         <span className={`text-xs font-medium ${execution.nodeStates[selectedNode.id].status === 'completed' ? 'text-green-400' :
-                                                execution.nodeStates[selectedNode.id].status === 'failed' ? 'text-red-400' :
-                                                    execution.nodeStates[selectedNode.id].status === 'running' ? 'text-yellow-400' : 'text-slate-400'
+                                            execution.nodeStates[selectedNode.id].status === 'failed' ? 'text-red-400' :
+                                                execution.nodeStates[selectedNode.id].status === 'running' ? 'text-yellow-400' : 'text-slate-400'
                                             }`}>
                                             {execution.nodeStates[selectedNode.id].status}
                                         </span>

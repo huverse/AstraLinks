@@ -367,6 +367,83 @@ export const executeTriggerNode: NodeExecutor = async (node, input, context) => 
 };
 
 // ============================================
+// 知识库检索节点执行器 (RAG)
+// ============================================
+
+export const executeKnowledgeNode: NodeExecutor = async (node, input, context) => {
+    const { query, apiKey, provider = 'openai', topK = 5, threshold = 0.6 } = node.data;
+    const workspaceId = context.variables.workspaceId;
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `开始知识库检索: "${query?.slice(0, 50)}..."`,
+    });
+
+    // 优先使用节点配置的查询，否则使用输入
+    const searchQuery = query || (typeof input === 'string' ? input : input?.query || input?.text || '');
+
+    if (!searchQuery) {
+        throw new Error('知识库节点需要查询内容');
+    }
+
+    if (!apiKey) {
+        throw new Error('知识库节点需要 API Key 进行 Embedding');
+    }
+
+    try {
+        // 调用知识库 API
+        const response = await fetch(`/api/knowledge/${workspaceId}/query`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${context.variables.authToken || ''}`,
+            },
+            body: JSON.stringify({
+                query: searchQuery,
+                apiKey,
+                provider,
+                topK,
+                threshold,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || '知识库查询失败');
+        }
+
+        const data = await response.json();
+
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'info',
+            message: `检索完成: 找到 ${data.results?.length || 0} 条相关内容`,
+        });
+
+        // 返回结构化结果
+        return {
+            query: searchQuery,
+            results: data.results || [],
+            context: data.context || '',
+            resultCount: data.results?.length || 0,
+            // 便于下游 AI 节点使用的格式
+            ragContext: data.context || '',
+        };
+    } catch (error: any) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'error',
+            message: `知识库检索失败: ${error.message}`,
+        });
+        throw error;
+    }
+};
+
+// ============================================
 // 执行器映射
 // ============================================
 
@@ -379,4 +456,6 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
     output: executeOutputNode,
     code: executeCodeNode,
     trigger: executeTriggerNode,
+    knowledge: executeKnowledgeNode,
 };
+
