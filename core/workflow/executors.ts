@@ -444,6 +444,82 @@ export const executeKnowledgeNode: NodeExecutor = async (node, input, context) =
 };
 
 // ============================================
+// MCP 工具节点执行器
+// ============================================
+
+import { mcpExecutor } from '../mcp/registry';
+
+const executeMCPNode: NodeExecutor = async (node, input, context) => {
+    const { mcpId, mcpName, tool, params } = node.data;
+
+    if (!mcpId || !tool) {
+        throw new Error('MCP 节点未配置工具');
+    }
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `调用 MCP 工具: ${mcpName || mcpId} / ${tool}`,
+    });
+
+    try {
+        // 解析参数，支持 {{input}} 变量替换
+        let parsedParams = {};
+        if (params) {
+            let paramsStr = params;
+            // 替换 {{input}} 为上一节点的输出
+            if (typeof input === 'string') {
+                paramsStr = paramsStr.replace(/\{\{input\}\}/g, input);
+            } else if (typeof input === 'object') {
+                paramsStr = paramsStr.replace(/\{\{input\}\}/g, JSON.stringify(input));
+            }
+            try {
+                parsedParams = JSON.parse(paramsStr);
+            } catch (e) {
+                context.logs.push({
+                    timestamp: Date.now(),
+                    nodeId: node.id,
+                    level: 'warn',
+                    message: `参数 JSON 解析失败，使用空参数`,
+                });
+            }
+        }
+
+        // 调用 MCP 执行器
+        const response = await mcpExecutor.call({
+            mcpId,
+            tool,
+            params: parsedParams,
+        });
+
+        if (response.success) {
+            context.logs.push({
+                timestamp: Date.now(),
+                nodeId: node.id,
+                level: 'info',
+                message: `MCP 工具执行成功`,
+                data: response.result,
+            });
+            return response.result;
+        } else {
+            const errMsg = typeof response.error === 'string'
+                ? response.error
+                : response.error?.message || '执行失败';
+            throw new Error(errMsg);
+        }
+    } catch (error: any) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'error',
+            message: `MCP 工具执行失败: ${error.message}`,
+        });
+        throw error;
+    }
+};
+
+// ============================================
 // 执行器映射
 // ============================================
 
@@ -457,5 +533,6 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
     code: executeCodeNode,
     trigger: executeTriggerNode,
     knowledge: executeKnowledgeNode,
+    mcp: executeMCPNode,
 };
 

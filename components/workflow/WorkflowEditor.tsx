@@ -5,7 +5,7 @@
  * @description 基于 React Flow 的工作流可视化编辑器，支持执行和状态查看
  */
 
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
 import ReactFlow, {
     Background,
     Controls,
@@ -28,6 +28,8 @@ import {
 } from 'lucide-react';
 import { nodeTypes, NodeType } from './nodes';
 import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
+import { mcpRegistry } from '../../core/mcp/registry';
+import { MCPRegistryEntry } from '../../core/mcp/types';
 
 // ============================================
 // 节点工具栏配置
@@ -105,6 +107,16 @@ export function WorkflowEditor({
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const [showLogs, setShowLogs] = useState(false);
+    const [mcpList, setMcpList] = useState<MCPRegistryEntry[]>([]);
+
+    // 加载 MCP 列表
+    useEffect(() => {
+        const loadMcps = async () => {
+            await mcpRegistry.initialize();
+            setMcpList(mcpRegistry.getAll().filter(m => m.status === 'active'));
+        };
+        loadMcps();
+    }, []);
 
     // 执行引擎 Hook
     const execution = useWorkflowExecution(workflowId, nodes, edges);
@@ -808,6 +820,77 @@ export function WorkflowEditor({
                                                     placeholder="0 */5 * * * *"
                                                     className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white font-mono focus:outline-none focus:border-purple-500"
                                                 />
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                {/* MCP 工具节点配置 */}
+                                {selectedNode.type === 'mcp' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">选择 MCP</label>
+                                            <select
+                                                value={selectedNode.data?.mcpId || ''}
+                                                onChange={(e) => {
+                                                    const mcp = mcpList.find(m => m.id === e.target.value);
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, mcpId: e.target.value, mcpName: mcp?.name || '', tool: '' } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, mcpId: e.target.value, mcpName: mcp?.name || '', tool: '' } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="">选择工具集...</option>
+                                                {mcpList.map(mcp => (
+                                                    <option key={mcp.id} value={mcp.id}>{mcp.name} ({mcp.tools.length} 工具)</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        {selectedNode.data?.mcpId && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">选择工具</label>
+                                                <select
+                                                    value={selectedNode.data?.tool || ''}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, tool: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, tool: e.target.value } });
+                                                    }}
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                >
+                                                    <option value="">选择工具...</option>
+                                                    {mcpList.find(m => m.id === selectedNode.data?.mcpId)?.tools.map(tool => (
+                                                        <option key={tool.name} value={tool.name}>{tool.name} - {tool.description}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                        {selectedNode.data?.tool && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">参数 (JSON)</label>
+                                                <textarea
+                                                    value={selectedNode.data?.params || '{}'}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, params: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, params: e.target.value } });
+                                                    }}
+                                                    placeholder='{"path": "/sandbox", "query": "搜索内容"}'
+                                                    className="w-full h-20 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white font-mono focus:outline-none focus:border-purple-500 resize-none"
+                                                />
+                                                <p className="text-xs text-slate-500 mt-1">使用 {"{{input}}"} 引用上一节点的输出</p>
                                             </div>
                                         )}
                                     </>
