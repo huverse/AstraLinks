@@ -268,16 +268,16 @@ class MCPExecutor {
         tool: string,
         params: Record<string, any>
     ): Promise<any> {
-        // 模拟内置 MCP 执行
+        // 执行内置 MCP 处理器 (真实实现)
         switch (mcpId) {
             case 'mcp-web-search':
-                return this.mockWebSearch(params);
+                return this.realWebSearch(params);
 
             case 'mcp-file-system':
-                return this.mockFileSystem(tool, params);
+                return this.realFileSystem(tool, params);
 
             case 'mcp-code-exec':
-                return this.mockCodeExec(params);
+                return this.realCodeExecutor(params);
 
             case 'mcp-http':
                 return this.executeHttpRequest(params);
@@ -287,51 +287,242 @@ class MCPExecutor {
         }
     }
 
-    /**
-     * 模拟网页搜索
-     */
-    private async mockWebSearch(params: Record<string, any>): Promise<any> {
-        // 模拟搜索结果
-        await new Promise(r => setTimeout(r, 500));
-        return {
-            query: params.query,
-            engine: params.engine || 'duckduckgo',
-            results: [
-                { title: `Result 1 for "${params.query}"`, url: 'https://example.com/1', snippet: 'Example snippet 1...' },
-                { title: `Result 2 for "${params.query}"`, url: 'https://example.com/2', snippet: 'Example snippet 2...' },
-                { title: `Result 3 for "${params.query}"`, url: 'https://example.com/3', snippet: 'Example snippet 3...' },
-            ],
-        };
-    }
 
     /**
-     * 模拟文件系统
+     * 真实文件系统操作 (沙箱内)
+     * @note 此方法在前端运行时会调用后端 API
      */
-    private async mockFileSystem(tool: string, params: Record<string, any>): Promise<any> {
-        await new Promise(r => setTimeout(r, 100));
+    private async realFileSystem(tool: string, params: Record<string, any>): Promise<any> {
+        // 检查是否在浏览器环境
+        if (typeof window !== 'undefined') {
+            // 前端: 调用后端 API
+            const token = localStorage.getItem('galaxyous_token');
+            const workspaceId = params.workspaceId || 'default';
 
-        switch (tool) {
-            case 'read':
-                return { path: params.path, content: `[Mock content of ${params.path}]` };
-            case 'write':
-                return { path: params.path, success: true, size: params.content.length };
-            case 'list':
-                return { path: params.path, files: ['file1.txt', 'file2.txt', 'subdir/'] };
-            default:
-                throw new Error(`Unknown file system tool: ${tool}`);
+            const response = await fetch(`/api/workspace-config/${workspaceId}/files`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ tool, ...params }),
+            });
+
+            if (!response.ok) {
+                throw new Error(`File operation failed: ${response.statusText}`);
+            }
+
+            return response.json();
+        } else {
+            // 后端: 直接操作文件系统
+            const fs = await import('fs/promises');
+            const path = await import('path');
+
+            // 工作区沙箱基础路径
+            const sandboxBase = process.env.WORKSPACE_FILES_PATH || './workspaces';
+            const workspaceId = params.workspaceId || 'default';
+            const basePath = path.join(sandboxBase, workspaceId, 'files');
+
+            // 确保路径安全 (防止目录遍历攻击)
+            const safePath = path.join(basePath, params.path || '');
+            if (!safePath.startsWith(basePath)) {
+                throw new Error('Access denied: Path traversal detected');
+            }
+
+            switch (tool) {
+                case 'read':
+                    const content = await fs.readFile(safePath, 'utf-8');
+                    return { path: params.path, content, success: true };
+
+                case 'write':
+                    await fs.mkdir(path.dirname(safePath), { recursive: true });
+                    await fs.writeFile(safePath, params.content, 'utf-8');
+                    return { path: params.path, success: true, size: params.content.length };
+
+                case 'list':
+                    try {
+                        const entries = await fs.readdir(safePath, { withFileTypes: true });
+                        const files = entries.map(e => ({
+                            name: e.name,
+                            type: e.isDirectory() ? 'directory' : 'file',
+                        }));
+                        return { path: params.path, files, success: true };
+                    } catch (e: any) {
+                        if (e.code === 'ENOENT') {
+                            return { path: params.path, files: [], success: true };
+                        }
+                        throw e;
+                    }
+
+                case 'delete':
+                    await fs.unlink(safePath);
+                    return { path: params.path, success: true };
+
+                case 'mkdir':
+                    await fs.mkdir(safePath, { recursive: true });
+                    return { path: params.path, success: true };
+
+                default:
+                    throw new Error(`Unknown file system tool: ${tool}`);
+            }
         }
     }
 
     /**
-     * 模拟代码执行
+     * 真实代码执行 (JavaScript 沙箱)
      */
-    private async mockCodeExec(params: Record<string, any>): Promise<any> {
-        await new Promise(r => setTimeout(r, 200));
-        return {
-            success: true,
-            output: `[Mock execution of ${params.language || 'javascript'} code]`,
-            executionTime: 150,
-        };
+    private async realCodeExecutor(params: Record<string, any>): Promise<any> {
+        const { code, language = 'javascript', timeout = 5000 } = params;
+
+        if (language !== 'javascript') {
+            return {
+                success: false,
+                output: '',
+                error: `Language "${language}" is not supported. Only JavaScript is available.`,
+                executionTime: 0,
+            };
+        }
+
+        const startTime = Date.now();
+        const logs: string[] = [];
+
+        try {
+            // 创建沙箱环境
+            const sandbox = {
+                console: {
+                    log: (...args: any[]) => logs.push(args.map(a => String(a)).join(' ')),
+                    error: (...args: any[]) => logs.push('[ERROR] ' + args.map(a => String(a)).join(' ')),
+                    warn: (...args: any[]) => logs.push('[WARN] ' + args.map(a => String(a)).join(' ')),
+                },
+                Math,
+                Date,
+                JSON,
+                Array,
+                Object,
+                String,
+                Number,
+                Boolean,
+                parseInt,
+                parseFloat,
+                isNaN,
+                isFinite,
+            };
+
+            // 使用 Function 构造器创建隔离执行
+            const wrappedCode = `
+                "use strict";
+                return (async function() {
+                    ${code}
+                })();
+            `;
+
+            // 创建带超时的执行
+            const executeWithTimeout = async () => {
+                const fn = new Function(...Object.keys(sandbox), wrappedCode);
+                return await fn(...Object.values(sandbox));
+            };
+
+            const timeoutPromise = new Promise((_, reject) => {
+                setTimeout(() => reject(new Error(`Execution timeout (${timeout}ms)`)), timeout);
+            });
+
+            const result = await Promise.race([executeWithTimeout(), timeoutPromise]);
+
+            return {
+                success: true,
+                output: logs.join('\n'),
+                result: result !== undefined ? String(result) : undefined,
+                executionTime: Date.now() - startTime,
+            };
+        } catch (error: any) {
+            return {
+                success: false,
+                output: logs.join('\n'),
+                error: error.message,
+                executionTime: Date.now() - startTime,
+            };
+        }
+    }
+
+    /**
+     * 真实网页搜索 (DuckDuckGo Instant Answer API)
+     */
+    private async realWebSearch(params: Record<string, any>): Promise<any> {
+        const { query, limit = 10 } = params;
+
+        try {
+            // 使用 DuckDuckGo Instant Answer API
+            const ddgUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
+
+            const response = await fetch(ddgUrl, {
+                headers: {
+                    'User-Agent': 'AstraLinks/1.0 (Web Search MCP)',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`Search API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+
+            // 解析 DuckDuckGo 响应
+            const results: any[] = [];
+
+            // Abstract (主要结果)
+            if (data.Abstract) {
+                results.push({
+                    title: data.Heading || query,
+                    url: data.AbstractURL || '',
+                    snippet: data.Abstract,
+                    source: data.AbstractSource || 'DuckDuckGo',
+                });
+            }
+
+            // Related Topics
+            if (data.RelatedTopics) {
+                for (const topic of data.RelatedTopics.slice(0, limit - results.length)) {
+                    if (topic.Text && topic.FirstURL) {
+                        results.push({
+                            title: topic.Text.split(' - ')[0] || topic.Text.substring(0, 60),
+                            url: topic.FirstURL,
+                            snippet: topic.Text,
+                            source: 'DuckDuckGo',
+                        });
+                    }
+                }
+            }
+
+            // 如果没有结果，返回提示
+            if (results.length === 0) {
+                results.push({
+                    title: `Search results for "${query}"`,
+                    url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+                    snippet: 'No instant answers available. Click to search on DuckDuckGo.',
+                    source: 'DuckDuckGo',
+                });
+            }
+
+            return {
+                query,
+                engine: 'duckduckgo',
+                results: results.slice(0, limit),
+                totalResults: results.length,
+            };
+        } catch (error: any) {
+            // 降级: 返回搜索链接
+            return {
+                query,
+                engine: 'duckduckgo',
+                results: [{
+                    title: `Search "${query}" on DuckDuckGo`,
+                    url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
+                    snippet: `Search failed: ${error.message}. Click to search manually.`,
+                    source: 'DuckDuckGo',
+                }],
+                error: error.message,
+            };
+        }
     }
 
     /**
@@ -395,3 +586,4 @@ export const mcpExecutor = new MCPExecutor();
 // ============================================
 
 export { MCPRegistry, MCPExecutor };
+

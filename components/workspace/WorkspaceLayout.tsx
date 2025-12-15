@@ -16,7 +16,6 @@ import ExecutionMonitor from './ExecutionMonitor';
 import FileManager from './FileManager';
 import WorkspaceSettings from './settings/WorkspaceSettings';
 import ConfigCenter from './ConfigCenter';
-import { promptOptimizer } from '../../core/prompt/optimizer';
 
 // ============================================
 // 执行历史面板
@@ -55,25 +54,66 @@ function FileManagerPanel({ workspaceId }: { workspaceId: string }) {
 }
 
 // ============================================
-// 提示词优化面板
+// 提示词优化面板 (Gemini AI 驱动)
 // ============================================
 
 function PromptOptimizerPanel({ onClose }: { onClose: () => void }) {
     const [input, setInput] = useState('');
+    const [geminiApiKey, setGeminiApiKey] = useState('');
     const [result, setResult] = useState<any>(null);
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [taskType, setTaskType] = useState<'chat' | 'code' | 'creative' | 'analysis' | 'translation'>('chat');
 
-    const handleOptimize = () => {
+    // 从 localStorage 加载保存的 API Key
+    React.useEffect(() => {
+        const savedKey = localStorage.getItem('gemini_api_key');
+        if (savedKey) {
+            setGeminiApiKey(savedKey);
+        }
+    }, []);
+
+    const handleOptimize = async () => {
         if (!input.trim()) return;
+        if (!geminiApiKey.trim()) {
+            setError('请输入 Gemini API Key');
+            return;
+        }
+
+        // 保存 API Key 到 localStorage
+        localStorage.setItem('gemini_api_key', geminiApiKey);
 
         setLoading(true);
-        // 模拟异步处理
-        setTimeout(() => {
-            const optimizationResult = promptOptimizer.optimize(input, { taskType });
-            setResult(optimizationResult);
+        setError(null);
+        setResult(null);
+
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            const response = await fetch('/api/prompt/optimize', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({
+                    prompt: input,
+                    taskType,
+                    geminiApiKey,
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setResult(data);
+            } else {
+                const errorData = await response.json();
+                setError(errorData.error || '优化失败');
+            }
+        } catch (e: any) {
+            setError(`网络错误: ${e.message}`);
+        } finally {
             setLoading(false);
-        }, 500);
+        }
     };
 
     const handleCopy = (text: string) => {
@@ -87,7 +127,8 @@ function PromptOptimizerPanel({ onClose }: { onClose: () => void }) {
                 <div className="flex items-center justify-between p-4 border-b border-white/10">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <Wand2 size={20} className="text-purple-400" />
-                        提示词优化助手
+                        AI 提示词优化助手
+                        <span className="text-xs bg-purple-600/50 px-2 py-0.5 rounded">Gemini</span>
                     </h2>
                     <button onClick={onClose} className="text-slate-400 hover:text-white">
                         <X size={20} />
@@ -96,6 +137,21 @@ function PromptOptimizerPanel({ onClose }: { onClose: () => void }) {
 
                 {/* Content */}
                 <div className="p-4 space-y-4">
+                    {/* Gemini API Key */}
+                    <div>
+                        <label className="block text-sm text-slate-400 mb-2">Gemini API Key</label>
+                        <input
+                            type="password"
+                            value={geminiApiKey}
+                            onChange={e => setGeminiApiKey(e.target.value)}
+                            placeholder="输入你的 Gemini API Key (从 Google AI Studio 获取)"
+                            className="w-full px-4 py-2 bg-black/30 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500"
+                        />
+                        <p className="text-xs text-slate-500 mt-1">
+                            获取方式: <a href="https://aistudio.google.com/app/apikey" target="_blank" className="text-purple-400 hover:underline">Google AI Studio</a>
+                        </p>
+                    </div>
+
                     {/* 任务类型选择 */}
                     <div>
                         <label className="block text-sm text-slate-400 mb-2">任务类型</label>
@@ -127,26 +183,34 @@ function PromptOptimizerPanel({ onClose }: { onClose: () => void }) {
                         <textarea
                             value={input}
                             onChange={e => setInput(e.target.value)}
-                            placeholder="在这里输入你的提示词，系统会自动分析并给出优化建议..."
+                            placeholder="在这里输入你的提示词，Gemini AI 会智能分析并给出优化建议..."
                             className="w-full h-32 px-4 py-3 bg-black/30 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500 resize-none"
                         />
                     </div>
 
+                    {/* 错误提示 */}
+                    {error && (
+                        <div className="p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                            <AlertCircle size={16} />
+                            {error}
+                        </div>
+                    )}
+
                     {/* 优化按钮 */}
                     <button
                         onClick={handleOptimize}
-                        disabled={loading || !input.trim()}
+                        disabled={loading || !input.trim() || !geminiApiKey.trim()}
                         className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {loading ? (
                             <>
                                 <RefreshCw size={18} className="animate-spin" />
-                                优化中...
+                                AI 优化中...
                             </>
                         ) : (
                             <>
                                 <Wand2 size={18} />
-                                优化提示词
+                                使用 Gemini 优化
                             </>
                         )}
                     </button>
