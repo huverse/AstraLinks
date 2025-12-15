@@ -2,7 +2,7 @@
  * 知识库 API
  * 
  * @module server/src/routes/knowledge
- * @description 知识库文档管理和 RAG 查询
+ * @description 知识库文档管理和 RAG 查询 (支持 txt/md/pdf)
  */
 
 import { Router, Request, Response } from 'express';
@@ -12,6 +12,9 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { authMiddleware } from '../middleware/auth';
 import * as fs from 'fs';
 import * as path from 'path';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const pdfParse = require('pdf-parse');
 
 const router = Router();
 router.use(authMiddleware);
@@ -312,6 +315,88 @@ router.delete('/:workspaceId/documents/:documentId', async (req: Request, res: R
         res.json({ success: true });
     } catch (error: any) {
         console.error('[Knowledge] Delete document error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 上传 PDF 文件 (Base64)
+ * POST /api/knowledge/:workspaceId/documents/pdf
+ */
+router.post('/:workspaceId/documents/pdf', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { workspaceId } = req.params;
+        const userId = (req as any).user?.id;
+        const { name, fileBase64, apiKey, provider = 'openai' } = req.body;
+
+        if (!await verifyOwnership(workspaceId, userId)) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        if (!fileBase64 || !apiKey) {
+            res.status(400).json({ error: '缺少 PDF 文件或 API Key' });
+            return;
+        }
+
+        // 解析 Base64 PDF
+        console.log('[Knowledge] Parsing PDF...');
+        const buffer = Buffer.from(fileBase64, 'base64');
+
+        let pdfText: string;
+        try {
+            const pdfData = await pdfParse(buffer);
+            pdfText = pdfData.text;
+            console.log(`[Knowledge] PDF parsed: ${pdfData.numpages} pages, ${pdfText.length} chars`);
+        } catch (pdfError: any) {
+            console.error('[Knowledge] PDF parse error:', pdfError);
+            res.status(400).json({ error: `PDF 解析失败: ${pdfError.message}` });
+            return;
+        }
+
+        if (!pdfText.trim()) {
+            res.status(400).json({ error: 'PDF 内容为空或无法提取文本' });
+            return;
+        }
+
+        const documentId = uuidv4();
+        const chunks = chunkText(pdfText, documentId, workspaceId);
+
+        // 生成 Embedding
+        console.log(`[Knowledge] Processing ${chunks.length} chunks from PDF...`);
+        for (const chunk of chunks) {
+            try {
+                chunk.embedding = await getEmbedding(chunk.content, apiKey, provider);
+            } catch (e: any) {
+                console.error(`[Knowledge] Embedding error for chunk ${chunk.index}:`, e.message);
+            }
+            await new Promise(r => setTimeout(r, 100));
+        }
+
+        // 存入向量存储
+        const store = getVectorStore(workspaceId);
+        store.chunks.push(...chunks);
+
+        // 持久化到文件
+        saveVectorStore(workspaceId, store);
+
+        // 存入数据库
+        await pool.execute(
+            `INSERT INTO knowledge_documents (id, workspace_id, name, type, content, chunk_count, created_at, updated_at)
+             VALUES (?, ?, ?, 'pdf', ?, ?, NOW(), NOW())`,
+            [documentId, workspaceId, name || 'PDF文档', pdfText.substring(0, 65000), chunks.length]
+        );
+
+        res.json({
+            id: documentId,
+            name: name || 'PDF文档',
+            type: 'pdf',
+            chunkCount: chunks.length,
+            charCount: pdfText.length,
+            message: 'PDF 文档已处理完成'
+        });
+    } catch (error: any) {
+        console.error('[Knowledge] PDF upload error:', error);
         res.status(500).json({ error: error.message });
     }
 });

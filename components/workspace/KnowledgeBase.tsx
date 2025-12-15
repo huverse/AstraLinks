@@ -278,6 +278,74 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                                 <h3 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
                                     <Upload size={16} /> 添加文档
                                 </h3>
+
+                                {/* PDF 文件上传 */}
+                                <div className="mb-3 p-3 bg-blue-900/20 border border-blue-500/30 rounded-lg">
+                                    <label className="block text-xs text-blue-300 mb-2">📄 上传 PDF 文件</label>
+                                    <input
+                                        type="file"
+                                        accept=".pdf"
+                                        onChange={async (e) => {
+                                            const file = e.target.files?.[0];
+                                            if (!file) return;
+                                            if (!apiKey.trim()) {
+                                                setError('请先填写 API Key');
+                                                return;
+                                            }
+
+                                            localStorage.setItem('rag_api_key', apiKey);
+                                            localStorage.setItem('rag_provider', provider);
+
+                                            setUploading(true);
+                                            setError(null);
+
+                                            try {
+                                                // 读取文件为 Base64
+                                                const reader = new FileReader();
+                                                reader.onload = async () => {
+                                                    const base64 = (reader.result as string).split(',')[1];
+
+                                                    const token = localStorage.getItem('galaxyous_token');
+                                                    const response = await fetch(`/api/knowledge/${workspaceId}/documents/pdf`, {
+                                                        method: 'POST',
+                                                        headers: {
+                                                            'Content-Type': 'application/json',
+                                                            'Authorization': `Bearer ${token}`,
+                                                        },
+                                                        body: JSON.stringify({
+                                                            name: file.name,
+                                                            fileBase64: base64,
+                                                            apiKey,
+                                                            provider,
+                                                        }),
+                                                    });
+
+                                                    if (response.ok) {
+                                                        const data = await response.json();
+                                                        setSuccess(`PDF 已处理，生成 ${data.chunkCount} 个块`);
+                                                        loadDocuments();
+                                                    } else {
+                                                        const data = await response.json();
+                                                        setError(data.error || 'PDF 上传失败');
+                                                    }
+                                                    setUploading(false);
+                                                };
+                                                reader.onerror = () => {
+                                                    setError('文件读取失败');
+                                                    setUploading(false);
+                                                };
+                                                reader.readAsDataURL(file);
+                                            } catch (e: any) {
+                                                setError(e.message);
+                                                setUploading(false);
+                                            }
+                                        }}
+                                        className="w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-blue-600 file:text-white hover:file:bg-blue-700 cursor-pointer"
+                                    />
+                                </div>
+
+                                {/* 文本内容上传 */}
+                                <div className="text-xs text-slate-400 mb-2">或者粘贴文本内容：</div>
                                 <input
                                     type="text"
                                     value={newDocName}
@@ -289,7 +357,7 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                                     value={newDocContent}
                                     onChange={e => setNewDocContent(e.target.value)}
                                     placeholder="粘贴文档内容..."
-                                    className="w-full h-32 px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm resize-none"
+                                    className="w-full h-24 px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm resize-none"
                                 />
                                 <button
                                     onClick={handleUpload}
@@ -297,7 +365,7 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                                     className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
                                 >
                                     {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                                    {uploading ? '处理中...' : '上传并向量化'}
+                                    {uploading ? '处理中...' : '上传文本'}
                                 </button>
                             </div>
 
@@ -312,17 +380,19 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                                 ) : documents.length === 0 ? (
                                     <div className="text-center py-8 text-slate-400">
                                         <HelpCircle className="mx-auto mb-2" />
-                                        暂无文档，请上传
+                                        暂无文档，请上传 PDF 或文本
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
                                         {documents.map(doc => (
                                             <div key={doc.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
                                                 <div className="flex items-center gap-3">
-                                                    <FileText size={16} className="text-blue-400" />
+                                                    <FileText size={16} className={doc.type === 'pdf' ? 'text-red-400' : 'text-blue-400'} />
                                                     <div>
                                                         <p className="text-sm text-white">{doc.name}</p>
-                                                        <p className="text-xs text-slate-400">{doc.chunk_count} 块</p>
+                                                        <p className="text-xs text-slate-400">
+                                                            {doc.type === 'pdf' ? '📄 PDF' : '📝 文本'} · {doc.chunk_count} 块
+                                                        </p>
                                                     </div>
                                                 </div>
                                                 <button

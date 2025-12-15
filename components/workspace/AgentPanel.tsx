@@ -32,35 +32,64 @@ interface AgentResult {
     duration: number;
 }
 
-// 预设 Agent 模板
-const PRESET_AGENTS: Omit<Agent, 'id'>[] = [
+// 预设 Agent 模板 (12个专业角色)
+const PRESET_AGENTS: (Omit<Agent, 'id'> & { icon: string; category: string })[] = [
+    // 内容创作类
     {
-        name: '研究员',
-        role: 'researcher',
-        systemPrompt: `你是一名专业的研究员。你的职责是：
-1. 深入分析用户给出的主题
-2. 整理关键信息和数据点
-3. 提供全面的背景知识
-
-请以结构化的方式呈现研究结果。`,
+        name: '研究员', role: 'researcher', icon: '🔍', category: '内容创作',
+        systemPrompt: `你是一名专业的研究员。请深入分析主题，整理关键信息，以结构化方式呈现研究结果。`
     },
     {
-        name: '写手',
-        role: 'writer',
-        systemPrompt: `你是一名专业的写手。你的职责是：
-1. 将研究资料转化为流畅的文章
-2. 确保内容准确、逻辑清晰
-3. 保持内容的可读性和吸引力`,
+        name: '写手', role: 'writer', icon: '✍️', category: '内容创作',
+        systemPrompt: `你是一名专业的写手。请将资料转化为流畅、有吸引力的文章，确保逻辑清晰。`
     },
     {
-        name: '审核员',
-        role: 'reviewer',
-        systemPrompt: `你是一名严谨的审核员。你的职责是：
-1. 检查内容的准确性和完整性
-2. 评估写作质量和逻辑性
-3. 给出具体的修改建议`,
+        name: '审核编辑', role: 'reviewer', icon: '📝', category: '内容创作',
+        systemPrompt: `你是一名审核编辑。请检查内容的准确性、完整性，提供改进建议和评分。`
+    },
+    {
+        name: '摘要大师', role: 'summarizer', icon: '📋', category: '内容创作',
+        systemPrompt: `你是一名摘要专家。请提取核心信息，生成一句话摘要、三点核心和详细摘要。`
+    },
+    // 技术类
+    {
+        name: '数据分析师', role: 'analyst', icon: '📊', category: '技术开发',
+        systemPrompt: `你是一名数据分析师。请分析数据，发现模式和异常，提供数据驱动的决策建议。`
+    },
+    {
+        name: '程序员', role: 'coder', icon: '💻', category: '技术开发',
+        systemPrompt: `你是一名全栈程序员。请编写高质量代码，遵循最佳实践，提供完整示例。`
+    },
+    {
+        name: '翻译官', role: 'translator', icon: '🌐', category: '技术开发',
+        systemPrompt: `你是一名多语言翻译官。请准确翻译内容，保留原意和风格，处理文化差异。`
+    },
+    // 商业类
+    {
+        name: '项目规划师', role: 'planner', icon: '📅', category: '商业运营',
+        systemPrompt: `你是一名项目规划师。请分解任务，制定时间线和里程碑，识别风险。`
+    },
+    {
+        name: '客服专家', role: 'customer_service', icon: '💬', category: '商业运营',
+        systemPrompt: `你是一名客服专家。请友好专业地回应询问，提供清晰的解决方案。`
+    },
+    {
+        name: 'SEO专家', role: 'seo_expert', icon: '🎯', category: '商业运营',
+        systemPrompt: `你是一名SEO专家。请分析内容的SEO潜力，建议关键词，优化标题和结构。`
+    },
+    // 创意类
+    {
+        name: '创意总监', role: 'creative', icon: '🎨', category: '创意设计',
+        systemPrompt: `你是一名创意总监。请产出新颖的创意概念，打造有吸引力的品牌故事和文案。`
+    },
+    {
+        name: '批评家', role: 'critic', icon: '🎭', category: '创意设计',
+        systemPrompt: `你是一名批评家。请批判性分析观点，找出问题和漏洞，提供建设性批评。`
     },
 ];
+
+// Agent 分类
+const AGENT_CATEGORIES = ['内容创作', '技术开发', '商业运营', '创意设计'];
 
 // ============================================
 // Agent 面板组件
@@ -195,6 +224,7 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
                         <Users size={20} className="text-purple-400" />
                         多 Agent 协作
                         <span className="text-xs bg-purple-600/50 px-2 py-0.5 rounded">{mode === 'sequential' ? '顺序模式' : '并行模式'}</span>
+                        <span className="text-xs bg-green-600/50 px-2 py-0.5 rounded">12 个专业角色</span>
                     </h2>
                     <button onClick={onClose} className="text-slate-400 hover:text-white">
                         <X size={20} />
@@ -262,7 +292,7 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
                                         className={`flex-shrink-0 p-3 rounded-lg border ${currentAgentIndex === i ? 'bg-purple-900/30 border-purple-500' : 'bg-white/5 border-white/10'}`}
                                     >
                                         <div className="flex items-center gap-2 mb-1">
-                                            <Bot size={14} className="text-purple-400" />
+                                            <span className="text-lg">{PRESET_AGENTS.find(p => p.role === agent.role)?.icon || '🤖'}</span>
                                             <span className="text-sm text-white font-medium">{agent.name}</span>
                                             {currentAgentIndex === i && <Loader2 size={12} className="animate-spin text-purple-400" />}
                                             {results.find(r => r.agentId === agent.id)?.status === 'completed' && (
@@ -285,22 +315,27 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
                         )}
                     </div>
 
-                    {/* 添加 Agent 弹窗 */}
+                    {/* 添加 Agent 弹窗 (分类显示) */}
                     {showAddAgent && (
                         <div className="p-4 bg-purple-900/20 border border-purple-500/30 rounded-lg">
-                            <h4 className="text-sm font-medium text-white mb-3">选择 Agent 模板</h4>
-                            <div className="grid grid-cols-3 gap-2">
-                                {PRESET_AGENTS.map(preset => (
-                                    <button
-                                        key={preset.role}
-                                        onClick={() => addPresetAgent(preset)}
-                                        className="p-3 bg-white/5 rounded-lg hover:bg-white/10 text-left"
-                                    >
-                                        <p className="text-sm text-white font-medium">{preset.name}</p>
-                                        <p className="text-xs text-slate-400">{preset.role}</p>
-                                    </button>
-                                ))}
-                            </div>
+                            <h4 className="text-sm font-medium text-white mb-3">选择 Agent 模板 (12 个专业角色)</h4>
+                            {AGENT_CATEGORIES.map(cat => (
+                                <div key={cat} className="mb-3">
+                                    <p className="text-xs text-purple-300 mb-2">{cat}</p>
+                                    <div className="grid grid-cols-4 gap-2">
+                                        {PRESET_AGENTS.filter(p => p.category === cat).map(preset => (
+                                            <button
+                                                key={preset.role}
+                                                onClick={() => addPresetAgent(preset)}
+                                                className="p-2 bg-white/5 rounded-lg hover:bg-white/10 text-left flex items-center gap-2"
+                                            >
+                                                <span className="text-lg">{preset.icon}</span>
+                                                <span className="text-xs text-white">{preset.name}</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
                             <button
                                 onClick={() => setShowAddAgent(false)}
                                 className="mt-2 text-sm text-slate-400"
