@@ -369,46 +369,49 @@ class MCPExecutor {
     }
 
     /**
-     * 真实代码执行 (JavaScript 沙箱)
+     * 真实代码执行 (JavaScript + Python 沙箱)
      */
     private async realCodeExecutor(params: Record<string, any>): Promise<any> {
         const { code, language = 'javascript', timeout = 5000 } = params;
+        const startTime = Date.now();
 
-        if (language !== 'javascript') {
+        // 支持的语言
+        const supportedLanguages = ['javascript', 'python'];
+        if (!supportedLanguages.includes(language)) {
             return {
                 success: false,
                 output: '',
-                error: `Language "${language}" is not supported. Only JavaScript is available.`,
+                error: `Language "${language}" is not supported. Available: ${supportedLanguages.join(', ')}`,
                 executionTime: 0,
             };
         }
 
-        const startTime = Date.now();
+        if (language === 'javascript') {
+            return this.executeJavaScript(code, timeout, startTime);
+        } else if (language === 'python') {
+            return this.executePython(code, timeout, startTime);
+        }
+
+        return { success: false, error: 'Unknown error' };
+    }
+
+    /**
+     * JavaScript 执行 (沙箱)
+     */
+    private async executeJavaScript(code: string, timeout: number, startTime: number): Promise<any> {
         const logs: string[] = [];
 
         try {
-            // 创建沙箱环境
             const sandbox = {
                 console: {
                     log: (...args: any[]) => logs.push(args.map(a => String(a)).join(' ')),
                     error: (...args: any[]) => logs.push('[ERROR] ' + args.map(a => String(a)).join(' ')),
                     warn: (...args: any[]) => logs.push('[WARN] ' + args.map(a => String(a)).join(' ')),
                 },
-                Math,
-                Date,
-                JSON,
-                Array,
-                Object,
-                String,
-                Number,
-                Boolean,
-                parseInt,
-                parseFloat,
-                isNaN,
-                isFinite,
+                Math, Date, JSON, Array, Object, String, Number, Boolean,
+                parseInt, parseFloat, isNaN, isFinite,
             };
 
-            // 使用 Function 构造器创建隔离执行
             const wrappedCode = `
                 "use strict";
                 return (async function() {
@@ -416,7 +419,6 @@ class MCPExecutor {
                 })();
             `;
 
-            // 创建带超时的执行
             const executeWithTimeout = async () => {
                 const fn = new Function(...Object.keys(sandbox), wrappedCode);
                 return await fn(...Object.values(sandbox));
@@ -430,6 +432,7 @@ class MCPExecutor {
 
             return {
                 success: true,
+                language: 'javascript',
                 output: logs.join('\n'),
                 result: result !== undefined ? String(result) : undefined,
                 executionTime: Date.now() - startTime,
@@ -437,7 +440,128 @@ class MCPExecutor {
         } catch (error: any) {
             return {
                 success: false,
+                language: 'javascript',
                 output: logs.join('\n'),
+                error: error.message,
+                executionTime: Date.now() - startTime,
+            };
+        }
+    }
+
+    /**
+     * Python 执行 (使用 child_process)
+     */
+    private async executePython(code: string, timeout: number, startTime: number): Promise<any> {
+        // 检查是否在浏览器环境
+        if (typeof window !== 'undefined') {
+            // 前端: 调用后端 API
+            const token = localStorage.getItem('galaxyous_token');
+
+            const response = await fetch('/api/mcp/execute-python', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ code, timeout }),
+            });
+
+            if (!response.ok) {
+                return {
+                    success: false,
+                    language: 'python',
+                    output: '',
+                    error: 'Python execution API error',
+                    executionTime: Date.now() - startTime,
+                };
+            }
+
+            return response.json();
+        }
+
+        // 后端: 使用 child_process 执行 Python
+        try {
+            const { spawn } = await import('child_process');
+            const fs = await import('fs/promises');
+            const path = await import('path');
+            const os = await import('os');
+
+            // 创建临时文件
+            const tempDir = os.tmpdir();
+            const tempFile = path.join(tempDir, `astralinks_py_${Date.now()}.py`);
+
+            // 写入代码 (添加安全包装)
+            const wrappedCode = `
+import sys
+import json
+
+# 禁止危险操作
+__builtins_backup__ = dict(__builtins__) if isinstance(__builtins__, dict) else dict(vars(__builtins__))
+
+# 用户代码
+try:
+${code.split('\n').map(line => '    ' + line).join('\n')}
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+`;
+
+            await fs.writeFile(tempFile, wrappedCode, 'utf-8');
+
+            return new Promise((resolve) => {
+                let stdout = '';
+                let stderr = '';
+                let killed = false;
+
+                // 尝试 python3, 否则用 python
+                const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+
+                const proc = spawn(pythonCmd, [tempFile], {
+                    timeout,
+                    cwd: tempDir,
+                });
+
+                const timeoutId = setTimeout(() => {
+                    killed = true;
+                    proc.kill('SIGTERM');
+                }, timeout);
+
+                proc.stdout.on('data', (data) => { stdout += data.toString(); });
+                proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+                proc.on('close', async (exitCode) => {
+                    clearTimeout(timeoutId);
+
+                    // 清理临时文件
+                    try { await fs.unlink(tempFile); } catch (e) { /* ignore */ }
+
+                    resolve({
+                        success: exitCode === 0 && !killed,
+                        language: 'python',
+                        output: stdout,
+                        error: killed ? `Execution timeout (${timeout}ms)` : (stderr || undefined),
+                        exitCode,
+                        executionTime: Date.now() - startTime,
+                    });
+                });
+
+                proc.on('error', async (err) => {
+                    clearTimeout(timeoutId);
+                    try { await fs.unlink(tempFile); } catch (e) { /* ignore */ }
+
+                    resolve({
+                        success: false,
+                        language: 'python',
+                        output: '',
+                        error: `Python execution failed: ${err.message}. Make sure Python is installed.`,
+                        executionTime: Date.now() - startTime,
+                    });
+                });
+            });
+        } catch (error: any) {
+            return {
+                success: false,
+                language: 'python',
+                output: '',
                 error: error.message,
                 executionTime: Date.now() - startTime,
             };

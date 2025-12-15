@@ -1,5 +1,10 @@
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
+import { authMiddleware } from '../middleware/auth';
+import { spawn } from 'child_process';
+import * as fs from 'fs/promises';
+import * as path from 'path';
+import * as os from 'os';
 
 const router = Router();
 
@@ -156,4 +161,95 @@ async function fetchTrends(endpoint: string): Promise<TrendItem[]> {
     }
 }
 
+// ============================================
+// Python 代码执行 API
+// ============================================
+
+/**
+ * POST /api/mcp/execute-python
+ * 执行 Python 代码
+ */
+router.post('/execute-python', authMiddleware, async (req: Request, res: Response) => {
+    const startTime = Date.now();
+
+    try {
+        const { code, timeout = 5000 } = req.body;
+
+        if (!code) {
+            res.status(400).json({ error: '请提供要执行的代码' });
+            return;
+        }
+
+        // 创建临时文件
+        const tempDir = os.tmpdir();
+        const tempFile = path.join(tempDir, `astralinks_py_${Date.now()}.py`);
+
+        // 写入代码 (添加安全包装)
+        const wrappedCode = `
+import sys
+import json
+
+# 用户代码
+try:
+${code.split('\n').map((line: string) => '    ' + line).join('\n')}
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+`;
+
+        await fs.writeFile(tempFile, wrappedCode, 'utf-8');
+
+        // 执行 Python
+        let stdout = '';
+        let stderr = '';
+        let killed = false;
+
+        const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+
+        const proc = spawn(pythonCmd, [tempFile], {
+            cwd: tempDir,
+        });
+
+        const timeoutId = setTimeout(() => {
+            killed = true;
+            proc.kill('SIGTERM');
+        }, timeout);
+
+        proc.stdout.on('data', (data) => { stdout += data.toString(); });
+        proc.stderr.on('data', (data) => { stderr += data.toString(); });
+
+        proc.on('close', async (exitCode) => {
+            clearTimeout(timeoutId);
+
+            // 清理临时文件
+            try { await fs.unlink(tempFile); } catch (e) { /* ignore */ }
+
+            res.json({
+                success: exitCode === 0 && !killed,
+                language: 'python',
+                output: stdout,
+                error: killed ? `Execution timeout (${timeout}ms)` : (stderr || undefined),
+                exitCode,
+                executionTime: Date.now() - startTime,
+            });
+        });
+
+        proc.on('error', async (err) => {
+            clearTimeout(timeoutId);
+            try { await fs.unlink(tempFile); } catch (e) { /* ignore */ }
+
+            res.status(500).json({
+                success: false,
+                language: 'python',
+                output: '',
+                error: `Python execution failed: ${err.message}. Make sure Python is installed.`,
+                executionTime: Date.now() - startTime,
+            });
+        });
+    } catch (error: any) {
+        console.error('[MCP] Python execution error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
+

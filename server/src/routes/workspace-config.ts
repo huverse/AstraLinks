@@ -773,5 +773,122 @@ router.post('/test-connection', async (req: Request, res: Response): Promise<voi
     }
 });
 
+// ============================================
+// 文件系统 MCP API
+// ============================================
+
+/**
+ * 工作区沙箱文件操作
+ * POST /api/workspace-config/:workspaceId/files
+ * 
+ * Body: { tool: 'read'|'write'|'list'|'delete'|'mkdir', path: string, content?: string }
+ */
+router.post('/:workspaceId/files', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { workspaceId } = req.params;
+        const userId = (req as any).user?.id;
+        const { tool, path: filePath, content } = req.body;
+
+        // 验证所有权
+        const isOwner = await verifyOwnership(workspaceId, userId);
+        if (!isOwner) {
+            res.status(403).json({ error: '无权访问此工作区' });
+            return;
+        }
+
+        // 工作区沙箱基础路径
+        const sandboxBase = process.env.WORKSPACE_FILES_PATH || path.join(process.cwd(), 'workspaces');
+        const basePath = path.join(sandboxBase, workspaceId, 'files');
+
+        // 确保基础目录存在
+        if (!fs.existsSync(basePath)) {
+            fs.mkdirSync(basePath, { recursive: true });
+        }
+
+        // 构建安全路径 (防止目录遍历攻击)
+        const normalizedPath = path.normalize(filePath || '').replace(/^(\.\.(\/|\\|$))+/, '');
+        const safePath = path.join(basePath, normalizedPath);
+
+        // 确保路径在沙箱内
+        if (!safePath.startsWith(basePath)) {
+            res.status(403).json({ error: '路径访问被拒绝: 目录遍历攻击检测' });
+            return;
+        }
+
+        switch (tool) {
+            case 'read': {
+                if (!fs.existsSync(safePath)) {
+                    res.status(404).json({ error: '文件不存在' });
+                    return;
+                }
+                const fileContent = fs.readFileSync(safePath, 'utf-8');
+                res.json({ path: filePath, content: fileContent, success: true });
+                break;
+            }
+
+            case 'write': {
+                // 确保父目录存在
+                const parentDir = path.dirname(safePath);
+                if (!fs.existsSync(parentDir)) {
+                    fs.mkdirSync(parentDir, { recursive: true });
+                }
+                fs.writeFileSync(safePath, content || '', 'utf-8');
+                res.json({ path: filePath, success: true, size: (content || '').length });
+                break;
+            }
+
+            case 'list': {
+                const targetPath = safePath || basePath;
+                if (!fs.existsSync(targetPath)) {
+                    res.json({ path: filePath, files: [], success: true });
+                    return;
+                }
+                const stat = fs.statSync(targetPath);
+                if (!stat.isDirectory()) {
+                    res.status(400).json({ error: '路径不是目录' });
+                    return;
+                }
+                const entries = fs.readdirSync(targetPath, { withFileTypes: true });
+                const files = entries.map(e => ({
+                    name: e.name,
+                    type: e.isDirectory() ? 'directory' : 'file',
+                    size: e.isFile() ? fs.statSync(path.join(targetPath, e.name)).size : undefined,
+                }));
+                res.json({ path: filePath, files, success: true });
+                break;
+            }
+
+            case 'delete': {
+                if (!fs.existsSync(safePath)) {
+                    res.status(404).json({ error: '文件不存在' });
+                    return;
+                }
+                const stat = fs.statSync(safePath);
+                if (stat.isDirectory()) {
+                    fs.rmdirSync(safePath, { recursive: true });
+                } else {
+                    fs.unlinkSync(safePath);
+                }
+                res.json({ path: filePath, success: true });
+                break;
+            }
+
+            case 'mkdir': {
+                if (!fs.existsSync(safePath)) {
+                    fs.mkdirSync(safePath, { recursive: true });
+                }
+                res.json({ path: filePath, success: true });
+                break;
+            }
+
+            default:
+                res.status(400).json({ error: `未知的文件操作: ${tool}` });
+        }
+    } catch (error: any) {
+        console.error('[WorkspaceConfig] File system error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
 
