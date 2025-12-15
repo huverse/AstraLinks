@@ -10,6 +10,7 @@ import {
     Users, Play, Plus, Trash2, Settings,
     Loader2, CheckCircle, AlertCircle, X, Bot, ArrowRight
 } from 'lucide-react';
+import { recordTokenUsage } from './TokenStatsPanel';
 
 // ============================================
 // 类型定义
@@ -199,13 +200,24 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
                 if (response.ok) {
                     const data = await response.json();
                     const output = data.choices?.[0]?.message?.content || '';
-                    const tokens = data.usage?.total_tokens || 0;
+                    const promptTokens = data.usage?.prompt_tokens || 0;
+                    const completionTokens = data.usage?.completion_tokens || 0;
+                    const totalTokens = data.usage?.total_tokens || 0;
+
+                    // 记录 Token 使用量
+                    recordTokenUsage({
+                        model,
+                        promptTokens,
+                        completionTokens,
+                        totalTokens,
+                        source: 'agent',
+                    });
 
                     const result: AgentResult = {
                         agentId: agent.id,
                         status: 'completed',
                         output,
-                        tokensUsed: tokens,
+                        tokensUsed: totalTokens,
                         duration: Date.now() - startTime,
                     };
 

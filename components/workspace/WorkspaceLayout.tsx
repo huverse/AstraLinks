@@ -9,7 +9,7 @@ import React, { useState } from 'react';
 import {
     GitBranch, History, FolderOpen, Settings,
     ChevronLeft, Plus, Search, Cloud, Wand2, Key, X, CheckCircle, AlertCircle, RefreshCw,
-    BookOpen, Users
+    BookOpen, Users, Plug, BarChart3
 } from 'lucide-react';
 import { useWorkflows, Workflow } from '../../hooks/useWorkspace';
 import { WorkflowEditor } from '../workflow';
@@ -19,6 +19,8 @@ import WorkspaceSettings from './settings/WorkspaceSettings';
 import ConfigCenter from './ConfigCenter';
 import KnowledgeBasePanel from './KnowledgeBase';
 import AgentPanel from './AgentPanel';
+import MCPPanel from './MCPPanel';
+import TokenStatsPanel from './TokenStatsPanel';
 
 // ============================================
 // 执行历史面板
@@ -293,12 +295,14 @@ interface SidebarProps {
     onOpenPromptOptimizer: () => void;
     onOpenKnowledgeBase: () => void;
     onOpenAgentPanel: () => void;
+    onOpenMcpPanel: () => void;
+    onOpenTokenStats: () => void;
 }
 
 function Sidebar({
     workspaceId, workspaceName, activeTab, onTabChange, onBack,
     workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow, onOpenConfigCenter, onOpenPromptOptimizer,
-    onOpenKnowledgeBase, onOpenAgentPanel
+    onOpenKnowledgeBase, onOpenAgentPanel, onOpenMcpPanel, onOpenTokenStats
 }: SidebarProps) {
     const tabs = [
         { id: 'workflows' as const, icon: GitBranch, label: '工作流' },
@@ -438,6 +442,20 @@ function Sidebar({
                     <Users size={16} />
                     <span>多 Agent 协作</span>
                 </button>
+                <button
+                    onClick={onOpenMcpPanel}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-emerald-400 hover:text-white hover:bg-emerald-500/20 rounded-lg transition-colors"
+                >
+                    <Plug size={16} />
+                    <span>MCP 工具</span>
+                </button>
+                <button
+                    onClick={onOpenTokenStats}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-green-400 hover:text-white hover:bg-green-500/20 rounded-lg transition-colors"
+                >
+                    <BarChart3 size={16} />
+                    <span>Token 统计</span>
+                </button>
             </div>
         </div>
     );
@@ -462,6 +480,8 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
     const [showPromptOptimizer, setShowPromptOptimizer] = useState(false);
     const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
     const [showAgentPanel, setShowAgentPanel] = useState(false);
+    const [showMcpPanel, setShowMcpPanel] = useState(false);
+    const [showTokenStats, setShowTokenStats] = useState(false);
     const { workflows, createWorkflow } = useWorkflows(workspaceId);
 
     const handleCreateWorkflow = async () => {
@@ -520,6 +540,8 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                 onOpenPromptOptimizer={() => setShowPromptOptimizer(true)}
                 onOpenKnowledgeBase={() => setShowKnowledgeBase(true)}
                 onOpenAgentPanel={() => setShowAgentPanel(true)}
+                onOpenMcpPanel={() => setShowMcpPanel(true)}
+                onOpenTokenStats={() => setShowTokenStats(true)}
             />
 
             {/* 主内容区 */}
@@ -585,6 +607,21 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                 <AgentPanel
                     workspaceId={workspaceId}
                     onClose={() => setShowAgentPanel(false)}
+                />
+            )}
+
+            {/* MCP 工具面板 */}
+            {showMcpPanel && (
+                <MCPPanel
+                    workspaceId={workspaceId}
+                    onClose={() => setShowMcpPanel(false)}
+                />
+            )}
+
+            {/* Token 成本统计 */}
+            {showTokenStats && (
+                <TokenStatsPanel
+                    onClose={() => setShowTokenStats(false)}
                 />
             )}
         </div>
