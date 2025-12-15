@@ -17,7 +17,7 @@ const router = Router();
 router.use(authMiddleware);
 
 // ============================================
-// 内存向量存储
+// 向量存储 + 文件持久化
 // ============================================
 
 interface DocumentChunk {
@@ -35,10 +35,55 @@ interface VectorStore {
 
 const vectorStores: Map<string, VectorStore> = new Map();
 
+// 向量存储目录
+const VECTOR_STORE_DIR = process.env.VECTOR_STORE_PATH || path.join(process.cwd(), 'data', 'vectors');
+
+// 确保目录存在
+function ensureVectorStoreDir() {
+    if (!fs.existsSync(VECTOR_STORE_DIR)) {
+        fs.mkdirSync(VECTOR_STORE_DIR, { recursive: true });
+    }
+}
+
+// 获取向量存储文件路径
+function getVectorStorePath(workspaceId: string): string {
+    return path.join(VECTOR_STORE_DIR, `${workspaceId}.json`);
+}
+
+// 从文件加载向量存储
+function loadVectorStore(workspaceId: string): VectorStore {
+    const filePath = getVectorStorePath(workspaceId);
+    try {
+        if (fs.existsSync(filePath)) {
+            const data = fs.readFileSync(filePath, 'utf-8');
+            const parsed = JSON.parse(data);
+            console.log(`[Knowledge] Loaded ${parsed.chunks?.length || 0} chunks for workspace ${workspaceId}`);
+            return parsed;
+        }
+    } catch (e: any) {
+        console.error(`[Knowledge] Failed to load vector store for ${workspaceId}:`, e.message);
+    }
+    return { chunks: [] };
+}
+
+// 保存向量存储到文件
+function saveVectorStore(workspaceId: string, store: VectorStore): void {
+    ensureVectorStoreDir();
+    const filePath = getVectorStorePath(workspaceId);
+    try {
+        fs.writeFileSync(filePath, JSON.stringify(store, null, 2), 'utf-8');
+        console.log(`[Knowledge] Saved ${store.chunks.length} chunks for workspace ${workspaceId}`);
+    } catch (e: any) {
+        console.error(`[Knowledge] Failed to save vector store for ${workspaceId}:`, e.message);
+    }
+}
+
+// 获取工作区的向量存储 (自动从文件加载)
 function getVectorStore(workspaceId: string): VectorStore {
     let store = vectorStores.get(workspaceId);
     if (!store) {
-        store = { chunks: [] };
+        // 尝试从文件加载
+        store = loadVectorStore(workspaceId);
         vectorStores.set(workspaceId, store);
     }
     return store;
@@ -214,6 +259,9 @@ router.post('/:workspaceId/documents', async (req: Request, res: Response): Prom
         const store = getVectorStore(workspaceId);
         store.chunks.push(...chunks);
 
+        // 持久化到文件
+        saveVectorStore(workspaceId, store);
+
         // 存入数据库
         await pool.execute(
             `INSERT INTO knowledge_documents (id, workspace_id, name, type, content, chunk_count, created_at, updated_at)
@@ -251,6 +299,9 @@ router.delete('/:workspaceId/documents/:documentId', async (req: Request, res: R
         // 从向量存储删除
         const store = getVectorStore(workspaceId);
         store.chunks = store.chunks.filter(c => c.documentId !== documentId);
+
+        // 持久化到文件
+        saveVectorStore(workspaceId, store);
 
         // 从数据库删除
         await pool.execute(
