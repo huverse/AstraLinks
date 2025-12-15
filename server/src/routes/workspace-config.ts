@@ -148,7 +148,15 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
         const { workspaceId } = req.params;
         const { configs } = req.body;
 
+        console.log('[WorkspaceConfig] PUT /ai step 1 - request:', {
+            workspaceId,
+            userId,
+            configCount: configs?.length,
+            configApiKeys: configs?.map((c: any) => ({ id: c.id?.slice(0, 8), apiKey: c.apiKey?.slice(0, 10) + '...' }))
+        });
+
         if (!await verifyOwnership(workspaceId, userId)) {
+            console.log('[WorkspaceConfig] PUT /ai - ownership denied');
             res.status(403).json({ error: '无权访问' });
             return;
         }
@@ -169,6 +177,8 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             });
         }
 
+        console.log('[WorkspaceConfig] PUT /ai step 2 - existing configs:', Object.keys(existingConfigs).length);
+
         // 处理 API Keys
         const encryptedConfigs = configs.map((config: any) => {
             let apiKeyToStore = '';
@@ -176,12 +186,17 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             if (config.apiKey === '__PRESERVE__') {
                 // 保留现有的加密 key
                 apiKeyToStore = existingConfigs[config.id]?.apiKey || '';
+                console.log('[WorkspaceConfig] PUT /ai - PRESERVE key for:', config.id?.slice(0, 8));
             } else if (config.apiKey && !config.apiKey.startsWith('••••')) {
                 // 新的 API Key，需要加密
                 apiKeyToStore = encrypt(config.apiKey);
+                console.log('[WorkspaceConfig] PUT /ai - NEW key for:', config.id?.slice(0, 8));
             } else if (config.apiKey?.startsWith('••••')) {
                 // 遮罩的 key，保留现有加密的
                 apiKeyToStore = existingConfigs[config.id]?.apiKey || '';
+                console.log('[WorkspaceConfig] PUT /ai - MASKED key for:', config.id?.slice(0, 8));
+            } else {
+                console.log('[WorkspaceConfig] PUT /ai - EMPTY key for:', config.id?.slice(0, 8));
             }
             // 如果 apiKey 是空字符串或未定义，存储空字符串
 
@@ -191,6 +206,8 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             };
         });
 
+        console.log('[WorkspaceConfig] PUT /ai step 3 - processed configs:', encryptedConfigs.length);
+
         // 检查记录是否存在，然后 INSERT 或 UPDATE
         const [existingRecord] = await pool.execute<RowDataPacket[]>(
             `SELECT id FROM workspace_configs WHERE workspace_id = ?`,
@@ -199,21 +216,24 @@ router.put('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
 
         if (existingRecord.length === 0) {
             // 记录不存在，INSERT
+            console.log('[WorkspaceConfig] PUT /ai step 4 - INSERT');
             await pool.execute(
                 `INSERT INTO workspace_configs (id, workspace_id, model_configs) VALUES (?, ?, ?)`,
                 [uuidv4(), workspaceId, JSON.stringify(encryptedConfigs)]
             );
         } else {
             // 记录存在，UPDATE
+            console.log('[WorkspaceConfig] PUT /ai step 4 - UPDATE');
             await pool.execute(
                 `UPDATE workspace_configs SET model_configs = ? WHERE workspace_id = ?`,
                 [JSON.stringify(encryptedConfigs), workspaceId]
             );
         }
 
+        console.log('[WorkspaceConfig] PUT /ai step 5 - SUCCESS');
         res.json({ success: true });
     } catch (error: any) {
-        console.error('[WorkspaceConfig] Save AI config error:', error);
+        console.error('[WorkspaceConfig] PUT /ai ERROR:', error.message, error.stack);
         res.status(500).json({ error: error.message });
     }
 });
