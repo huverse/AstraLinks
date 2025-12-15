@@ -219,14 +219,18 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
         const { workspaceId } = req.params;
         const { name, provider, model, apiKey, baseUrl, temperature, maxTokens } = req.body;
 
-        console.log('[WorkspaceConfig] POST /ai request:', { workspaceId, userId, name, model, hasApiKey: !!apiKey });
+        console.log('[WorkspaceConfig] POST /ai step 1 - request received:', { workspaceId, userId, name, model, hasApiKey: !!apiKey });
 
-        if (!await verifyOwnership(workspaceId, userId)) {
-            console.log('[WorkspaceConfig] POST /ai ownership check failed:', { workspaceId, userId });
+        const isOwner = await verifyOwnership(workspaceId, userId);
+        console.log('[WorkspaceConfig] POST /ai step 2 - ownership check:', { isOwner });
+
+        if (!isOwner) {
+            console.log('[WorkspaceConfig] POST /ai - ownership denied');
             res.status(403).json({ error: '无权访问' });
             return;
         }
 
+        console.log('[WorkspaceConfig] POST /ai step 3 - fetching existing configs');
         const [rows] = await pool.execute<RowDataPacket[]>(
             `SELECT model_configs FROM workspace_configs WHERE workspace_id = ?`,
             [workspaceId]
@@ -235,6 +239,7 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
         const existingConfigs = rows.length > 0 && rows[0].model_configs
             ? (typeof rows[0].model_configs === 'string' ? JSON.parse(rows[0].model_configs) : rows[0].model_configs)
             : [];
+        console.log('[WorkspaceConfig] POST /ai step 4 - existing configs count:', existingConfigs.length);
 
         const newConfig = {
             id: uuidv4(),
@@ -250,6 +255,7 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
         };
 
         existingConfigs.push(newConfig);
+        console.log('[WorkspaceConfig] POST /ai step 5 - new config created:', newConfig.id);
 
         // 检查记录是否存在，然后 INSERT 或 UPDATE
         const [existingRecord] = await pool.execute<RowDataPacket[]>(
@@ -258,19 +264,20 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
         );
 
         if (existingRecord.length === 0) {
-            // 记录不存在，INSERT
+            console.log('[WorkspaceConfig] POST /ai step 6a - INSERT new record');
             await pool.execute(
                 `INSERT INTO workspace_configs (id, workspace_id, model_configs) VALUES (?, ?, ?)`,
                 [uuidv4(), workspaceId, JSON.stringify(existingConfigs)]
             );
         } else {
-            // 记录存在，UPDATE
+            console.log('[WorkspaceConfig] POST /ai step 6b - UPDATE existing record');
             await pool.execute(
                 `UPDATE workspace_configs SET model_configs = ? WHERE workspace_id = ?`,
                 [JSON.stringify(existingConfigs), workspaceId]
             );
         }
 
+        console.log('[WorkspaceConfig] POST /ai step 7 - SUCCESS');
         res.status(201).json({
             id: newConfig.id,
             name: newConfig.name,
@@ -279,7 +286,7 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
             hasApiKey: !!apiKey,
         });
     } catch (error: any) {
-        console.error('[WorkspaceConfig] Add AI config error:', error);
+        console.error('[WorkspaceConfig] POST /ai ERROR:', error.message, error.stack);
         res.status(500).json({ error: error.message });
     }
 });
