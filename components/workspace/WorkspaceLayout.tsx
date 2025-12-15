@@ -8,7 +8,8 @@
 import React, { useState } from 'react';
 import {
     GitBranch, History, FolderOpen, Settings,
-    ChevronLeft, Plus, Search, Cloud, Wand2, Key, X, CheckCircle, AlertCircle, RefreshCw
+    ChevronLeft, Plus, Search, Cloud, Wand2, Key, X, CheckCircle, AlertCircle, RefreshCw,
+    BookOpen, Users
 } from 'lucide-react';
 import { useWorkflows, Workflow } from '../../hooks/useWorkspace';
 import { WorkflowEditor } from '../workflow';
@@ -16,6 +17,8 @@ import ExecutionMonitor from './ExecutionMonitor';
 import FileManager from './FileManager';
 import WorkspaceSettings from './settings/WorkspaceSettings';
 import ConfigCenter from './ConfigCenter';
+import KnowledgeBasePanel from './KnowledgeBase';
+import AgentPanel from './AgentPanel';
 
 // ============================================
 // 执行历史面板
@@ -288,11 +291,14 @@ interface SidebarProps {
     onCreateWorkflow: () => void;
     onOpenConfigCenter: () => void;
     onOpenPromptOptimizer: () => void;
+    onOpenKnowledgeBase: () => void;
+    onOpenAgentPanel: () => void;
 }
 
 function Sidebar({
     workspaceId, workspaceName, activeTab, onTabChange, onBack,
-    workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow, onOpenConfigCenter, onOpenPromptOptimizer
+    workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow, onOpenConfigCenter, onOpenPromptOptimizer,
+    onOpenKnowledgeBase, onOpenAgentPanel
 }: SidebarProps) {
     const tabs = [
         { id: 'workflows' as const, icon: GitBranch, label: '工作流' },
@@ -418,6 +424,20 @@ function Sidebar({
                     <Wand2 size={16} />
                     <span>提示词优化</span>
                 </button>
+                <button
+                    onClick={onOpenKnowledgeBase}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-blue-400 hover:text-white hover:bg-blue-500/20 rounded-lg transition-colors"
+                >
+                    <BookOpen size={16} />
+                    <span>知识库 (RAG)</span>
+                </button>
+                <button
+                    onClick={onOpenAgentPanel}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-sm text-purple-400 hover:text-white hover:bg-purple-500/20 rounded-lg transition-colors"
+                >
+                    <Users size={16} />
+                    <span>多 Agent 协作</span>
+                </button>
             </div>
         </div>
     );
@@ -440,6 +460,8 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
     const [showSettings, setShowSettings] = useState(false);
     const [showConfigCenter, setShowConfigCenter] = useState(false);
     const [showPromptOptimizer, setShowPromptOptimizer] = useState(false);
+    const [showKnowledgeBase, setShowKnowledgeBase] = useState(false);
+    const [showAgentPanel, setShowAgentPanel] = useState(false);
     const { workflows, createWorkflow } = useWorkflows(workspaceId);
 
     const handleCreateWorkflow = async () => {
@@ -496,6 +518,8 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                 onCreateWorkflow={handleCreateWorkflow}
                 onOpenConfigCenter={() => setShowConfigCenter(true)}
                 onOpenPromptOptimizer={() => setShowPromptOptimizer(true)}
+                onOpenKnowledgeBase={() => setShowKnowledgeBase(true)}
+                onOpenAgentPanel={() => setShowAgentPanel(true)}
             />
 
             {/* 主内容区 */}
@@ -546,6 +570,22 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
             {/* 提示词优化助手 */}
             {showPromptOptimizer && (
                 <PromptOptimizerPanel onClose={() => setShowPromptOptimizer(false)} />
+            )}
+
+            {/* 知识库 RAG */}
+            {showKnowledgeBase && (
+                <KnowledgeBasePanel
+                    workspaceId={workspaceId}
+                    onClose={() => setShowKnowledgeBase(false)}
+                />
+            )}
+
+            {/* 多 Agent 协作 */}
+            {showAgentPanel && (
+                <AgentPanel
+                    workspaceId={workspaceId}
+                    onClose={() => setShowAgentPanel(false)}
+                />
             )}
         </div>
     );

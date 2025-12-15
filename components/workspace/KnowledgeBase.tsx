@@ -1,0 +1,397 @@
+/**
+ * 知识库管理组件
+ * 
+ * @module components/workspace/KnowledgeBase
+ * @description 工作区知识库文档管理和 RAG 查询
+ */
+
+import React, { useState, useEffect, useCallback } from 'react';
+import {
+    BookOpen, Upload, Trash2, Search, FileText,
+    Loader2, CheckCircle, AlertCircle, X, HelpCircle
+} from 'lucide-react';
+
+// ============================================
+// 类型定义
+// ============================================
+
+interface KnowledgeDocument {
+    id: string;
+    name: string;
+    type: string;
+    chunk_count: number;
+    created_at: string;
+}
+
+interface QueryResult {
+    content: string;
+    score: number;
+    documentId: string;
+}
+
+// ============================================
+// 知识库面板组件
+// ============================================
+
+interface KnowledgeBasePanelProps {
+    workspaceId: string;
+    onClose: () => void;
+}
+
+export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBasePanelProps) {
+    const [documents, setDocuments] = useState<KnowledgeDocument[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
+    const [querying, setQuerying] = useState(false);
+
+    const [newDocName, setNewDocName] = useState('');
+    const [newDocContent, setNewDocContent] = useState('');
+    const [apiKey, setApiKey] = useState('');
+    const [provider, setProvider] = useState<'openai' | 'gemini'>('openai');
+
+    const [queryText, setQueryText] = useState('');
+    const [queryResults, setQueryResults] = useState<QueryResult[]>([]);
+    const [queryContext, setQueryContext] = useState('');
+
+    const [activeTab, setActiveTab] = useState<'documents' | 'query'>('documents');
+    const [error, setError] = useState<string | null>(null);
+    const [success, setSuccess] = useState<string | null>(null);
+
+    // 加载 API Key
+    useEffect(() => {
+        const saved = localStorage.getItem('rag_api_key');
+        const savedProvider = localStorage.getItem('rag_provider') as 'openai' | 'gemini';
+        if (saved) setApiKey(saved);
+        if (savedProvider) setProvider(savedProvider);
+    }, []);
+
+    // 加载文档列表
+    const loadDocuments = useCallback(async () => {
+        try {
+            setLoading(true);
+            const token = localStorage.getItem('galaxyous_token');
+            const response = await fetch(`/api/knowledge/${workspaceId}/documents`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setDocuments(data.documents || []);
+            }
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setLoading(false);
+        }
+    }, [workspaceId]);
+
+    useEffect(() => {
+        loadDocuments();
+    }, [loadDocuments]);
+
+    // 上传文档
+    const handleUpload = async () => {
+        if (!newDocContent.trim() || !apiKey.trim()) {
+            setError('请填写文档内容和 API Key');
+            return;
+        }
+
+        // 保存 API Key
+        localStorage.setItem('rag_api_key', apiKey);
+        localStorage.setItem('rag_provider', provider);
+
+        setUploading(true);
+        setError(null);
+
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            const response = await fetch(`/api/knowledge/${workspaceId}/documents`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    name: newDocName || `文档_${Date.now()}`,
+                    content: newDocContent,
+                    type: 'txt',
+                    apiKey,
+                    provider,
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setSuccess(`文档已处理，生成 ${data.chunkCount} 个块`);
+                setNewDocName('');
+                setNewDocContent('');
+                loadDocuments();
+            } else {
+                const data = await response.json();
+                setError(data.error || '上传失败');
+            }
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setUploading(false);
+        }
+    };
+
+    // 删除文档
+    const handleDelete = async (docId: string) => {
+        if (!confirm('确定删除此文档？')) return;
+
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            await fetch(`/api/knowledge/${workspaceId}/documents/${docId}`, {
+                method: 'DELETE',
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            loadDocuments();
+        } catch (e: any) {
+            setError(e.message);
+        }
+    };
+
+    // RAG 查询
+    const handleQuery = async () => {
+        if (!queryText.trim() || !apiKey.trim()) {
+            setError('请填写查询内容和 API Key');
+            return;
+        }
+
+        setQuerying(true);
+        setError(null);
+        setQueryResults([]);
+
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            const response = await fetch(`/api/knowledge/${workspaceId}/query`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({
+                    query: queryText,
+                    apiKey,
+                    provider,
+                    topK: 5,
+                    threshold: 0.6,
+                }),
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setQueryResults(data.results || []);
+                setQueryContext(data.context || '');
+            } else {
+                const data = await response.json();
+                setError(data.error || '查询失败');
+            }
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setQuerying(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl border border-white/10 flex flex-col">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <BookOpen size={20} className="text-blue-400" />
+                        知识库
+                        <span className="text-xs bg-blue-600/50 px-2 py-0.5 rounded">RAG</span>
+                    </h2>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex border-b border-white/10">
+                    <button
+                        onClick={() => setActiveTab('documents')}
+                        className={`flex-1 py-3 text-sm font-medium ${activeTab === 'documents' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400'}`}
+                    >
+                        📄 文档管理
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('query')}
+                        className={`flex-1 py-3 text-sm font-medium ${activeTab === 'query' ? 'text-blue-400 border-b-2 border-blue-400' : 'text-slate-400'}`}
+                    >
+                        🔍 智能查询
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="flex-1 overflow-auto p-4">
+                    {/* 错误/成功提示 */}
+                    {error && (
+                        <div className="mb-4 p-3 bg-red-900/30 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-center gap-2">
+                            <AlertCircle size={16} />
+                            {error}
+                            <button onClick={() => setError(null)} className="ml-auto"><X size={14} /></button>
+                        </div>
+                    )}
+                    {success && (
+                        <div className="mb-4 p-3 bg-green-900/30 border border-green-500/30 rounded-lg text-green-400 text-sm flex items-center gap-2">
+                            <CheckCircle size={16} />
+                            {success}
+                            <button onClick={() => setSuccess(null)} className="ml-auto"><X size={14} /></button>
+                        </div>
+                    )}
+
+                    {/* API Key 配置 */}
+                    <div className="mb-4 p-3 bg-white/5 rounded-lg">
+                        <div className="flex gap-4">
+                            <div className="flex-1">
+                                <label className="block text-xs text-slate-400 mb-1">Embedding API Key</label>
+                                <input
+                                    type="password"
+                                    value={apiKey}
+                                    onChange={e => setApiKey(e.target.value)}
+                                    placeholder="OpenAI 或 Gemini API Key"
+                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Provider</label>
+                                <select
+                                    value={provider}
+                                    onChange={e => setProvider(e.target.value as any)}
+                                    className="px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                                >
+                                    <option value="openai">OpenAI</option>
+                                    <option value="gemini">Gemini</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    {activeTab === 'documents' && (
+                        <div className="space-y-4">
+                            {/* 上传区域 */}
+                            <div className="p-4 bg-white/5 rounded-xl border border-dashed border-white/20">
+                                <h3 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+                                    <Upload size={16} /> 添加文档
+                                </h3>
+                                <input
+                                    type="text"
+                                    value={newDocName}
+                                    onChange={e => setNewDocName(e.target.value)}
+                                    placeholder="文档名称 (可选)"
+                                    className="w-full px-3 py-2 mb-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                                />
+                                <textarea
+                                    value={newDocContent}
+                                    onChange={e => setNewDocContent(e.target.value)}
+                                    placeholder="粘贴文档内容..."
+                                    className="w-full h-32 px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm resize-none"
+                                />
+                                <button
+                                    onClick={handleUpload}
+                                    disabled={uploading}
+                                    className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                                    {uploading ? '处理中...' : '上传并向量化'}
+                                </button>
+                            </div>
+
+                            {/* 文档列表 */}
+                            <div>
+                                <h3 className="text-sm font-medium text-white mb-2">已上传文档 ({documents.length})</h3>
+                                {loading ? (
+                                    <div className="text-center py-8 text-slate-400">
+                                        <Loader2 className="animate-spin mx-auto mb-2" />
+                                        加载中...
+                                    </div>
+                                ) : documents.length === 0 ? (
+                                    <div className="text-center py-8 text-slate-400">
+                                        <HelpCircle className="mx-auto mb-2" />
+                                        暂无文档，请上传
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {documents.map(doc => (
+                                            <div key={doc.id} className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+                                                <div className="flex items-center gap-3">
+                                                    <FileText size={16} className="text-blue-400" />
+                                                    <div>
+                                                        <p className="text-sm text-white">{doc.name}</p>
+                                                        <p className="text-xs text-slate-400">{doc.chunk_count} 块</p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleDelete(doc.id)}
+                                                    className="text-red-400 hover:text-red-300"
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {activeTab === 'query' && (
+                        <div className="space-y-4">
+                            {/* 查询输入 */}
+                            <div>
+                                <label className="block text-sm text-slate-400 mb-2">输入问题</label>
+                                <textarea
+                                    value={queryText}
+                                    onChange={e => setQueryText(e.target.value)}
+                                    placeholder="在这里输入你的问题，系统会从知识库中检索相关内容..."
+                                    className="w-full h-24 px-4 py-3 bg-black/30 border border-white/10 rounded-xl text-white resize-none"
+                                />
+                                <button
+                                    onClick={handleQuery}
+                                    disabled={querying}
+                                    className="mt-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {querying ? <Loader2 size={14} className="animate-spin" /> : <Search size={14} />}
+                                    {querying ? '检索中...' : '语义检索'}
+                                </button>
+                            </div>
+
+                            {/* 查询结果 */}
+                            {queryResults.length > 0 && (
+                                <div>
+                                    <h3 className="text-sm font-medium text-white mb-2">检索结果 ({queryResults.length})</h3>
+                                    <div className="space-y-2">
+                                        {queryResults.map((result, i) => (
+                                            <div key={i} className="p-3 bg-white/5 rounded-lg">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-xs bg-blue-600/50 px-2 py-0.5 rounded">
+                                                        相似度: {(result.score * 100).toFixed(1)}%
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-white whitespace-pre-wrap">{result.content}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 上下文 */}
+                            {queryContext && (
+                                <div>
+                                    <h3 className="text-sm font-medium text-white mb-2">生成的上下文 (可用于 AI 对话)</h3>
+                                    <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg">
+                                        <pre className="text-sm text-green-300 whitespace-pre-wrap">{queryContext}</pre>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}

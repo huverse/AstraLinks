@@ -25,6 +25,7 @@ import workspaceConfigRoutes from './routes/workspace-config';
 import adminWorkflowsRoutes from './routes/admin-workflows';
 import adminMcpRoutes from './routes/admin-mcp';
 import promptRoutes from './routes/prompt';
+import knowledgeRoutes from './routes/knowledge';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
@@ -68,6 +69,7 @@ app.use('/api/workflows', workflowsRoutes);
 app.use('/api/sync', syncRoutes);
 app.use('/api/workspace-config', workspaceConfigRoutes);
 app.use('/api/prompt', promptRoutes);
+app.use('/api/knowledge', knowledgeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
