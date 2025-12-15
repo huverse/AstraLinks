@@ -652,4 +652,126 @@ function getMimeType(filename: string): string {
     return mimeTypes[ext] || 'application/octet-stream';
 }
 
+// ============================================
+// 测试 AI 连接
+// ============================================
+
+/**
+ * 测试 AI API 连接
+ * POST /api/ai/test-connection
+ */
+router.post('/test-connection', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { provider, model, apiKey, baseUrl } = req.body;
+
+        if (!apiKey) {
+            res.status(400).json({ error: '请提供 API Key' });
+            return;
+        }
+
+        // 根据 provider 构建测试请求
+        let testUrl = baseUrl;
+        let headers: Record<string, string> = {};
+        let body: any = {};
+
+        switch (provider) {
+            case 'openai':
+                testUrl = (baseUrl || 'https://api.openai.com/v1') + '/chat/completions';
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                };
+                body = {
+                    model: model || 'gpt-4o-mini',
+                    messages: [{ role: 'user', content: 'Hi' }],
+                    max_tokens: 5
+                };
+                break;
+
+            case 'anthropic':
+                testUrl = (baseUrl || 'https://api.anthropic.com') + '/v1/messages';
+                headers = {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                };
+                body = {
+                    model: model || 'claude-3-haiku-20240307',
+                    messages: [{ role: 'user', content: 'Hi' }],
+                    max_tokens: 5
+                };
+                break;
+
+            case 'google':
+                testUrl = `${baseUrl || 'https://generativelanguage.googleapis.com'}/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`;
+                headers = { 'Content-Type': 'application/json' };
+                body = {
+                    contents: [{ parts: [{ text: 'Hi' }] }],
+                    generationConfig: { maxOutputTokens: 5 }
+                };
+                break;
+
+            case 'deepseek':
+                testUrl = (baseUrl || 'https://api.deepseek.com') + '/v1/chat/completions';
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                };
+                body = {
+                    model: model || 'deepseek-chat',
+                    messages: [{ role: 'user', content: 'Hi' }],
+                    max_tokens: 5
+                };
+                break;
+
+            default:
+                // 自定义 provider，尝试 OpenAI 兼容格式
+                testUrl = (baseUrl || 'https://api.openai.com/v1') + '/chat/completions';
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                };
+                body = {
+                    model: model || 'gpt-4o-mini',
+                    messages: [{ role: 'user', content: 'Hi' }],
+                    max_tokens: 5
+                };
+        }
+
+        // 发送测试请求
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+
+        try {
+            const response = await fetch(testUrl, {
+                method: 'POST',
+                headers,
+                body: JSON.stringify(body),
+                signal: controller.signal
+            });
+
+            clearTimeout(timeout);
+
+            if (response.ok) {
+                res.json({ success: true, message: '连接成功！API Key 有效' });
+            } else {
+                const errorData = await response.json().catch(() => ({})) as any;
+                const errorMessage = errorData.error?.message || errorData.message || `HTTP ${response.status}`;
+                res.status(400).json({ error: `连接失败: ${errorMessage}` });
+            }
+        } catch (fetchError: any) {
+            clearTimeout(timeout);
+            if (fetchError.name === 'AbortError') {
+                res.status(408).json({ error: '连接超时，请检查网络或 Base URL' });
+            } else {
+                res.status(500).json({ error: `网络错误: ${fetchError.message}` });
+            }
+        }
+    } catch (error: any) {
+        console.error('[WorkspaceConfig] test-connection error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;
+

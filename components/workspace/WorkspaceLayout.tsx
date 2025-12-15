@@ -8,7 +8,7 @@
 import React, { useState } from 'react';
 import {
     GitBranch, History, FolderOpen, Settings,
-    ChevronLeft, Plus, Search, Cloud, Wand2, Key
+    ChevronLeft, Plus, Search, Cloud, Wand2, Key, X, CheckCircle, AlertCircle, RefreshCw
 } from 'lucide-react';
 import { useWorkflows, Workflow } from '../../hooks/useWorkspace';
 import { WorkflowEditor } from '../workflow';
@@ -16,6 +16,7 @@ import ExecutionMonitor from './ExecutionMonitor';
 import FileManager from './FileManager';
 import WorkspaceSettings from './settings/WorkspaceSettings';
 import ConfigCenter from './ConfigCenter';
+import { promptOptimizer } from '../../core/prompt/optimizer';
 
 // ============================================
 // 执行历史面板
@@ -54,6 +55,160 @@ function FileManagerPanel({ workspaceId }: { workspaceId: string }) {
 }
 
 // ============================================
+// 提示词优化面板
+// ============================================
+
+function PromptOptimizerPanel({ onClose }: { onClose: () => void }) {
+    const [input, setInput] = useState('');
+    const [result, setResult] = useState<any>(null);
+    const [loading, setLoading] = useState(false);
+    const [taskType, setTaskType] = useState<'chat' | 'code' | 'creative' | 'analysis' | 'translation'>('chat');
+
+    const handleOptimize = () => {
+        if (!input.trim()) return;
+
+        setLoading(true);
+        // 模拟异步处理
+        setTimeout(() => {
+            const optimizationResult = promptOptimizer.optimize(input, { taskType });
+            setResult(optimizationResult);
+            setLoading(false);
+        }, 500);
+    };
+
+    const handleCopy = (text: string) => {
+        navigator.clipboard.writeText(text);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-slate-800 rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-auto shadow-2xl border border-white/10">
+                {/* Header */}
+                <div className="flex items-center justify-between p-4 border-b border-white/10">
+                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        <Wand2 size={20} className="text-purple-400" />
+                        提示词优化助手
+                    </h2>
+                    <button onClick={onClose} className="text-slate-400 hover:text-white">
+                        <X size={20} />
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-4 space-y-4">
+                    {/* 任务类型选择 */}
+                    <div>
+                        <label className="block text-sm text-slate-400 mb-2">任务类型</label>
+                        <div className="flex gap-2 flex-wrap">
+                            {[
+                                { id: 'chat', label: '对话' },
+                                { id: 'code', label: '代码' },
+                                { id: 'creative', label: '创意' },
+                                { id: 'analysis', label: '分析' },
+                                { id: 'translation', label: '翻译' },
+                            ].map(t => (
+                                <button
+                                    key={t.id}
+                                    onClick={() => setTaskType(t.id as any)}
+                                    className={`px-3 py-1.5 text-sm rounded-lg transition-colors ${taskType === t.id
+                                        ? 'bg-purple-600 text-white'
+                                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                        }`}
+                                >
+                                    {t.label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* 输入区 */}
+                    <div>
+                        <label className="block text-sm text-slate-400 mb-2">输入提示词</label>
+                        <textarea
+                            value={input}
+                            onChange={e => setInput(e.target.value)}
+                            placeholder="在这里输入你的提示词，系统会自动分析并给出优化建议..."
+                            className="w-full h-32 px-4 py-3 bg-black/30 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:outline-none focus:border-purple-500 resize-none"
+                        />
+                    </div>
+
+                    {/* 优化按钮 */}
+                    <button
+                        onClick={handleOptimize}
+                        disabled={loading || !input.trim()}
+                        className="w-full py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-xl font-medium hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                        {loading ? (
+                            <>
+                                <RefreshCw size={18} className="animate-spin" />
+                                优化中...
+                            </>
+                        ) : (
+                            <>
+                                <Wand2 size={18} />
+                                优化提示词
+                            </>
+                        )}
+                    </button>
+
+                    {/* 结果展示 */}
+                    {result && (
+                        <div className="space-y-4">
+                            {/* 评分对比 */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="p-4 bg-white/5 rounded-xl">
+                                    <p className="text-sm text-slate-400 mb-1">原始评分</p>
+                                    <p className="text-2xl font-bold text-slate-300">{result.score.original}/100</p>
+                                </div>
+                                <div className="p-4 bg-purple-500/20 rounded-xl border border-purple-500/30">
+                                    <p className="text-sm text-purple-300 mb-1">优化后评分</p>
+                                    <p className="text-2xl font-bold text-purple-400">{result.score.optimized}/100</p>
+                                </div>
+                            </div>
+
+                            {/* 优化建议 */}
+                            {result.suggestions.length > 0 && (
+                                <div>
+                                    <p className="text-sm text-slate-400 mb-2">优化建议</p>
+                                    <div className="space-y-2">
+                                        {result.suggestions.map((s: any, i: number) => (
+                                            <div key={i} className="p-3 bg-white/5 rounded-lg flex items-start gap-2">
+                                                {s.type === 'warning' ? (
+                                                    <AlertCircle size={16} className="text-amber-400 shrink-0 mt-0.5" />
+                                                ) : (
+                                                    <CheckCircle size={16} className="text-green-400 shrink-0 mt-0.5" />
+                                                )}
+                                                <span className="text-sm text-slate-300">{s.message}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* 优化后的提示词 */}
+                            <div>
+                                <div className="flex items-center justify-between mb-2">
+                                    <p className="text-sm text-slate-400">优化后的提示词</p>
+                                    <button
+                                        onClick={() => handleCopy(result.optimizedPrompt)}
+                                        className="text-xs text-purple-400 hover:text-purple-300"
+                                    >
+                                        复制
+                                    </button>
+                                </div>
+                                <div className="p-4 bg-black/30 rounded-xl border border-purple-500/30">
+                                    <p className="text-white whitespace-pre-wrap">{result.optimizedPrompt}</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ============================================
 // 侧边栏
 // ============================================
 
@@ -68,11 +223,12 @@ interface SidebarProps {
     onSelectWorkflow: (id: string) => void;
     onCreateWorkflow: () => void;
     onOpenConfigCenter: () => void;
+    onOpenPromptOptimizer: () => void;
 }
 
 function Sidebar({
     workspaceId, workspaceName, activeTab, onTabChange, onBack,
-    workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow, onOpenConfigCenter
+    workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow, onOpenConfigCenter, onOpenPromptOptimizer
 }: SidebarProps) {
     const tabs = [
         { id: 'workflows' as const, icon: GitBranch, label: '工作流' },
@@ -192,7 +348,7 @@ function Sidebar({
                     <span>云端同步</span>
                 </button>
                 <button
-                    onClick={() => alert('提示词优化助手正在开发中，敬请期待！\n\n开启后，工作流中的 AI 节点将自动应用智能提示词优化。')}
+                    onClick={onOpenPromptOptimizer}
                     className="w-full flex items-center gap-2 px-3 py-2 text-sm text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
                 >
                     <Wand2 size={16} />
@@ -219,6 +375,7 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showConfigCenter, setShowConfigCenter] = useState(false);
+    const [showPromptOptimizer, setShowPromptOptimizer] = useState(false);
     const { workflows, createWorkflow } = useWorkflows(workspaceId);
 
     const handleCreateWorkflow = async () => {
@@ -274,6 +431,7 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                 onSelectWorkflow={setSelectedWorkflowId}
                 onCreateWorkflow={handleCreateWorkflow}
                 onOpenConfigCenter={() => setShowConfigCenter(true)}
+                onOpenPromptOptimizer={() => setShowPromptOptimizer(true)}
             />
 
             {/* 主内容区 */}
@@ -319,6 +477,11 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                         onClose={() => setShowConfigCenter(false)}
                     />
                 </div>
+            )}
+
+            {/* 提示词优化助手 */}
+            {showPromptOptimizer && (
+                <PromptOptimizerPanel onClose={() => setShowPromptOptimizer(false)} />
             )}
         </div>
     );

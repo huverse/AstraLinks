@@ -181,7 +181,7 @@ function ConfigForm({
         try {
             // 简单验证 API Key 格式
             const baseUrl = form.baseUrl || getDefaultBaseUrl(form.provider);
-            const response = await fetch('/api/ai/test-connection', {
+            const response = await fetch('/api/workspace-config/test-connection', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -339,8 +339,8 @@ function ConfigForm({
             {/* 测试结果 */}
             {testResult && (
                 <div className={`p-3 rounded-lg flex items-center gap-2 ${testResult.success
-                        ? 'bg-green-900/30 border border-green-500/30 text-green-400'
-                        : 'bg-red-900/30 border border-red-500/30 text-red-400'
+                    ? 'bg-green-900/30 border border-green-500/30 text-green-400'
+                    : 'bg-red-900/30 border border-red-500/30 text-red-400'
                     }`}>
                     {testResult.success ? <Check size={16} /> : <AlertCircle size={16} />}
                     <span className="text-sm">{testResult.message}</span>

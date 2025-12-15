@@ -8,7 +8,8 @@
 import React, { useState, useEffect } from 'react';
 import {
     Bot, Plug, Settings as SettingsIcon, Cloud,
-    Save, Loader2, Check, Plus, Trash2, RefreshCw
+    Save, Loader2, Check, Plus, Trash2, RefreshCw,
+    Download, Upload, Clock
 } from 'lucide-react';
 
 // ============================================
@@ -401,7 +402,11 @@ function FeatureTogglePanel({
 
 function CloudSyncPanel({ workspaceId }: { workspaceId: string }) {
     const [syncing, setSyncing] = useState(false);
+    const [restoring, setRestoring] = useState(false);
     const [lastSync, setLastSync] = useState<string | null>(null);
+    const [lastSyncId, setLastSyncId] = useState<string | null>(null);
+    const [showHistory, setShowHistory] = useState(false);
+    const [syncHistory, setSyncHistory] = useState<any[]>([]);
 
     // 加载最后同步时间
     useEffect(() => {
@@ -415,6 +420,7 @@ function CloudSyncPanel({ workspaceId }: { workspaceId: string }) {
                     const data = await response.json();
                     if (data.data?.createdAt) {
                         setLastSync(data.data.createdAt);
+                        setLastSyncId(data.data.syncId);
                     }
                 }
             } catch (error) {
@@ -460,6 +466,79 @@ function CloudSyncPanel({ workspaceId }: { workspaceId: string }) {
         }
     };
 
+    // 恢复数据
+    const handleRestore = async () => {
+        if (!lastSyncId) {
+            alert('没有可恢复的备份');
+            return;
+        }
+
+        if (!confirm('确定要从云端恢复数据吗？这将覆盖当前工作区配置。')) {
+            return;
+        }
+
+        setRestoring(true);
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            const response = await fetch('/api/sync/download', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                },
+                body: JSON.stringify({ syncId: lastSyncId }),
+            });
+
+            if (response.ok) {
+                const { data } = await response.json();
+
+                // 恢复工作区配置
+                await fetch(`/api/workspaces/${workspaceId}/config`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+                    },
+                    body: JSON.stringify({
+                        mcp_tools: data.mcp_tools || [],
+                        features: data.features || {},
+                    }),
+                });
+
+                alert('✅ 数据恢复成功！请刷新页面查看更改。');
+            } else {
+                throw new Error('下载备份失败');
+            }
+        } catch (error) {
+            console.error('Restore error:', error);
+            alert('恢复失败，请稍后重试');
+        } finally {
+            setRestoring(false);
+        }
+    };
+
+    // 查看同步历史
+    const loadHistory = async () => {
+        if (showHistory) {
+            setShowHistory(false);
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('galaxyous_token');
+            const response = await fetch('/api/sync/history', {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+            });
+            if (response.ok) {
+                const { data } = await response.json();
+                setSyncHistory(data || []);
+                setShowHistory(true);
+            }
+        } catch (error) {
+            console.error('Failed to load history:', error);
+        }
+    };
+
     return (
         <div className="space-y-4">
             <div className="p-4 rounded-xl border border-white/10 bg-white/5">
@@ -468,18 +547,32 @@ function CloudSyncPanel({ workspaceId }: { workspaceId: string }) {
                         <Cloud size={20} className="text-blue-400" />
                         <span className="font-medium text-white">云端同步</span>
                     </div>
-                    <button
-                        onClick={handleSync}
-                        disabled={syncing}
-                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-colors disabled:opacity-50"
-                    >
-                        {syncing ? (
-                            <Loader2 size={16} className="animate-spin" />
-                        ) : (
-                            <RefreshCw size={16} />
-                        )}
-                        <span>{syncing ? '同步中...' : '立即同步'}</span>
-                    </button>
+                    <div className="flex gap-2">
+                        <button
+                            onClick={handleRestore}
+                            disabled={restoring || !lastSyncId}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 text-white text-sm rounded-lg hover:bg-amber-500 transition-colors disabled:opacity-50"
+                        >
+                            {restoring ? (
+                                <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                                <Download size={14} />
+                            )}
+                            <span>恢复</span>
+                        </button>
+                        <button
+                            onClick={handleSync}
+                            disabled={syncing}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-500 transition-colors disabled:opacity-50"
+                        >
+                            {syncing ? (
+                                <Loader2 size={14} className="animate-spin" />
+                            ) : (
+                                <Upload size={14} />
+                            )}
+                            <span>{syncing ? '同步中...' : '立即同步'}</span>
+                        </button>
+                    </div>
                 </div>
 
                 {lastSync ? (
@@ -488,6 +581,50 @@ function CloudSyncPanel({ workspaceId }: { workspaceId: string }) {
                     </p>
                 ) : (
                     <p className="text-sm text-slate-400">尚未同步</p>
+                )}
+            </div>
+
+            {/* 同步历史 */}
+            <div className="p-4 rounded-xl border border-white/10 bg-white/5">
+                <button
+                    onClick={loadHistory}
+                    className="flex items-center gap-2 text-sm text-slate-400 hover:text-white transition-colors"
+                >
+                    <Clock size={16} />
+                    <span>{showHistory ? '隐藏历史记录' : '查看同步历史'}</span>
+                </button>
+
+                {showHistory && syncHistory.length > 0 && (
+                    <div className="mt-3 space-y-2 max-h-48 overflow-auto">
+                        {syncHistory.slice(0, 10).map((record: any) => (
+                            <div
+                                key={record.id}
+                                className="flex items-center justify-between p-2 bg-white/5 rounded-lg text-sm"
+                            >
+                                <div>
+                                    <p className="text-slate-300">{new Date(record.created_at).toLocaleString()}</p>
+                                    <p className="text-xs text-slate-500">
+                                        {(record.file_size / 1024).toFixed(1)} KB
+                                    </p>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        if (confirm('确定恢复这个版本？')) {
+                                            setLastSyncId(record.id);
+                                            await handleRestore();
+                                        }
+                                    }}
+                                    className="px-2 py-1 text-xs text-amber-400 hover:bg-amber-500/20 rounded"
+                                >
+                                    恢复此版本
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {showHistory && syncHistory.length === 0 && (
+                    <p className="mt-3 text-sm text-slate-500">暂无同步历史</p>
                 )}
             </div>
 

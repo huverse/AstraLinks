@@ -436,8 +436,8 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                 <p className="text-xs text-gray-500 dark:text-gray-400">支持 GET/POST/PUT/DELETE 请求</p>
                             </div>
 
-                            {/* File System - 预留 */}
-                            <div className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600 opacity-60">
+                            {/* File System */}
+                            <div className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
@@ -450,12 +450,13 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                             <p className="text-xs text-gray-500">沙箱文件读写操作</p>
                                         </div>
                                     </div>
-                                    <span className="px-2 py-1 text-xs bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-gray-400 rounded">即将推出</span>
+                                    <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded">已启用</span>
                                 </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">支持工作区内文件的读取、写入和列目录操作</p>
                             </div>
 
-                            {/* Code Executor - 预留 */}
-                            <div className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600 opacity-60">
+                            {/* Code Executor */}
+                            <div className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600">
                                 <div className="flex items-center justify-between mb-2">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
@@ -468,8 +469,9 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                             <p className="text-xs text-gray-500">安全代码执行环境</p>
                                         </div>
                                     </div>
-                                    <span className="px-2 py-1 text-xs bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-gray-400 rounded">即将推出</span>
+                                    <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded">已启用</span>
                                 </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">在沙箱环境中安全执行 JavaScript/Python 代码</p>
                             </div>
 
                             <p className="text-xs text-gray-400 dark:text-gray-500 text-center pt-2">
