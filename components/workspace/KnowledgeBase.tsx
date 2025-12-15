@@ -52,16 +52,14 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
     const [baseUrl, setBaseUrl] = useState('');
     const [showAdvanced, setShowAdvanced] = useState(false);
 
-    // Embedding 模型预设
+    // Embedding 模型预设 (2025 年最新)
     const EMBEDDING_MODELS = {
         openai: [
-            { value: 'text-embedding-3-small', label: 'text-embedding-3-small (推荐, $0.02/1M)' },
-            { value: 'text-embedding-3-large', label: 'text-embedding-3-large (高精度, $0.13/1M)' },
-            { value: 'text-embedding-ada-002', label: 'text-embedding-ada-002 (旧版)' },
+            { value: 'text-embedding-3-small', label: 'text-embedding-3-small (推荐, 1536 dims, $0.02/1M)' },
+            { value: 'text-embedding-3-large', label: 'text-embedding-3-large (高精度, 3072 dims, $0.13/1M)' },
         ],
         gemini: [
-            { value: 'gemini-embedding-001', label: 'gemini-embedding-001 (最新)' },
-            { value: 'text-embedding-004', label: 'text-embedding-004 (经典)' },
+            { value: 'gemini-embedding-001', label: 'gemini-embedding-001 (2025 最新, 250+ 语言, MMTEB #1)' },
         ],
         custom: [],
     };

@@ -104,13 +104,11 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
     const [agents, setAgents] = useState<Agent[]>([]);
     const [taskInput, setTaskInput] = useState('');
 
-    // API 配置
+    // API 配置 - 完全自定义
     const [apiKey, setApiKey] = useState('');
     const [baseUrl, setBaseUrl] = useState('');
-    const [provider, setProvider] = useState<'openai' | 'gemini' | 'custom'>('openai');
     const [model, setModel] = useState('gpt-4o-mini');
     const [temperature, setTemperature] = useState(0.7);
-    const [showAdvanced, setShowAdvanced] = useState(false);
 
     const [mode, setMode] = useState<'sequential' | 'parallel'>('sequential');
 
@@ -122,31 +120,13 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
     const [error, setError] = useState<string | null>(null);
     const [showAddAgent, setShowAddAgent] = useState(false);
 
-    // 模型预设
-    const MODEL_PRESETS = {
-        openai: [
-            { value: 'gpt-4o', label: 'GPT-4o (最强)' },
-            { value: 'gpt-4o-mini', label: 'GPT-4o Mini (推荐)' },
-            { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-            { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo (快速)' },
-        ],
-        gemini: [
-            { value: 'gemini-2.0-flash', label: 'Gemini 2.0 Flash (推荐)' },
-            { value: 'gemini-1.5-pro', label: 'Gemini 1.5 Pro' },
-            { value: 'gemini-1.5-flash', label: 'Gemini 1.5 Flash' },
-        ],
-        custom: [],
-    };
-
     // 加载配置
     useEffect(() => {
         const saved = localStorage.getItem('agent_api_key');
-        const savedProvider = localStorage.getItem('agent_provider') as 'openai' | 'gemini' | 'custom';
         const savedModel = localStorage.getItem('agent_model');
         const savedBaseUrl = localStorage.getItem('agent_base_url');
         const savedTemp = localStorage.getItem('agent_temperature');
         if (saved) setApiKey(saved);
-        if (savedProvider) setProvider(savedProvider);
         if (savedModel) setModel(savedModel);
         if (savedBaseUrl) setBaseUrl(savedBaseUrl);
         if (savedTemp) setTemperature(parseFloat(savedTemp));
@@ -175,7 +155,6 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
         }
 
         localStorage.setItem('agent_api_key', apiKey);
-        localStorage.setItem('agent_provider', provider);
         localStorage.setItem('agent_model', model);
         localStorage.setItem('agent_base_url', baseUrl);
         localStorage.setItem('agent_temperature', temperature.toString());
@@ -208,9 +187,9 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
                     },
                     body: JSON.stringify({
                         apiKey,
-                        model: provider === 'gemini' ? 'gemini-2.0-flash' : 'gpt-4o-mini',
+                        model,
                         messages,
-                        temperature: 0.7,
+                        temperature,
                         maxTokens: 4096,
                     }),
                 });
@@ -274,104 +253,61 @@ export default function AgentPanel({ workspaceId, onClose }: AgentPanelProps) {
                         </div>
                     )}
 
-                    {/* API 配置 */}
+                    {/* API 配置 - 完全自定义 */}
                     <div className="p-3 bg-white/5 rounded-lg space-y-3">
-                        <div className="flex gap-3">
-                            <div className="flex-1">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
                                 <label className="block text-xs text-slate-400 mb-1">API Key</label>
                                 <input
                                     type="password"
                                     value={apiKey}
                                     onChange={e => setApiKey(e.target.value)}
-                                    placeholder="OpenAI / Gemini / 自定义 API Key"
+                                    placeholder="sk-xxx 或其他 API Key"
                                     className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs text-slate-400 mb-1">Provider</label>
-                                <select
-                                    value={provider}
-                                    onChange={e => {
-                                        const p = e.target.value as 'openai' | 'gemini' | 'custom';
-                                        setProvider(p);
-                                        // 切换 provider 时自动设置默认模型
-                                        if (p === 'openai') setModel('gpt-4o-mini');
-                                        else if (p === 'gemini') setModel('gemini-2.0-flash');
-                                    }}
-                                    className="px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
-                                >
-                                    <option value="openai">OpenAI</option>
-                                    <option value="gemini">Gemini</option>
-                                    <option value="custom">自定义</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs text-slate-400 mb-1">模型</label>
-                                {provider === 'custom' ? (
-                                    <input
-                                        type="text"
-                                        value={model}
-                                        onChange={e => setModel(e.target.value)}
-                                        placeholder="模型名称"
-                                        className="w-32 px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
-                                    />
-                                ) : (
-                                    <select
-                                        value={model}
-                                        onChange={e => setModel(e.target.value)}
-                                        className="px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
-                                    >
-                                        {MODEL_PRESETS[provider].map(m => (
-                                            <option key={m.value} value={m.value}>{m.label}</option>
-                                        ))}
-                                    </select>
-                                )}
+                                <label className="block text-xs text-slate-400 mb-1">模型名称</label>
+                                <input
+                                    type="text"
+                                    value={model}
+                                    onChange={e => setModel(e.target.value)}
+                                    placeholder="gpt-4o-mini / gemini-2.0-flash / ..."
+                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                                />
                             </div>
                         </div>
 
-                        {/* 高级设置折叠 */}
-                        <button
-                            onClick={() => setShowAdvanced(!showAdvanced)}
-                            className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
-                        >
-                            {showAdvanced ? '▼' : '▶'} 高级设置
-                        </button>
+                        <div>
+                            <label className="block text-xs text-slate-400 mb-1">Base URL (可选)</label>
+                            <input
+                                type="text"
+                                value={baseUrl}
+                                onChange={e => setBaseUrl(e.target.value)}
+                                placeholder="https://api.openai.com/v1 或自定义代理端点"
+                                className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">留空使用默认 OpenAI 端点</p>
+                        </div>
 
-                        {showAdvanced && (
-                            <div className="space-y-3 pt-2 border-t border-white/10">
-                                {/* 自定义 Base URL */}
-                                <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Base URL (可选)</label>
-                                    <input
-                                        type="text"
-                                        value={baseUrl}
-                                        onChange={e => setBaseUrl(e.target.value)}
-                                        placeholder={provider === 'openai' ? 'https://api.openai.com/v1' : provider === 'gemini' ? 'https://generativelanguage.googleapis.com' : '自定义 API 端点'}
-                                        className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
-                                    />
-                                    <p className="text-xs text-slate-500 mt-1">留空使用默认端点，或填入自定义 API 代理地址</p>
-                                </div>
-
-                                {/* Temperature 滑块 */}
-                                <div>
-                                    <label className="block text-xs text-slate-400 mb-1">Temperature: {temperature.toFixed(1)}</label>
-                                    <input
-                                        type="range"
-                                        min="0"
-                                        max="2"
-                                        step="0.1"
-                                        value={temperature}
-                                        onChange={e => setTemperature(parseFloat(e.target.value))}
-                                        className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
-                                    />
-                                    <div className="flex justify-between text-xs text-slate-500 mt-1">
-                                        <span>精确 (0)</span>
-                                        <span>平衡 (0.7)</span>
-                                        <span>创意 (2)</span>
-                                    </div>
-                                </div>
+                        {/* Temperature 滑块 */}
+                        <div>
+                            <label className="block text-xs text-slate-400 mb-1">Temperature: {temperature.toFixed(1)}</label>
+                            <input
+                                type="range"
+                                min="0"
+                                max="2"
+                                step="0.1"
+                                value={temperature}
+                                onChange={e => setTemperature(parseFloat(e.target.value))}
+                                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer"
+                            />
+                            <div className="flex justify-between text-xs text-slate-500 mt-1">
+                                <span>精确 (0)</span>
+                                <span>平衡 (0.7)</span>
+                                <span>创意 (2)</span>
                             </div>
-                        )}
+                        </div>
                     </div>
 
                     {/* Agent 列表 */}
