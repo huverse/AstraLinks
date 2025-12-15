@@ -89,7 +89,10 @@ router.get('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
         const userId = (req as any).user.id;
         const { workspaceId } = req.params;
 
+        console.log('[WorkspaceConfig] GET /ai request:', { workspaceId, userId });
+
         if (!await verifyOwnership(workspaceId, userId)) {
+            console.log('[WorkspaceConfig] GET /ai ownership denied');
             res.status(403).json({ error: '无权访问' });
             return;
         }
@@ -99,8 +102,10 @@ router.get('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             [workspaceId]
         );
 
+        console.log('[WorkspaceConfig] GET /ai rows found:', rows.length);
+
         if (rows.length === 0) {
-            // 返回默认配置
+            console.log('[WorkspaceConfig] GET /ai returning empty configs');
             res.json({
                 configs: [],
                 activeConfigId: null,
@@ -112,6 +117,8 @@ router.get('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             ? JSON.parse(rows[0].model_configs)
             : rows[0].model_configs;
 
+        console.log('[WorkspaceConfig] GET /ai configs count:', (modelConfigs || []).length);
+
         // 解密 API Keys (只返回遮罩版本)
         const safeConfigs = (modelConfigs || []).map((config: any) => ({
             ...config,
@@ -119,12 +126,14 @@ router.get('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
             hasApiKey: !!config.apiKey,
         }));
 
+        console.log('[WorkspaceConfig] GET /ai returning configs:', safeConfigs.length);
+
         res.json({
             configs: safeConfigs,
             activeConfigId: modelConfigs?.find((c: any) => c.isActive)?.id || null,
         });
     } catch (error: any) {
-        console.error('[WorkspaceConfig] Get AI config error:', error);
+        console.error('[WorkspaceConfig] GET /ai ERROR:', error.message, error.stack);
         res.status(500).json({ error: error.message });
     }
 });
