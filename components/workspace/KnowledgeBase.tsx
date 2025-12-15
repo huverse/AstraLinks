@@ -47,7 +47,24 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
     const [newDocName, setNewDocName] = useState('');
     const [newDocContent, setNewDocContent] = useState('');
     const [apiKey, setApiKey] = useState('');
-    const [provider, setProvider] = useState<'openai' | 'gemini'>('openai');
+    const [provider, setProvider] = useState<'openai' | 'gemini' | 'custom'>('openai');
+    const [embeddingModel, setEmbeddingModel] = useState('text-embedding-3-small');
+    const [baseUrl, setBaseUrl] = useState('');
+    const [showAdvanced, setShowAdvanced] = useState(false);
+
+    // Embedding 模型预设
+    const EMBEDDING_MODELS = {
+        openai: [
+            { value: 'text-embedding-3-small', label: 'text-embedding-3-small (推荐, $0.02/1M)' },
+            { value: 'text-embedding-3-large', label: 'text-embedding-3-large (高精度, $0.13/1M)' },
+            { value: 'text-embedding-ada-002', label: 'text-embedding-ada-002 (旧版)' },
+        ],
+        gemini: [
+            { value: 'gemini-embedding-001', label: 'gemini-embedding-001 (最新)' },
+            { value: 'text-embedding-004', label: 'text-embedding-004 (经典)' },
+        ],
+        custom: [],
+    };
 
     const [queryText, setQueryText] = useState('');
     const [queryResults, setQueryResults] = useState<QueryResult[]>([]);
@@ -57,12 +74,16 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<string | null>(null);
 
-    // 加载 API Key
+    // 加载配置
     useEffect(() => {
         const saved = localStorage.getItem('rag_api_key');
-        const savedProvider = localStorage.getItem('rag_provider') as 'openai' | 'gemini';
+        const savedProvider = localStorage.getItem('rag_provider') as 'openai' | 'gemini' | 'custom';
+        const savedModel = localStorage.getItem('rag_embedding_model');
+        const savedBaseUrl = localStorage.getItem('rag_base_url');
         if (saved) setApiKey(saved);
         if (savedProvider) setProvider(savedProvider);
+        if (savedModel) setEmbeddingModel(savedModel);
+        if (savedBaseUrl) setBaseUrl(savedBaseUrl);
     }, []);
 
     // 加载文档列表
@@ -95,9 +116,11 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
             return;
         }
 
-        // 保存 API Key
+        // 保存配置
         localStorage.setItem('rag_api_key', apiKey);
         localStorage.setItem('rag_provider', provider);
+        localStorage.setItem('rag_embedding_model', embeddingModel);
+        localStorage.setItem('rag_base_url', baseUrl);
 
         setUploading(true);
         setError(null);
@@ -244,16 +267,16 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                         </div>
                     )}
 
-                    {/* API Key 配置 */}
-                    <div className="mb-4 p-3 bg-white/5 rounded-lg">
-                        <div className="flex gap-4">
+                    {/* API 配置 */}
+                    <div className="mb-4 p-3 bg-white/5 rounded-lg space-y-3">
+                        <div className="flex gap-3">
                             <div className="flex-1">
                                 <label className="block text-xs text-slate-400 mb-1">Embedding API Key</label>
                                 <input
                                     type="password"
                                     value={apiKey}
                                     onChange={e => setApiKey(e.target.value)}
-                                    placeholder="OpenAI 或 Gemini API Key"
+                                    placeholder="OpenAI / Gemini / 自定义 API Key"
                                     className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
                                 />
                             </div>
@@ -261,14 +284,65 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                                 <label className="block text-xs text-slate-400 mb-1">Provider</label>
                                 <select
                                     value={provider}
-                                    onChange={e => setProvider(e.target.value as any)}
+                                    onChange={e => {
+                                        const p = e.target.value as 'openai' | 'gemini' | 'custom';
+                                        setProvider(p);
+                                        // 切换 provider 时自动选择默认模型
+                                        if (p === 'openai') setEmbeddingModel('text-embedding-3-small');
+                                        else if (p === 'gemini') setEmbeddingModel('gemini-embedding-001');
+                                    }}
                                     className="px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
                                 >
                                     <option value="openai">OpenAI</option>
                                     <option value="gemini">Gemini</option>
+                                    <option value="custom">自定义</option>
                                 </select>
                             </div>
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Embedding 模型</label>
+                                {provider === 'custom' ? (
+                                    <input
+                                        type="text"
+                                        value={embeddingModel}
+                                        onChange={e => setEmbeddingModel(e.target.value)}
+                                        placeholder="模型名称"
+                                        className="w-40 px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                                    />
+                                ) : (
+                                    <select
+                                        value={embeddingModel}
+                                        onChange={e => setEmbeddingModel(e.target.value)}
+                                        className="px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                                    >
+                                        {EMBEDDING_MODELS[provider].map(m => (
+                                            <option key={m.value} value={m.value}>{m.label}</option>
+                                        ))}
+                                    </select>
+                                )}
+                            </div>
                         </div>
+
+                        {/* 高级设置折叠 */}
+                        <button
+                            onClick={() => setShowAdvanced(!showAdvanced)}
+                            className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+                        >
+                            {showAdvanced ? '▼' : '▶'} 高级设置
+                        </button>
+
+                        {showAdvanced && (
+                            <div className="pt-2 border-t border-white/10">
+                                <label className="block text-xs text-slate-400 mb-1">Base URL (可选)</label>
+                                <input
+                                    type="text"
+                                    value={baseUrl}
+                                    onChange={e => setBaseUrl(e.target.value)}
+                                    placeholder={provider === 'openai' ? 'https://api.openai.com/v1' : provider === 'gemini' ? 'https://generativelanguage.googleapis.com' : '自定义 Embedding API 端点'}
+                                    className="w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-white text-sm"
+                                />
+                                <p className="text-xs text-slate-500 mt-1">留空使用默认端点，或填入自定义 API 代理地址</p>
+                            </div>
+                        )}
                     </div>
 
                     {activeTab === 'documents' && (
