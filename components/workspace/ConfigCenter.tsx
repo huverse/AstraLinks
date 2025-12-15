@@ -154,7 +154,8 @@ function ConfigForm({
         name: initialConfig?.name || '',
         provider: initialConfig?.provider || 'custom',
         model: initialConfig?.model || '',
-        apiKey: '',
+        // 编辑时如果有 API Key，显示遮罩版本
+        apiKey: initialConfig?.hasApiKey ? (initialConfig?.apiKey || '••••••••••••') : '',
         baseUrl: initialConfig?.baseUrl || '',
         temperature: initialConfig?.temperature ?? 0.7,
         maxTokens: initialConfig?.maxTokens ?? 4096,
