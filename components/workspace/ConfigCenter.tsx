@@ -8,7 +8,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Settings, Key, Plus, Trash2, Check, X, Eye, EyeOff,
-    Cpu, Cloud, Thermometer, Hash, RefreshCw, Save
+    Cpu, Cloud, Thermometer, Hash, RefreshCw, Save, Zap,
+    AlertCircle
 } from 'lucide-react';
 import { authFetch } from '../../utils/api';
 
@@ -33,6 +34,7 @@ interface AIConfig {
     baseUrl: string;
     temperature: number;
     maxTokens: number;
+    apiKey?: string;  // 遮罩版本的 API Key，用于显示
     hasApiKey: boolean;
     isActive: boolean;
 }
@@ -161,8 +163,61 @@ function ConfigForm({
         maxTokens: initialConfig?.maxTokens ?? 4096,
     });
     const [showApiKey, setShowApiKey] = useState(false);
+    const [testing, setTesting] = useState(false);
+    const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
     const selectedProvider = PROVIDERS.find(p => p.id === form.provider);
+
+    // 测试连接
+    const testConnection = async () => {
+        if (!form.apiKey || form.apiKey.startsWith('••••')) {
+            setTestResult({ success: false, message: '请输入新的 API Key 进行测试' });
+            return;
+        }
+
+        setTesting(true);
+        setTestResult(null);
+
+        try {
+            // 简单验证 API Key 格式
+            const baseUrl = form.baseUrl || getDefaultBaseUrl(form.provider);
+            const response = await fetch('/api/ai/test-connection', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('galaxyous_token')}`
+                },
+                body: JSON.stringify({
+                    provider: form.provider,
+                    model: form.model,
+                    apiKey: form.apiKey,
+                    baseUrl
+                })
+            });
+
+            if (response.ok) {
+                setTestResult({ success: true, message: '连接成功！' });
+            } else {
+                const data = await response.json();
+                setTestResult({ success: false, message: data.error || '连接失败' });
+            }
+        } catch (error) {
+            setTestResult({ success: false, message: '网络错误，请稍后重试' });
+        } finally {
+            setTesting(false);
+        }
+    };
+
+    // 获取默认 Base URL
+    const getDefaultBaseUrl = (provider: string) => {
+        switch (provider) {
+            case 'openai': return 'https://api.openai.com/v1';
+            case 'anthropic': return 'https://api.anthropic.com';
+            case 'google': return 'https://generativelanguage.googleapis.com';
+            case 'deepseek': return 'https://api.deepseek.com';
+            default: return '';
+        }
+    };
 
     return (
         <div className="p-4 bg-white/5 rounded-xl border border-white/10 space-y-4">
@@ -281,8 +336,27 @@ function ConfigForm({
                 </div>
             </div>
 
+            {/* 测试结果 */}
+            {testResult && (
+                <div className={`p-3 rounded-lg flex items-center gap-2 ${testResult.success
+                        ? 'bg-green-900/30 border border-green-500/30 text-green-400'
+                        : 'bg-red-900/30 border border-red-500/30 text-red-400'
+                    }`}>
+                    {testResult.success ? <Check size={16} /> : <AlertCircle size={16} />}
+                    <span className="text-sm">{testResult.message}</span>
+                </div>
+            )}
+
             {/* 按钮 */}
             <div className="flex gap-2 pt-2">
+                <button
+                    onClick={testConnection}
+                    disabled={testing}
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white rounded-lg transition-colors flex items-center gap-2"
+                >
+                    {testing ? <RefreshCw size={16} className="animate-spin" /> : <Zap size={16} />}
+                    测试
+                </button>
                 <button
                     onClick={() => onSave(form)}
                     className="flex-1 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg transition-colors flex items-center justify-center gap-2"

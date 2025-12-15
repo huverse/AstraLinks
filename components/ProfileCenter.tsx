@@ -347,13 +347,20 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                 <ChevronRight size={20} className="text-gray-400" />
                             </button>
                         </div>
+                        {/* MCP 服务中心 */}
+                        <div className="space-y-3">
+                            <h3 className="font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                <Zap size={18} className="text-purple-500" />
+                                MCP 服务中心
+                            </h3>
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                MCP (Model Context Protocol) 扩展 AI 的能力，启用后可在对话中使用
+                            </p>
 
-                        {/* MCP Link (Reserved for Ultra) */}
-                        {profile.user_tier === 'ultra' && (
-                            <div className="space-y-3">
-                                <h3 className="font-semibold text-gray-900 dark:text-white">MCP 热点服务</h3>
-                                <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
-                                    <div className="flex items-center gap-3 mb-3">
+                            {/* 热点趋势服务 */}
+                            <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
                                             <Zap size={20} className="text-amber-500" />
                                         </div>
@@ -362,35 +369,113 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                             <p className="text-xs text-gray-500">获取微博、知乎、B站等平台热搜</p>
                                         </div>
                                     </div>
-                                    <div className="flex flex-wrap gap-2 mb-3">
-                                        {['微博', '知乎', '百度', 'B站', '抖音', '头条', '掘金', 'GitHub'].map(p => (
-                                            <span key={p} className="px-2 py-1 text-xs bg-white/60 dark:bg-slate-700/60 rounded-full text-gray-600 dark:text-gray-300">
-                                                {p}
-                                            </span>
-                                        ))}
-                                    </div>
-                                    <p className="text-xs text-gray-500 mb-2">在对话中说"最近有什么新闻"，AI会自动获取热点</p>
-                                    <button
-                                        onClick={async () => {
-                                            try {
-                                                const res = await fetch(`${API_BASE}/api/mcp/platforms`);
-                                                if (res.ok) {
-                                                    const data = await res.json();
-                                                    alert(`✅ MCP服务正常\n\n支持 ${data.platforms.length} 个平台:\n${data.platforms.map((p: any) => `${p.icon} ${p.name}`).join('\n')}`);
-                                                } else {
-                                                    alert('❌ MCP服务连接失败');
-                                                }
-                                            } catch (e) {
-                                                alert('❌ 无法连接MCP服务');
+                                    <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded">已启用</span>
+                                </div>
+                                <div className="flex flex-wrap gap-1 mb-2">
+                                    {['微博', '知乎', '百度', 'B站', '抖音', '头条', '掘金', 'GitHub'].map(p => (
+                                        <span key={p} className="px-1.5 py-0.5 text-xs bg-white/60 dark:bg-slate-700/60 rounded text-gray-600 dark:text-gray-300">
+                                            {p}
+                                        </span>
+                                    ))}
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        try {
+                                            const res = await fetch(`${API_BASE}/api/mcp/platforms`);
+                                            if (res.ok) {
+                                                const data = await res.json();
+                                                alert(`✅ 热点服务正常\n\n支持 ${data.platforms.length} 个平台:\n${data.platforms.map((p: any) => `${p.icon} ${p.name}`).join('\n')}`);
+                                            } else {
+                                                alert('❌ 热点服务连接失败');
                                             }
-                                        }}
-                                        className="w-full py-2 text-sm font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 rounded-lg hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
-                                    >
-                                        测试连接
-                                    </button>
+                                        } catch (e) {
+                                            alert('❌ 无法连接热点服务');
+                                        }
+                                    }}
+                                    className="w-full py-1.5 text-xs font-medium text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/40 rounded hover:bg-amber-200 dark:hover:bg-amber-900/60 transition-colors"
+                                >
+                                    测试连接
+                                </button>
+                            </div>
+
+                            {/* Web Search */}
+                            <div className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-blue-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-900 dark:text-white">Web Search</p>
+                                            <p className="text-xs text-gray-500">搜索引擎工具 (Google/Bing/DuckDuckGo)</p>
+                                        </div>
+                                    </div>
+                                    <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded">已启用</span>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">在对话中说"帮我搜索..."，AI 会自动调用搜索</p>
+                            </div>
+
+                            {/* HTTP Client */}
+                            <div className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-purple-500/20 flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-purple-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M12 2L2 7l10 5 10-5-10-5z" /><path d="M2 17l10 5 10-5" /><path d="M2 12l10 5 10-5" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-900 dark:text-white">HTTP Client</p>
+                                            <p className="text-xs text-gray-500">发送 HTTP 请求，获取 API 数据</p>
+                                        </div>
+                                    </div>
+                                    <span className="px-2 py-1 text-xs bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300 rounded">已启用</span>
+                                </div>
+                                <p className="text-xs text-gray-500 dark:text-gray-400">支持 GET/POST/PUT/DELETE 请求</p>
+                            </div>
+
+                            {/* File System - 预留 */}
+                            <div className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600 opacity-60">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-green-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-900 dark:text-white">File System</p>
+                                            <p className="text-xs text-gray-500">沙箱文件读写操作</p>
+                                        </div>
+                                    </div>
+                                    <span className="px-2 py-1 text-xs bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-gray-400 rounded">即将推出</span>
                                 </div>
                             </div>
-                        )}
+
+                            {/* Code Executor - 预留 */}
+                            <div className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-lg border border-gray-200 dark:border-slate-600 opacity-60">
+                                <div className="flex items-center justify-between mb-2">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-cyan-500/20 flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-cyan-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                                                <polyline points="16 18 22 12 16 6" /><polyline points="8 6 2 12 8 18" />
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <p className="font-medium text-gray-900 dark:text-white">Code Executor</p>
+                                            <p className="text-xs text-gray-500">安全代码执行环境</p>
+                                        </div>
+                                    </div>
+                                    <span className="px-2 py-1 text-xs bg-gray-200 dark:bg-slate-600 text-gray-600 dark:text-gray-400 rounded">即将推出</span>
+                                </div>
+                            </div>
+
+                            <p className="text-xs text-gray-400 dark:text-gray-500 text-center pt-2">
+                                更多 MCP 服务正在开发中，敬请期待
+                            </p>
+                        </div>
 
                         {/* Split Invitation Codes */}
                         {splitEnabled && splitCodes && splitCodes.treeId && (
