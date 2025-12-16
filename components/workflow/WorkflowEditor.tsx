@@ -110,6 +110,7 @@ export function WorkflowEditor({
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const [showLogs, setShowLogs] = useState(false);
     const [mcpList, setMcpList] = useState<MCPRegistryEntry[]>([]);
+    const [showTemplates, setShowTemplates] = useState(false);
 
     // 加载 MCP 列表
     useEffect(() => {
@@ -324,6 +325,40 @@ export function WorkflowEditor({
                             <Save size={16} />
                             <span className="text-sm">保存</span>
                         </button>
+
+                        {/* 模板选择器 */}
+                        <div className="relative">
+                            <button
+                                onClick={() => setShowTemplates(!showTemplates)}
+                                disabled={execution.status === 'running'}
+                                className="flex items-center gap-2 px-3 py-2 bg-amber-600/80 text-white rounded-xl hover:bg-amber-500 transition-colors shadow-lg disabled:opacity-50 text-sm"
+                            >
+                                📝 模板
+                            </button>
+                            {showTemplates && (
+                                <div className="absolute right-0 top-12 bg-slate-800/95 backdrop-blur border border-slate-700 rounded-xl p-2 shadow-2xl w-56 z-50">
+                                    <div className="text-xs text-slate-400 px-2 py-1">快速加载模板</div>
+                                    {workflowTemplates.map(tpl => (
+                                        <button
+                                            key={tpl.id}
+                                            onClick={() => {
+                                                setNodes(tpl.nodes);
+                                                setEdges(tpl.edges);
+                                                setShowTemplates(false);
+                                                onChange?.(tpl.nodes, tpl.edges);
+                                            }}
+                                            className="w-full flex items-center gap-2 px-2 py-2 text-left text-sm text-white hover:bg-white/10 rounded-lg transition-colors"
+                                        >
+                                            <span>{tpl.icon}</span>
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-medium truncate">{tpl.name}</div>
+                                                <div className="text-[10px] text-slate-500 truncate">{tpl.description}</div>
+                                            </div>
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                         {execution.status === 'running' ? (
                             <button
                                 onClick={execution.cancel}

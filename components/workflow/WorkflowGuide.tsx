@@ -264,16 +264,14 @@ export function WorkflowGuide() {
 
     return (
         <>
-            {/* 帮助按钮 */}
+            {/* 帮助按钮 - 右下角小按钮 */}
             <button
                 onClick={() => setIsOpen(true)}
-                className="fixed bottom-4 left-4 z-50 p-3 bg-purple-600/90 hover:bg-purple-500 text-white rounded-full shadow-lg hover:shadow-xl transition-all group"
+                className="fixed bottom-20 right-4 z-40 p-2 bg-purple-600/70 hover:bg-purple-500 text-white rounded-lg shadow-md hover:shadow-lg transition-all text-xs flex items-center gap-1.5"
                 title="使用帮助"
             >
-                <HelpCircle size={20} />
-                <span className="absolute left-full ml-2 px-2 py-1 bg-slate-800 text-xs rounded whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                    使用帮助
-                </span>
+                <HelpCircle size={14} />
+                <span className="hidden sm:inline">帮助</span>
             </button>
 
             {/* 帮助面板 */}
