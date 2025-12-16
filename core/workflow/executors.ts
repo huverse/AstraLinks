@@ -499,14 +499,19 @@ const executeMCPNode: NodeExecutor = async (node, input, context) => {
 
     try {
         // 解析参数，支持 {{input}} 变量替换
-        let parsedParams = {};
+        let parsedParams: Record<string, any> = {};
         if (params) {
             let paramsStr = params;
             // 替换 {{input}} 为上一节点的输出
             if (typeof input === 'string') {
                 paramsStr = paramsStr.replace(/\{\{input\}\}/g, input);
             } else if (typeof input === 'object') {
+                // 对于对象类型，替换 {{input}} 为 JSON 字符串
                 paramsStr = paramsStr.replace(/\{\{input\}\}/g, JSON.stringify(input));
+                // 同时替换 {{input.xxx}} 格式
+                paramsStr = paramsStr.replace(/\{\{input\.(\w+)\}\}/g, (_, key) => {
+                    return (input as any)?.[key] || '';
+                });
             }
             try {
                 parsedParams = JSON.parse(paramsStr);
@@ -515,7 +520,22 @@ const executeMCPNode: NodeExecutor = async (node, input, context) => {
                     timestamp: Date.now(),
                     nodeId: node.id,
                     level: 'warn',
-                    message: `参数 JSON 解析失败，使用空参数`,
+                    message: `参数 JSON 解析失败，使用默认参数`,
+                });
+            }
+        }
+
+        // 如果是搜索相关工具且没有 query 参数，自动使用 input 作为 query
+        if (tool.includes('search') || tool === 'query') {
+            if (!parsedParams.query) {
+                parsedParams.query = typeof input === 'string'
+                    ? input
+                    : (input?.query || input?.text || input?.keyword || JSON.stringify(input));
+                context.logs.push({
+                    timestamp: Date.now(),
+                    nodeId: node.id,
+                    level: 'debug',
+                    message: `自动注入 query 参数: "${String(parsedParams.query).slice(0, 50)}..."`,
                 });
             }
         }
