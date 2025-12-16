@@ -30,6 +30,8 @@ import { nodeTypes, NodeType } from './nodes';
 import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
 import { mcpRegistry } from '../../core/mcp/registry';
 import { MCPRegistryEntry } from '../../core/mcp/types';
+import WorkflowGuide from './WorkflowGuide';
+import { workflowTemplates, WorkflowTemplate } from '../../core/workflow/templates';
 
 // ============================================
 // 节点工具栏配置
@@ -913,6 +915,9 @@ export function WorkflowEditor({
                     </Panel>
                 )}
             </ReactFlow>
+
+            {/* 帮助指南 */}
+            <WorkflowGuide />
         </div>
     );
 }

@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { Plug, Check, X, Clock, RefreshCw, Search, Trash2, Eye, AlertCircle } from 'lucide-react';
+import { Plug, Check, X, Clock, RefreshCw, Search, Trash2, Eye, AlertCircle, ShoppingCart, Download } from 'lucide-react';
 import { fetchAPI } from '../services/api';
 
 // ============================================
@@ -158,13 +158,15 @@ function MCPList({
 // ============================================
 
 export default function MCPRegistry() {
-    const [activeTab, setActiveTab] = useState<'builtin' | 'pending' | 'uploaded'>('builtin');
+    const [activeTab, setActiveTab] = useState<'builtin' | 'pending' | 'uploaded' | 'marketplace'>('builtin');
     const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(true);
 
     const [builtinMCPs, setBuiltinMCPs] = useState<MCPItem[]>([]);
     const [pendingMCPs, setPendingMCPs] = useState<MCPItem[]>([]);
     const [uploadedMCPs, setUploadedMCPs] = useState<MCPItem[]>([]);
+    const [marketplaceMCPs, setMarketplaceMCPs] = useState<any[]>([]);
+    const [marketplaceLoading, setMarketplaceLoading] = useState(false);
 
     const loadData = async () => {
         setLoading(true);
@@ -231,7 +233,23 @@ export default function MCPRegistry() {
         { id: 'builtin', label: '内置 MCP', count: builtinMCPs.length },
         { id: 'pending', label: '待审核', count: pendingMCPs.length },
         { id: 'uploaded', label: '用户上传', count: uploadedMCPs.length },
+        { id: 'marketplace', label: '🛏️ 市场', count: marketplaceMCPs.length },
     ];
+
+    // 加载市场数据
+    const loadMarketplace = async () => {
+        setMarketplaceLoading(true);
+        try {
+            const res = await fetchAPI(`/mcp-marketplace/search?q=${encodeURIComponent(searchQuery)}&pageSize=30`);
+            if (res.success && res.data) {
+                setMarketplaceMCPs(res.data);
+            }
+        } catch (error) {
+            console.error('Failed to load marketplace:', error);
+        } finally {
+            setMarketplaceLoading(false);
+        }
+    };
 
     // 过滤搜索
     const filterMCPs = (mcps: MCPItem[]) => {
@@ -306,6 +324,66 @@ export default function MCPRegistry() {
                         loading={loading}
                         onDelete={handleDelete}
                     />
+                )}
+                {activeTab === 'marketplace' && (
+                    <div>
+                        <div className="flex items-center justify-between mb-4">
+                            <p className="text-sm text-gray-500 dark:text-slate-400">
+                                <ShoppingCart size={14} className="inline mr-1" />
+                                从 Smithery.ai 市场浏览 MCP
+                            </p>
+                            <button
+                                onClick={loadMarketplace}
+                                className="flex items-center gap-2 px-3 py-1.5 bg-purple-500 text-white text-sm rounded-lg hover:bg-purple-600"
+                            >
+                                <RefreshCw size={14} className={marketplaceLoading ? 'animate-spin' : ''} />
+                                加载市场
+                            </button>
+                        </div>
+                        {marketplaceLoading ? (
+                            <div className="flex justify-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-2 border-purple-500 border-t-transparent" />
+                            </div>
+                        ) : marketplaceMCPs.length === 0 ? (
+                            <div className="text-center py-8 text-gray-500 dark:text-slate-400">
+                                点击 "加载市场" 按钮获取 MCP
+                            </div>
+                        ) : (
+                            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                                {marketplaceMCPs.map((mcp: any) => (
+                                    <div key={mcp.qualifiedName} className="p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
+                                        <div className="flex items-start gap-3">
+                                            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 rounded-lg">
+                                                <Plug size={18} className="text-purple-500" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <h3 className="font-semibold text-gray-900 dark:text-white truncate">
+                                                    {mcp.displayName}
+                                                </h3>
+                                                <p className="text-xs text-gray-500 dark:text-slate-400 line-clamp-2 mt-1">
+                                                    {mcp.description || '暂无描述'}
+                                                </p>
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center justify-between mt-3 pt-3 border-t border-gray-200 dark:border-slate-600">
+                                            <span className="text-xs text-gray-400">
+                                                {mcp.useCount?.toLocaleString() || 0} 次使用
+                                            </span>
+                                            <a
+                                                href={`https://smithery.ai/server/${mcp.qualifiedName}`}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="flex items-center gap-1 text-xs text-purple-500 hover:text-purple-600"
+                                            >
+                                                <Download size={12} />
+                                                查看详情
+                                            </a>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
         </div>

@@ -160,18 +160,78 @@ router.delete('/:id', async (req: Request, res: Response) => {
 router.post('/:id/call', async (req: Request, res: Response) => {
     try {
         const { tool, params } = req.body;
-        const startTime = Date.now();
+        const mcpId = req.params.id;
 
-        // 模拟执行
-        await new Promise(r => setTimeout(r, 200));
+        if (!tool) {
+            res.status(400).json({ success: false, error: 'Missing tool parameter' });
+            return;
+        }
 
-        res.json({
-            success: true,
-            result: `[Mock result for ${tool}]`,
-            metadata: { duration: Date.now() - startTime, timestamp: new Date().toISOString() },
-        });
+        // 导入服务端 MCP 执行器
+        const { mcpExecutor } = await import('../services/mcpExecutor');
+
+        // 检查是否为内置 MCP
+        const isBuiltin = mcpExecutor.isBuiltinMCP(mcpId);
+
+        if (isBuiltin) {
+            // 调用内置 MCP 执行器
+            const response = await mcpExecutor.call({
+                mcpId,
+                tool,
+                params: params || {},
+            });
+            res.json(response);
+            return;
+        }
+
+        // 非内置 MCP: 从数据库查询并执行
+        const [rows] = await pool.query('SELECT * FROM mcp_registry WHERE id = ? AND status != ?', [mcpId, 'deleted']);
+
+        if ((rows as any[]).length === 0) {
+            res.status(404).json({
+                success: false,
+                error: { code: 'MCP_NOT_FOUND', message: `MCP not found: ${mcpId}` }
+            });
+            return;
+        }
+
+        const mcpRow = (rows as any[])[0];
+        const connection = JSON.parse(mcpRow.connection || '{}');
+
+        // 根据连接类型执行
+        if (connection.type === 'http' && connection.url) {
+            const httpResponse = await fetch(connection.url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(connection.headers || {}),
+                },
+                body: JSON.stringify({ tool, params }),
+            });
+
+            if (!httpResponse.ok) {
+                throw new Error(`HTTP error: ${httpResponse.status}`);
+            }
+
+            const result = await httpResponse.json();
+            res.json({
+                success: true,
+                result,
+                metadata: { duration: 0, timestamp: new Date().toISOString() },
+            });
+        } else {
+            // 其他类型暂不支持
+            res.status(400).json({
+                success: false,
+                error: { code: 'UNSUPPORTED_CONNECTION', message: `Connection type "${connection.type}" not supported` }
+            });
+        }
     } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+        console.error('[MCP Registry] Call error:', error);
+        res.status(500).json({
+            success: false,
+            error: { code: 'EXECUTION_ERROR', message: error.message }
+        });
     }
 });
 
