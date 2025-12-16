@@ -8,9 +8,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     Search, Download, Check, Plug, ExternalLink,
-    ChevronRight, Star, RefreshCw, AlertCircle, X
+    ChevronRight, Star, RefreshCw, AlertCircle, X, Upload
 } from 'lucide-react';
 import { authFetch } from '../utils/api';
+import MCPUpload from './MCPUpload';
 
 // ============================================
 // 类型定义
@@ -213,6 +214,7 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
     const [loading, setLoading] = useState(true);
     const [installing, setInstalling] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [showUpload, setShowUpload] = useState(false);
 
     // 加载市场数据
     const loadMarket = useCallback(async () => {
@@ -327,8 +329,8 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
                     <button
                         onClick={() => setActiveTab('market')}
                         className={`px-4 py-2 text-sm rounded-lg transition-colors ${activeTab === 'market'
-                                ? 'bg-purple-500/20 text-purple-400'
-                                : 'text-slate-400 hover:text-white'
+                            ? 'bg-purple-500/20 text-purple-400'
+                            : 'text-slate-400 hover:text-white'
                             }`}
                     >
                         🛒 探索市场
@@ -336,11 +338,18 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
                     <button
                         onClick={() => setActiveTab('installed')}
                         className={`px-4 py-2 text-sm rounded-lg transition-colors ${activeTab === 'installed'
-                                ? 'bg-purple-500/20 text-purple-400'
-                                : 'text-slate-400 hover:text-white'
+                            ? 'bg-purple-500/20 text-purple-400'
+                            : 'text-slate-400 hover:text-white'
                             }`}
                     >
                         📦 我的 MCP ({installedMcps.length})
+                    </button>
+
+                    <button
+                        onClick={() => setShowUpload(true)}
+                        className="ml-auto px-4 py-2 text-sm rounded-lg bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 transition-colors flex items-center gap-1.5"
+                    >
+                        <Upload size={14} /> 上传自定义 MCP
                     </button>
                 </div>
             </div>
@@ -411,6 +420,14 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
             <div className="px-6 py-3 border-t border-white/10 text-xs text-slate-500 text-center">
                 数据来源: <a href="https://smithery.ai" target="_blank" rel="noopener noreferrer" className="text-purple-400 hover:underline">Smithery.ai</a>
             </div>
+
+            {/* 上传弹窗 */}
+            {showUpload && (
+                <MCPUpload
+                    onClose={() => setShowUpload(false)}
+                    onSuccess={() => loadInstalled()}
+                />
+            )}
         </div>
     );
 }
