@@ -8,10 +8,13 @@
 import React, { useState, useEffect } from 'react';
 import {
     X, Plug, FolderOpen, Code, Globe, Play, Loader2,
-    CheckCircle, XCircle, Copy, File, Folder, Terminal
+    CheckCircle, XCircle, Copy, File, Folder, Terminal,
+    ShoppingBag, Upload
 } from 'lucide-react';
 import { mcpRegistry, mcpExecutor } from '../../core/mcp/registry';
 import { MCPRegistryEntry } from '../../core/mcp/types';
+import MCPMarketplace from '../MCPMarketplace';
+import MCPUpload from '../MCPUpload';
 
 interface MCPPanelProps {
     workspaceId: string;
@@ -26,6 +29,8 @@ export default function MCPPanel({ workspaceId, onClose }: MCPPanelProps) {
     const [executing, setExecuting] = useState(false);
     const [result, setResult] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
+    const [showMarketplace, setShowMarketplace] = useState(false);
+    const [showUpload, setShowUpload] = useState(false);
 
     // 加载 MCP 列表
     useEffect(() => {
@@ -93,6 +98,14 @@ export default function MCPPanel({ workspaceId, onClose }: MCPPanelProps) {
         }
     };
 
+    // 显示市场或上传时的处理
+    if (showMarketplace) {
+        return <MCPMarketplace onClose={() => setShowMarketplace(false)} />;
+    }
+    if (showUpload) {
+        return <MCPUpload onClose={() => setShowUpload(false)} />;
+    }
+
     return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-hidden shadow-2xl border border-white/10 flex flex-col">
@@ -103,9 +116,25 @@ export default function MCPPanel({ workspaceId, onClose }: MCPPanelProps) {
                         MCP 工具调用
                         <span className="text-xs bg-purple-600/50 px-2 py-0.5 rounded">{mcps.length} 个可用</span>
                     </h2>
-                    <button onClick={onClose} className="text-slate-400 hover:text-white">
-                        <X size={20} />
-                    </button>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => setShowMarketplace(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-lg hover:from-emerald-700 hover:to-teal-700 transition-colors"
+                        >
+                            <ShoppingBag size={14} />
+                            市场
+                        </button>
+                        <button
+                            onClick={() => setShowUpload(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors"
+                        >
+                            <Upload size={14} />
+                            上传
+                        </button>
+                        <button onClick={onClose} className="text-slate-400 hover:text-white ml-2">
+                            <X size={20} />
+                        </button>
+                    </div>
                 </div>
 
                 {/* Content */}
