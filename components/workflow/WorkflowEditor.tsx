@@ -536,24 +536,117 @@ export function WorkflowEditor({
                                 {/* AI 节点配置 */}
                                 {selectedNode.type === 'ai' && (
                                     <>
+                                        {/* 配置来源选择 */}
                                         <div>
-                                            <label className="text-xs text-slate-400 block mb-1">模型</label>
-                                            <input
-                                                type="text"
-                                                value={selectedNode.data?.model || ''}
+                                            <label className="text-xs text-slate-400 block mb-1">配置来源</label>
+                                            <select
+                                                value={selectedNode.data?.configSource || 'manual'}
                                                 onChange={(e) => {
                                                     const updated = nodes.map(n =>
                                                         n.id === selectedNode.id
-                                                            ? { ...n, data: { ...n.data, model: e.target.value } }
+                                                            ? { ...n, data: { ...n.data, configSource: e.target.value } }
                                                             : n
                                                     );
                                                     setNodes(updated);
-                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, model: e.target.value } });
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, configSource: e.target.value } });
                                                 }}
-                                                placeholder="gpt-4o-mini"
                                                 className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
-                                            />
+                                            >
+                                                <option value="manual">手动配置</option>
+                                                <option value="workspace">使用工作区配置</option>
+                                            </select>
+                                            <p className="text-[10px] text-slate-500 mt-1">💡 选择"工作区配置"将使用AI配置中心的设置</p>
                                         </div>
+
+                                        {/* 手动配置 */}
+                                        {selectedNode.data?.configSource !== 'workspace' && (
+                                            <>
+                                                <div>
+                                                    <label className="text-xs text-slate-400 block mb-1">提供商</label>
+                                                    <select
+                                                        value={selectedNode.data?.provider || 'openai'}
+                                                        onChange={(e) => {
+                                                            const updated = nodes.map(n =>
+                                                                n.id === selectedNode.id
+                                                                    ? { ...n, data: { ...n.data, provider: e.target.value } }
+                                                                    : n
+                                                            );
+                                                            setNodes(updated);
+                                                            setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, provider: e.target.value } });
+                                                        }}
+                                                        className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                    >
+                                                        <option value="openai">OpenAI</option>
+                                                        <option value="google">Google</option>
+                                                        <option value="anthropic">Anthropic</option>
+                                                        <option value="deepseek">DeepSeek</option>
+                                                        <option value="custom">自定义</option>
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-slate-400 block mb-1">模型</label>
+                                                    <input
+                                                        type="text"
+                                                        value={selectedNode.data?.model || ''}
+                                                        onChange={(e) => {
+                                                            const updated = nodes.map(n =>
+                                                                n.id === selectedNode.id
+                                                                    ? { ...n, data: { ...n.data, model: e.target.value } }
+                                                                    : n
+                                                            );
+                                                            setNodes(updated);
+                                                            setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, model: e.target.value } });
+                                                        }}
+                                                        placeholder="gpt-4o-mini / gemini-2.5-flash"
+                                                        className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-slate-400 block mb-1">API Key</label>
+                                                    <input
+                                                        type="password"
+                                                        value={selectedNode.data?.apiKey || ''}
+                                                        onChange={(e) => {
+                                                            const updated = nodes.map(n =>
+                                                                n.id === selectedNode.id
+                                                                    ? { ...n, data: { ...n.data, apiKey: e.target.value } }
+                                                                    : n
+                                                            );
+                                                            setNodes(updated);
+                                                            setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, apiKey: e.target.value } });
+                                                        }}
+                                                        placeholder="sk-xxx..."
+                                                        className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-slate-400 block mb-1">Base URL (可选)</label>
+                                                    <input
+                                                        type="text"
+                                                        value={selectedNode.data?.baseUrl || ''}
+                                                        onChange={(e) => {
+                                                            const updated = nodes.map(n =>
+                                                                n.id === selectedNode.id
+                                                                    ? { ...n, data: { ...n.data, baseUrl: e.target.value } }
+                                                                    : n
+                                                            );
+                                                            setNodes(updated);
+                                                            setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, baseUrl: e.target.value } });
+                                                        }}
+                                                        placeholder="https://api.openai.com/v1"
+                                                        className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                    />
+                                                </div>
+                                            </>
+                                        )}
+
+                                        {/* 工作区配置提示 */}
+                                        {selectedNode.data?.configSource === 'workspace' && (
+                                            <div className="p-2 bg-purple-900/30 border border-purple-500/30 rounded-lg">
+                                                <p className="text-xs text-purple-300">将使用AI配置中心的当前配置 (模型、API Key等)</p>
+                                            </div>
+                                        )}
+
                                         <div>
                                             <label className="text-xs text-slate-400 block mb-1">系统提示词</label>
                                             <textarea

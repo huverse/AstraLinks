@@ -411,6 +411,61 @@ router.get('/:workspaceId/ai/:configId/key', async (req: Request, res: Response)
     }
 });
 
+/**
+ * 获取工作区当前活跃的 AI 配置 (包含解密的 API Key)
+ * GET /api/workspace-config/:workspaceId/ai/active
+ */
+router.get('/:workspaceId/ai/active', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { workspaceId } = req.params;
+
+        if (!await verifyOwnership(workspaceId, userId)) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            `SELECT model_configs FROM workspace_configs WHERE workspace_id = ?`,
+            [workspaceId]
+        );
+
+        if (rows.length === 0) {
+            res.json({ config: null });
+            return;
+        }
+
+        const configs = typeof rows[0].model_configs === 'string'
+            ? JSON.parse(rows[0].model_configs)
+            : rows[0].model_configs;
+
+        // 查找活跃配置
+        const activeConfig = configs.find((c: any) => c.isActive);
+
+        if (!activeConfig) {
+            res.json({ config: null });
+            return;
+        }
+
+        // 返回解密后的配置
+        res.json({
+            config: {
+                id: activeConfig.id,
+                name: activeConfig.name,
+                provider: activeConfig.provider,
+                model: activeConfig.model,
+                apiKey: decrypt(activeConfig.apiKey),
+                baseUrl: activeConfig.baseUrl,
+                temperature: activeConfig.temperature,
+                maxTokens: activeConfig.maxTokens,
+            }
+        });
+    } catch (error: any) {
+        console.error('[WorkspaceConfig] Get active config error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============================================
 // 执行历史
 // ============================================

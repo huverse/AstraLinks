@@ -92,13 +92,47 @@ export const executeEndNode: NodeExecutor = async (node, input, context) => {
 // ============================================
 
 export const executeAINode: NodeExecutor = async (node, input, context) => {
-    const { model, provider, systemPrompt, temperature, maxTokens, apiKey, baseUrl } = node.data;
+    let { model, provider, systemPrompt, temperature, maxTokens, apiKey, baseUrl, configSource } = node.data;
+    const workspaceId = context.variables.workspaceId;
+
+    // 如果使用工作区配置，从 API 获取当前活跃配置
+    if (configSource === 'workspace' && workspaceId) {
+        try {
+            const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+                ? 'https://astralinks.xyz'
+                : 'http://localhost:3001';
+
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : '';
+            const configResponse = await fetch(`${API_BASE}/api/workspace-config/${workspaceId}/ai/active`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+
+            if (configResponse.ok) {
+                const configData = await configResponse.json();
+                if (configData.config) {
+                    provider = configData.config.provider || provider;
+                    model = configData.config.model || model;
+                    apiKey = configData.config.apiKey || apiKey;
+                    baseUrl = configData.config.baseUrl || baseUrl;
+                    temperature = configData.config.temperature ?? temperature;
+                    maxTokens = configData.config.maxTokens ?? maxTokens;
+                }
+            }
+        } catch (e) {
+            // 忽略配置加载错误，使用节点本身的配置
+        }
+    }
+
+    // 验证 API Key
+    if (!apiKey) {
+        throw new Error('API Key is required. 请在节点配置中填写 API Key 或使用工作区配置。');
+    }
 
     context.logs.push({
         timestamp: Date.now(),
         nodeId: node.id,
         level: 'info',
-        message: `调用 AI 模型: ${provider || 'OpenAI'}/${model || 'gpt-4o-mini'}`,
+        message: `调用 AI 模型: ${provider || 'custom'}/${model || 'gpt-4o-mini'}`,
     });
 
     try {
