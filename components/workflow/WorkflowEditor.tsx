@@ -1107,6 +1107,257 @@ export function WorkflowEditor({
                                     </>
                                 )}
 
+                                {/* HTTP 节点配置 */}
+                                {selectedNode.type === 'http' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">请求方法</label>
+                                            <select
+                                                value={selectedNode.data?.method || 'GET'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, method: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, method: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="GET">GET</option>
+                                                <option value="POST">POST</option>
+                                                <option value="PUT">PUT</option>
+                                                <option value="DELETE">DELETE</option>
+                                                <option value="PATCH">PATCH</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">URL</label>
+                                            <input
+                                                type="text"
+                                                value={selectedNode.data?.url || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, url: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, url: e.target.value } });
+                                                }}
+                                                placeholder="https://api.example.com/data"
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            />
+                                            <p className="text-xs text-slate-500 mt-1">支持 {"{{input}}"} 变量</p>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">请求头 (JSON)</label>
+                                            <textarea
+                                                value={selectedNode.data?.headers || '{}'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, headers: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, headers: e.target.value } });
+                                                }}
+                                                placeholder='{"Authorization": "Bearer xxx"}'
+                                                className="w-full h-16 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white font-mono focus:outline-none focus:border-purple-500 resize-none"
+                                            />
+                                        </div>
+                                        {(selectedNode.data?.method !== 'GET' && selectedNode.data?.method !== 'HEAD') && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">请求体</label>
+                                                <textarea
+                                                    value={selectedNode.data?.body || ''}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, body: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, body: e.target.value } });
+                                                    }}
+                                                    placeholder='{"key": "value"} 或 {{input}}'
+                                                    className="w-full h-20 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white font-mono focus:outline-none focus:border-purple-500 resize-none"
+                                                />
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                {/* 数据转换节点配置 */}
+                                {selectedNode.type === 'transform' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">转换类型</label>
+                                            <select
+                                                value={selectedNode.data?.transformType || 'json'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, transformType: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, transformType: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="json">JSON 解析</option>
+                                                <option value="text">转为文本</option>
+                                                <option value="split">分割字符串</option>
+                                                <option value="merge">合并数组</option>
+                                                <option value="filter">过滤数组</option>
+                                                <option value="map">映射数组</option>
+                                            </select>
+                                        </div>
+                                        {(selectedNode.data?.transformType === 'split' || selectedNode.data?.transformType === 'merge') && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">分隔符</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedNode.data?.separator || '\n'}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, separator: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, separator: e.target.value } });
+                                                    }}
+                                                    placeholder="\n"
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                        )}
+                                        {(selectedNode.data?.transformType === 'filter' || selectedNode.data?.transformType === 'map') && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">表达式 (JS)</label>
+                                                <textarea
+                                                    value={selectedNode.data?.code || ''}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, code: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, code: e.target.value } });
+                                                    }}
+                                                    placeholder="item.length > 0"
+                                                    className="w-full h-16 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white font-mono focus:outline-none focus:border-purple-500 resize-none"
+                                                />
+                                                <p className="text-xs text-slate-500 mt-1">可用变量: item, index</p>
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
+                                {/* 循环节点配置 */}
+                                {selectedNode.type === 'loop' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">循环类型</label>
+                                            <select
+                                                value={selectedNode.data?.loopType || 'count'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, loopType: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, loopType: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="count">固定次数</option>
+                                                <option value="foreach">遍历数组</option>
+                                                <option value="while">条件循环</option>
+                                            </select>
+                                        </div>
+                                        {selectedNode.data?.loopType === 'count' && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">循环次数</label>
+                                                <input
+                                                    type="number"
+                                                    value={selectedNode.data?.loopCount || 3}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, loopCount: parseInt(e.target.value) } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, loopCount: parseInt(e.target.value) } });
+                                                    }}
+                                                    min={1}
+                                                    max={100}
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                        )}
+                                        <p className="text-xs text-amber-400 bg-amber-900/30 px-2 py-1 rounded">⚠️ 循环功能正在完善中</p>
+                                    </>
+                                )}
+
+                                {/* 并行节点配置 */}
+                                {selectedNode.type === 'parallel' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">并行分支数</label>
+                                            <input
+                                                type="number"
+                                                value={selectedNode.data?.branchCount || 2}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, branchCount: parseInt(e.target.value) } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, branchCount: parseInt(e.target.value) } });
+                                                }}
+                                                min={2}
+                                                max={10}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-amber-400 bg-amber-900/30 px-2 py-1 rounded">⚠️ 并行功能正在完善中</p>
+                                    </>
+                                )}
+
+                                {/* 子工作流节点配置 */}
+                                {selectedNode.type === 'subworkflow' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">子工作流 ID</label>
+                                            <input
+                                                type="text"
+                                                value={selectedNode.data?.subWorkflowId || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, subWorkflowId: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, subWorkflowId: e.target.value } });
+                                                }}
+                                                placeholder="workflow-uuid"
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-amber-400 bg-amber-900/30 px-2 py-1 rounded">⚠️ 子工作流功能正在完善中</p>
+                                    </>
+                                )}
+
                                 {/* 执行状态 */}
                                 {execution.nodeStates[selectedNode.id] && (
                                     <div className="pt-2 border-t border-slate-700">
