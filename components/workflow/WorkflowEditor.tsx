@@ -107,16 +107,50 @@ export function WorkflowEditor({
     onChange,
     onSave,
 }: WorkflowEditorProps) {
-    // workspaceId: 优先使用 prop，否则从 URL 解析或用 workflowId
-    const workspaceId = propWorkspaceId ||
-        (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('workspace') : null) ||
-        workflowId;
+    // workspaceId 状态：需要从 API 获取真实的工作区 ID
+    const [resolvedWorkspaceId, setResolvedWorkspaceId] = useState<string | null>(
+        propWorkspaceId ||
+        (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('workspace') : null)
+    );
+    const workspaceId = resolvedWorkspaceId || '';
+
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const [showLogs, setShowLogs] = useState(false);
     const [mcpList, setMcpList] = useState<MCPRegistryEntry[]>([]);
     const [showTemplates, setShowTemplates] = useState(false);
+
+    // 从 API 获取工作流的真实 workspaceId
+    useEffect(() => {
+        if (!propWorkspaceId && workflowId) {
+            const fetchWorkspaceId = async () => {
+                try {
+                    const token = typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : null;
+                    const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+                        ? 'https://astralinks.xyz'
+                        : 'http://localhost:3001';
+
+                    const response = await fetch(`${API_BASE}/api/workflow/${workflowId}`, {
+                        headers: {
+                            'Authorization': token ? `Bearer ${token}` : '',
+                        },
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        if (data.workspaceId) {
+                            console.log('[WorkflowEditor] Resolved workspaceId:', data.workspaceId);
+                            setResolvedWorkspaceId(data.workspaceId);
+                        }
+                    }
+                } catch (error) {
+                    console.error('[WorkflowEditor] Failed to fetch workspaceId:', error);
+                }
+            };
+            fetchWorkspaceId();
+        }
+    }, [workflowId, propWorkspaceId]);
 
     // 加载 MCP 列表
     useEffect(() => {
