@@ -92,6 +92,7 @@ const defaultEdges: Edge[] = [];
 
 interface WorkflowEditorProps {
     workflowId: string;
+    workspaceId?: string; // 工作区 ID，用于获取 AI 配置
     initialNodes?: Node[];
     initialEdges?: Edge[];
     onChange?: (nodes: Node[], edges: Edge[]) => void;
@@ -100,11 +101,16 @@ interface WorkflowEditorProps {
 
 export function WorkflowEditor({
     workflowId,
+    workspaceId: propWorkspaceId,
     initialNodes = defaultNodes,
     initialEdges = defaultEdges,
     onChange,
     onSave,
 }: WorkflowEditorProps) {
+    // workspaceId: 优先使用 prop，否则从 URL 解析或用 workflowId
+    const workspaceId = propWorkspaceId ||
+        (typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('workspace') : null) ||
+        workflowId;
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
@@ -121,8 +127,11 @@ export function WorkflowEditor({
         loadMcps();
     }, []);
 
-    // 执行引擎 Hook
-    const execution = useWorkflowExecution(workflowId, nodes, edges);
+    // 执行引擎 Hook - 传递 workspaceId 用于获取工作区 AI 配置
+    const execution = useWorkflowExecution(workflowId, nodes, edges, {
+        workspaceId,
+        authToken: typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') || '' : '',
+    });
 
     // 连接边回调
     const onConnect = useCallback(
