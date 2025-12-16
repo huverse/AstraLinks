@@ -415,11 +415,23 @@ const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:5173';
 // State store for CSRF protection (in production, use Redis)
 const stateStore = new Map<string, { expires: number; action: 'login' | 'bind'; userId?: number }>();
 
+// QQ Session store for new users completing registration
+interface QQSessionData {
+    openid: string;
+    qqNickname: string;
+    avatarUrl: string;
+    expires: number;
+}
+const qqSessionStore = new Map<string, QQSessionData>();
+
 // Cleanup expired states periodically
 setInterval(() => {
     const now = Date.now();
     for (const [key, value] of stateStore.entries()) {
         if (value.expires < now) stateStore.delete(key);
+    }
+    for (const [key, value] of qqSessionStore.entries()) {
+        if (value.expires < now) qqSessionStore.delete(key);
     }
 }, 60000);
 
@@ -571,40 +583,43 @@ router.get('/qq/callback', async (req: Request, res: Response) => {
             return;
         }
 
-        // Login or auto-register
+        // Login or redirect for new user registration
         const [existingUsers] = await pool.execute<RowDataPacket[]>(
             'SELECT id, username, email, is_admin, qq_nickname FROM users WHERE qq_openid = ?',
             [openid]
         );
 
-        let user;
         if (existingUsers.length > 0) {
-            // Existing user with QQ bound
-            user = existingUsers[0];
+            // Existing user with QQ bound - login directly
+            const user = existingUsers[0];
             // Update nickname/avatar if changed
             await pool.execute(
                 'UPDATE users SET qq_nickname = ?, avatar_url = ?, last_login = NOW() WHERE id = ?',
                 [qqNickname, avatarUrl, user.id]
             );
+
+            // Generate JWT
+            const token = generateToken({
+                id: user.id,
+                username: user.username,
+                isAdmin: user.is_admin || false
+            });
+
+            // Redirect to frontend with token
+            res.redirect(`${FRONTEND_URL}?token=${token}&qq_login=success`);
         } else {
-            // Auto-register new user
-            const username = `QQ_${openid.substring(0, 8)}`;
-            const [result] = await pool.execute<ResultSetHeader>(
-                `INSERT INTO users (username, qq_openid, qq_nickname, avatar_url) VALUES (?, ?, ?, ?)`,
-                [username, openid, qqNickname, avatarUrl]
-            );
-            user = { id: result.insertId, username, email: null, is_admin: false };
+            // New QQ user - create session and redirect to complete registration
+            const qqSession = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            qqSessionStore.set(qqSession, {
+                openid,
+                qqNickname,
+                avatarUrl,
+                expires: Date.now() + 30 * 60 * 1000 // 30 minutes
+            });
+
+            // Redirect to frontend complete-oauth page
+            res.redirect(`${FRONTEND_URL}/complete-oauth?qq_session=${qqSession}`);
         }
-
-        // Generate JWT
-        const token = generateToken({
-            id: user.id,
-            username: user.username,
-            isAdmin: user.is_admin || false
-        });
-
-        // Redirect to frontend with token
-        res.redirect(`${FRONTEND_URL}?token=${token}&qq_login=success`);
 
     } catch (error: any) {
         console.error('QQ callback error:', error);
@@ -677,6 +692,249 @@ router.get('/qq/status', authMiddleware, async (req: AuthenticatedRequest, res: 
     } catch (error) {
         console.error('QQ status error:', error);
         res.status(500).json({ error: '获取状态失败' });
+    }
+});
+
+/**
+ * GET /api/auth/qq/session
+ * Get QQ session info for completing registration
+ */
+router.get('/qq/session', async (req: Request, res: Response) => {
+    try {
+        const qqSession = req.query.session as string;
+
+        if (!qqSession) {
+            res.status(400).json({ error: '缺少 session 参数' });
+            return;
+        }
+
+        const sessionData = qqSessionStore.get(qqSession);
+        if (!sessionData || sessionData.expires < Date.now()) {
+            qqSessionStore.delete(qqSession);
+            res.status(400).json({ error: 'Session 已过期，请重新登录' });
+            return;
+        }
+
+        res.json({
+            qqNickname: sessionData.qqNickname,
+            avatarUrl: sessionData.avatarUrl
+        });
+    } catch (error) {
+        console.error('QQ session error:', error);
+        res.status(500).json({ error: '获取 session 失败' });
+    }
+});
+
+/**
+ * POST /api/auth/qq/complete
+ * Complete QQ OAuth registration - either bind to existing account or create new
+ */
+router.post('/qq/complete', async (req: Request, res: Response) => {
+    try {
+        const { qqSession, action, username, password, invitationCode } = req.body;
+
+        // Validate session
+        if (!qqSession) {
+            res.status(400).json({ error: '缺少 QQ session' });
+            return;
+        }
+
+        const sessionData = qqSessionStore.get(qqSession);
+        if (!sessionData || sessionData.expires < Date.now()) {
+            qqSessionStore.delete(qqSession);
+            res.status(400).json({ error: 'Session 已过期，请重新登录' });
+            return;
+        }
+
+        if (!username || !password) {
+            res.status(400).json({ error: '请输入用户名和密码' });
+            return;
+        }
+
+        if (password.length < 6) {
+            res.status(400).json({ error: '密码长度至少 6 个字符' });
+            return;
+        }
+
+        const { openid, qqNickname, avatarUrl } = sessionData;
+
+        if (action === 'bind') {
+            // Bind to existing account - verify username and password
+            const [users] = await pool.execute<RowDataPacket[]>(
+                'SELECT id, username, password_hash, is_admin, qq_openid FROM users WHERE username = ?',
+                [username]
+            );
+
+            if (users.length === 0) {
+                res.status(401).json({ error: '用户名或密码错误' });
+                return;
+            }
+
+            const user = users[0];
+
+            // Check if this account already has QQ bound
+            if (user.qq_openid) {
+                res.status(400).json({ error: '该账户已绑定其他 QQ' });
+                return;
+            }
+
+            // Verify password
+            if (!user.password_hash) {
+                res.status(400).json({ error: '该账户未设置密码，无法绑定' });
+                return;
+            }
+
+            const isValid = await verifyPassword(password, user.password_hash);
+            if (!isValid) {
+                res.status(401).json({ error: '用户名或密码错误' });
+                return;
+            }
+
+            // Bind QQ to this account
+            await pool.execute(
+                'UPDATE users SET qq_openid = ?, qq_nickname = ?, avatar_url = ?, last_login = NOW() WHERE id = ?',
+                [openid, qqNickname, avatarUrl, user.id]
+            );
+
+            // Clean up session
+            qqSessionStore.delete(qqSession);
+
+            // Generate token
+            const token = generateToken({
+                id: user.id,
+                username: user.username,
+                isAdmin: user.is_admin || false
+            });
+
+            res.json({
+                message: '绑定成功',
+                token,
+                user: { id: user.id, username: user.username, isAdmin: user.is_admin }
+            });
+
+        } else if (action === 'create') {
+            // Create new account - requires invitation code
+            if (!invitationCode) {
+                res.status(400).json({ error: '请输入邀请码' });
+                return;
+            }
+
+            if (username.length < 3 || username.length > 60) {
+                res.status(400).json({ error: '用户名长度应为 3-60 个字符' });
+                return;
+            }
+
+            // Check if username exists
+            const [existingUser] = await pool.execute<RowDataPacket[]>(
+                'SELECT id FROM users WHERE username = ?',
+                [username]
+            );
+
+            if (existingUser.length > 0) {
+                res.status(400).json({ error: '用户名已存在' });
+                return;
+            }
+
+            // Validate invitation code (check both normal and split codes)
+            let codeType: 'normal' | 'split' | null = null;
+            let codeData: any = null;
+            let splitTreeId: string | null = null;
+
+            const [normalCodes] = await pool.execute<RowDataPacket[]>(
+                'SELECT id, is_used FROM invitation_codes WHERE code = ?',
+                [invitationCode]
+            );
+
+            if (normalCodes.length > 0) {
+                codeData = normalCodes[0];
+                codeType = 'normal';
+                if (codeData.is_used) {
+                    res.status(400).json({ error: '该邀请码已被使用' });
+                    return;
+                }
+            }
+
+            if (!codeData) {
+                const [splitCodes] = await pool.execute<RowDataPacket[]>(
+                    `SELECT c.*, t.is_banned as tree_banned 
+                     FROM split_invitation_codes c
+                     JOIN split_invitation_trees t ON c.tree_id = t.id
+                     WHERE c.code = ?`,
+                    [invitationCode]
+                );
+
+                if (splitCodes.length > 0) {
+                    codeData = splitCodes[0];
+                    codeType = 'split';
+                    splitTreeId = codeData.tree_id;
+
+                    if (codeData.is_used) {
+                        res.status(400).json({ error: '该邀请码已被使用' });
+                        return;
+                    }
+                    if (codeData.tree_banned) {
+                        res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
+                        return;
+                    }
+                }
+            }
+
+            if (!codeData) {
+                res.status(400).json({ error: '邀请码无效' });
+                return;
+            }
+
+            // Hash password and create user
+            const passwordHash = await hashPassword(password);
+
+            let insertSql: string;
+            let insertParams: any[];
+
+            if (codeType === 'split') {
+                insertSql = `INSERT INTO users (username, password_hash, qq_openid, qq_nickname, avatar_url, split_code_used, split_tree_id)
+                             VALUES (?, ?, ?, ?, ?, ?, ?)`;
+                insertParams = [username, passwordHash, openid, qqNickname, avatarUrl, invitationCode, splitTreeId];
+            } else {
+                insertSql = `INSERT INTO users (username, password_hash, qq_openid, qq_nickname, avatar_url, invitation_code_used)
+                             VALUES (?, ?, ?, ?, ?, ?)`;
+                insertParams = [username, passwordHash, openid, qqNickname, avatarUrl, invitationCode];
+            }
+
+            const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
+            const userId = result.insertId;
+
+            // Mark invitation code as used
+            if (codeType === 'normal') {
+                await pool.execute(
+                    `UPDATE invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
+                    [userId, codeData.id]
+                );
+            } else {
+                await pool.execute(
+                    `UPDATE split_invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
+                    [userId, codeData.id]
+                );
+            }
+
+            // Clean up session
+            qqSessionStore.delete(qqSession);
+
+            // Generate token
+            const token = generateToken({ id: userId, username, isAdmin: false });
+
+            res.status(201).json({
+                message: '注册成功',
+                token,
+                user: { id: userId, username, isAdmin: false }
+            });
+
+        } else {
+            res.status(400).json({ error: '无效的 action，请使用 bind 或 create' });
+        }
+
+    } catch (error) {
+        console.error('QQ complete error:', error);
+        res.status(500).json({ error: '服务器错误' });
     }
 });
 
