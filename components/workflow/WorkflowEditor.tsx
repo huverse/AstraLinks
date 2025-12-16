@@ -187,10 +187,39 @@ export function WorkflowEditor({
         setSelectedNode(null);
     }, []);
 
-    // 保存
-    const handleSave = useCallback(() => {
-        onSave?.(nodes, edges);
-    }, [nodes, edges, onSave]);
+    // 保存 - 调用 API 保存工作流
+    const handleSave = useCallback(async () => {
+        try {
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : null;
+            const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+                ? 'https://astralinks.xyz'
+                : 'http://localhost:3001';
+
+            const response = await fetch(`${API_BASE}/api/workflow/${workflowId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': token ? `Bearer ${token}` : '',
+                },
+                body: JSON.stringify({
+                    nodes,
+                    edges,
+                    nodeCount: nodes.length,
+                }),
+            });
+
+            if (response.ok) {
+                onSave?.(nodes, edges);
+                alert('保存成功');
+            } else {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || `保存失败: ${response.status}`);
+            }
+        } catch (error: any) {
+            console.error('[WorkflowEditor] Save error:', error);
+            alert(`保存失败: ${error.message}`);
+        }
+    }, [nodes, edges, onSave, workflowId]);
 
     // 执行工作流 - 直接运行，不需要立即输入
     const [showInputPanel, setShowInputPanel] = useState(false);
