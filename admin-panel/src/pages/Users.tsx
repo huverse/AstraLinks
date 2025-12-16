@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminAPI } from '../services/api';
-import { Search, Ban, Trash2, ShieldOff, Crown, Star, Shield, ChevronDown } from 'lucide-react';
+import { Search, Ban, Trash2, ShieldOff, Crown, Star, Shield, ChevronDown, AlertTriangle } from 'lucide-react';
 
 interface TierModalProps {
     isOpen: boolean;
@@ -57,8 +57,8 @@ function TierModal({ isOpen, user, onClose, onSave }: TierModalProps) {
                                         key={tier.value}
                                         onClick={() => setNewTier(tier.value)}
                                         className={`flex flex-col items-center p-3 rounded-lg border-2 transition-all ${newTier === tier.value
-                                                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                                                : 'border-gray-200 dark:border-slate-600 hover:border-gray-300'
+                                            ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                                            : 'border-gray-200 dark:border-slate-600 hover:border-gray-300'
                                             }`}
                                     >
                                         <Icon className={tier.color} size={24} />
@@ -103,12 +103,144 @@ function TierModal({ isOpen, user, onClose, onSave }: TierModalProps) {
     );
 }
 
+// ==================== DeleteUserModal ====================
+interface DeleteModalProps {
+    isOpen: boolean;
+    user: any;
+    onClose: () => void;
+    onConfirm: (userId: number, reason: string, blacklistQQ: boolean, blacklistIP: boolean) => void;
+}
+
+function DeleteUserModal({ isOpen, user, onClose, onConfirm }: DeleteModalProps) {
+    const [reason, setReason] = useState('');
+    const [blacklistQQ, setBlacklistQQ] = useState(false);
+    const [blacklistIP, setBlacklistIP] = useState(false);
+    const [deleting, setDeleting] = useState(false);
+
+    if (!isOpen || !user) return null;
+
+    const handleConfirm = async () => {
+        if (!reason.trim() || reason.trim().length < 5) {
+            alert('请输入至少5个字符的删除理由');
+            return;
+        }
+        setDeleting(true);
+        await onConfirm(user.id, reason.trim(), blacklistQQ, blacklistIP);
+        setDeleting(false);
+        setReason('');
+        setBlacklistQQ(false);
+        setBlacklistIP(false);
+        onClose();
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={onClose}>
+            <div className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-md p-6 m-4" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center gap-3 mb-4">
+                    <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-lg">
+                        <AlertTriangle className="text-red-500" size={24} />
+                    </div>
+                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                        永久删除用户
+                    </h2>
+                </div>
+
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3 mb-4">
+                    <p className="text-sm text-red-700 dark:text-red-400">
+                        <strong>警告：</strong>此操作不可逆！用户 <span className="font-bold">{user.username}</span> 的所有数据将被永久删除，
+                        该用户登录时会看到删除原因。
+                    </p>
+                </div>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                            删除原因 <span className="text-red-500">*</span>
+                        </label>
+                        <textarea
+                            value={reason}
+                            onChange={e => setReason(e.target.value)}
+                            placeholder="请输入删除理由（用户会看到此信息）"
+                            className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-red-500 outline-none"
+                            rows={3}
+                        />
+                    </div>
+
+                    <div className="space-y-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                            额外措施（可选）
+                        </label>
+
+                        <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${blacklistQQ
+                            ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                            : 'border-gray-200 dark:border-slate-600 hover:border-gray-300'
+                            } ${!user.qq_openid ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                            <input
+                                type="checkbox"
+                                checked={blacklistQQ}
+                                onChange={e => setBlacklistQQ(e.target.checked)}
+                                disabled={!user.qq_openid}
+                                className="w-4 h-4 text-red-500"
+                            />
+                            <div>
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                    拉黑 QQ 号
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                    {user.qq_openid ? '该 QQ 将无法再次注册或登录' : '该用户未绑定 QQ'}
+                                </p>
+                            </div>
+                        </label>
+
+                        <label className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all ${blacklistIP
+                            ? 'border-red-500 bg-red-50 dark:bg-red-900/20'
+                            : 'border-gray-200 dark:border-slate-600 hover:border-gray-300'
+                            }`}>
+                            <input
+                                type="checkbox"
+                                checked={blacklistIP}
+                                onChange={e => setBlacklistIP(e.target.checked)}
+                                className="w-4 h-4 text-red-500"
+                            />
+                            <div>
+                                <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                    拉黑 IP 地址
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                    该用户最后使用的 IP 将被封禁
+                                </p>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg"
+                    >
+                        取消
+                    </button>
+                    <button
+                        onClick={handleConfirm}
+                        disabled={deleting || reason.trim().length < 5}
+                        className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 disabled:opacity-50"
+                    >
+                        {deleting ? '删除中...' : '确认删除'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 export default function Users() {
     const [users, setUsers] = useState<any[]>([]);
     const [search, setSearch] = useState('');
     const [page, _setPage] = useState(1);
     const [loading, setLoading] = useState(true);
     const [tierModalUser, setTierModalUser] = useState<any>(null);
+    const [deleteModalUser, setDeleteModalUser] = useState<any>(null);
 
     const loadUsers = () => {
         setLoading(true);
@@ -140,11 +272,9 @@ export default function Users() {
         }
     };
 
-    const handleDelete = async (userId: number, username: string) => {
-        if (!confirm(`确定删除用户 ${username}？此操作不可逆！`)) return;
-
+    const handleDelete = async (userId: number, reason: string, blacklistQQ: boolean, blacklistIP: boolean) => {
         try {
-            await adminAPI.deleteUser(userId);
+            await adminAPI.deleteUser(userId, { reason, blacklistQQ, blacklistIP });
             alert('删除成功');
             loadUsers();
         } catch (err: any) {
@@ -284,7 +414,7 @@ export default function Users() {
                                                 <Ban size={16} />
                                             </button>
                                             <button
-                                                onClick={() => handleDelete(user.id, user.username)}
+                                                onClick={() => setDeleteModalUser(user)}
                                                 className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
                                                 title="删除"
                                             >
@@ -305,6 +435,14 @@ export default function Users() {
                 user={tierModalUser}
                 onClose={() => setTierModalUser(null)}
                 onSave={handleChangeTier}
+            />
+
+            {/* Delete User Modal */}
+            <DeleteUserModal
+                isOpen={!!deleteModalUser}
+                user={deleteModalUser}
+                onClose={() => setDeleteModalUser(null)}
+                onConfirm={handleDelete}
             />
         </div>
     );

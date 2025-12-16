@@ -183,7 +183,50 @@ router.post('/login', async (req: Request, res: Response) => {
         );
 
         if (rows.length === 0) {
+            // Check if this username was deleted
+            const [deletedUsers] = await pool.execute<RowDataPacket[]>(
+                'SELECT reason, additional_measures, created_at FROM deleted_users WHERE username = ? ORDER BY created_at DESC LIMIT 1',
+                [username]
+            );
+
+            if (deletedUsers.length > 0) {
+                const deleted = deletedUsers[0];
+                const measures = JSON.parse(deleted.additional_measures || '{}');
+                let measuresText = '';
+                if (measures.blacklist_qq) measuresText += 'QQ 号已被拉入黑名单';
+                if (measures.blacklist_ip) {
+                    measuresText += measuresText ? '，IP 地址已被拉入黑名单' : 'IP 地址已被拉入黑名单';
+                }
+
+                res.status(403).json({
+                    error: '账户已被永久删除',
+                    accountDeleted: true,
+                    reason: deleted.reason,
+                    measures: measuresText || '无额外措施',
+                    deletedAt: deleted.created_at
+                });
+                return;
+            }
+
             res.status(401).json({ error: '用户名或密码错误' });
+            return;
+        }
+
+        // Check IP blacklist
+        const clientIP = req.ip || req.socket.remoteAddress || '';
+        const normalizedIP = clientIP.startsWith('::ffff:') ? clientIP.substring(7) : clientIP;
+
+        const [ipBlacklist] = await pool.execute<RowDataPacket[]>(
+            'SELECT reason FROM blacklist WHERE type = "ip" AND value = ? AND is_active = TRUE',
+            [normalizedIP]
+        );
+
+        if (ipBlacklist.length > 0) {
+            res.status(403).json({
+                error: 'IP 地址已被封禁',
+                ipBlocked: true,
+                reason: ipBlacklist[0].reason
+            });
             return;
         }
 
@@ -584,6 +627,19 @@ router.get('/qq/callback', async (req: Request, res: Response) => {
         }
 
         // Login or redirect for new user registration
+
+        // Check if this QQ is blacklisted
+        const [qqBlacklist] = await pool.execute<RowDataPacket[]>(
+            'SELECT reason FROM blacklist WHERE type = "qq" AND value = ? AND is_active = TRUE',
+            [openid]
+        );
+
+        if (qqBlacklist.length > 0) {
+            const reason = encodeURIComponent(qqBlacklist[0].reason);
+            res.redirect(`${FRONTEND_URL}?error=qq_blacklisted&reason=${reason}`);
+            return;
+        }
+
         const [existingUsers] = await pool.execute<RowDataPacket[]>(
             'SELECT id, username, email, is_admin, qq_nickname FROM users WHERE qq_openid = ?',
             [openid]

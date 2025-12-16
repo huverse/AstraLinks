@@ -60,8 +60,8 @@ export const adminAPI = {
     getUser: (id: number) => fetchAPI(`/api/admin/users/${id}`),
     updateUser: (id: number, data: any) =>
         fetchAPI(`/api/admin/users/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
-    deleteUser: (id: number) =>
-        fetchAPI(`/api/admin/users/${id}`, { method: 'DELETE' }),
+    deleteUser: (id: number, options?: { reason: string; blacklistQQ?: boolean; blacklistIP?: boolean }) =>
+        fetchAPI(`/api/admin/users/${id}`, { method: 'DELETE', body: JSON.stringify(options || {}) }),
     changeUserTier: (id: number, new_tier: string, reason: string) =>
         fetchAPI(`/api/admin/users/${id}/tier`, { method: 'PUT', body: JSON.stringify({ new_tier, reason }) }),
     getUserTierHistory: (id: number) => fetchAPI(`/api/admin/users/${id}/tier-history`),

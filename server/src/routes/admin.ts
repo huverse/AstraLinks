@@ -336,54 +336,123 @@ router.get('/users/:id/tier-history', async (req: Request, res: Response) => {
 
 /**
  * DELETE /api/admin/users/:id
- * Delete user (with undo support)
+ * Delete user with reason and optional blacklist measures
  */
 router.delete('/users/:id', async (req: Request, res: Response) => {
     try {
         const { id } = req.params;
+        const { reason, blacklistQQ, blacklistIP } = req.body;
         const adminId = (req as any).user.id;
-        const undoWindow = 60; // 60 seconds to undo
 
         if (parseInt(id) === adminId) {
-            res.status(400).json({ error: 'Cannot delete your own account' });
+            res.status(400).json({ error: '无法删除自己的账户' });
             return;
         }
 
-        // Get user data before deletion for potential restore
+        if (!reason || reason.trim().length < 5) {
+            res.status(400).json({ error: '请提供删除原因（至少5个字符）' });
+            return;
+        }
+
+        // Get user data before deletion
         const [users] = await pool.execute<RowDataPacket[]>(
             'SELECT * FROM users WHERE id = ?',
             [id]
         );
 
         if (users.length === 0) {
-            res.status(404).json({ error: 'User not found' });
+            res.status(404).json({ error: '用户不存在' });
             return;
         }
 
         const userData = users[0];
 
-        // Delete the user
-        await pool.execute('DELETE FROM users WHERE id = ?', [id]);
+        // Get user's last known IP from device_fingerprint or admin_logs
+        let userIP: string | null = null;
+        if (blacklistIP) {
+            const [logs] = await pool.execute<RowDataPacket[]>(
+                'SELECT ip_address FROM admin_logs WHERE target_id = ? AND target_type = "user" ORDER BY created_at DESC LIMIT 1',
+                [id]
+            );
+            if (logs.length > 0) {
+                userIP = logs[0].ip_address;
+            }
+        }
 
-        // Create pending operation for undo
-        const undoExpiry = new Date();
-        undoExpiry.setSeconds(undoExpiry.getSeconds() + undoWindow);
+        // Start transaction
+        const connection = await pool.getConnection();
+        try {
+            await connection.beginTransaction();
 
-        await pool.execute(
-            `INSERT INTO pending_operations (admin_id, operation_type, target_type, target_id, target_data, expires_at)
-             VALUES (?, 'DELETE_USER', 'user', ?, ?, ?)`,
-            [adminId, parseInt(id), JSON.stringify(userData), undoExpiry]
-        );
+            // Insert into deleted_users
+            const additionalMeasures = {
+                blacklist_qq: !!blacklistQQ && !!userData.qq_openid,
+                blacklist_ip: !!blacklistIP && !!userIP,
+            };
 
-        await logAdminAction(adminId, 'DELETE_USER', 'user', parseInt(id), { username: userData.username }, getClientIP(req));
+            const [deleteResult] = await connection.execute<ResultSetHeader>(
+                `INSERT INTO deleted_users (user_id, username, email, qq_openid, reason, deleted_by_admin_id, additional_measures, original_user_data)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [
+                    userData.id,
+                    userData.username,
+                    userData.email,
+                    userData.qq_openid,
+                    reason.trim(),
+                    adminId,
+                    JSON.stringify(additionalMeasures),
+                    JSON.stringify(userData)
+                ]
+            );
 
-        res.json({
-            message: 'User deleted successfully',
-            undoAvailableFor: undoWindow + ' seconds'
-        });
+            const deletedUserId = deleteResult.insertId;
+
+            // Add to blacklist if requested
+            if (blacklistQQ && userData.qq_openid) {
+                await connection.execute(
+                    `INSERT INTO blacklist (type, value, reason, related_deleted_user_id, created_by_admin_id)
+                     VALUES ('qq', ?, ?, ?, ?)
+                     ON DUPLICATE KEY UPDATE reason = VALUES(reason), is_active = TRUE`,
+                    [userData.qq_openid, `用户 ${userData.username} 被删除: ${reason.trim()}`, deletedUserId, adminId]
+                );
+            }
+
+            if (blacklistIP && userIP) {
+                await connection.execute(
+                    `INSERT INTO blacklist (type, value, reason, related_deleted_user_id, created_by_admin_id)
+                     VALUES ('ip', ?, ?, ?, ?)
+                     ON DUPLICATE KEY UPDATE reason = VALUES(reason), is_active = TRUE`,
+                    [userIP, `用户 ${userData.username} 被删除: ${reason.trim()}`, deletedUserId, adminId]
+                );
+            }
+
+            // Delete the user
+            await connection.execute('DELETE FROM users WHERE id = ?', [id]);
+
+            await connection.commit();
+
+            // Log admin action
+            await logAdminAction(adminId, 'DELETE_USER_PERMANENT', 'user', parseInt(id), {
+                username: userData.username,
+                reason: reason.trim(),
+                blacklist_qq: additionalMeasures.blacklist_qq,
+                blacklist_ip: additionalMeasures.blacklist_ip,
+            }, getClientIP(req));
+
+            res.json({
+                message: `用户 ${userData.username} 已永久删除`,
+                deletedUserId,
+                measures: additionalMeasures
+            });
+        } catch (txError) {
+            await connection.rollback();
+            throw txError;
+        } finally {
+            connection.release();
+        }
     } catch (error: any) {
         console.error('Delete user error:', error);
-        res.status(500).json({ error: 'Failed to delete user' });
+        res.status(500).json({ error: '删除用户失败' });
     }
 });
 

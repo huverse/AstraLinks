@@ -58,11 +58,11 @@ export async function initWorkflowQueue(): Promise<boolean> {
         );
 
         // 事件监听
-        worker.on('completed', (job) => {
+        worker.on('completed', (job: Job) => {
             console.log(`[WorkflowQueue] Job ${job.id} completed`);
         });
 
-        worker.on('failed', (job, err) => {
+        worker.on('failed', (job: Job | undefined, err: Error) => {
             console.error(`[WorkflowQueue] Job ${job?.id} failed:`, err.message);
         });
 
