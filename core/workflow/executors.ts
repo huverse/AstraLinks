@@ -153,38 +153,93 @@ export const executeAINode: NodeExecutor = async (node, input, context) => {
             ? 'https://astralinks.xyz'
             : 'http://localhost:3001';
 
-        const response = await fetch(`${API_BASE}/api/proxy/openai`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                apiKey: apiKey || '',
-                baseUrl: baseUrl || '',
-                model: model || 'gpt-4o-mini',
-                messages,
-                temperature: temperature ?? 0.7,
-                maxTokens: maxTokens ?? 2048,
-            }),
-        });
+        let responseContent = '';
+        let estimatedTokens = { promptTokens: 0, completionTokens: 0, totalTokens: 0 };
 
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({ error: 'Request failed' }));
-            throw new Error(error.error || `API Error: ${response.status}`);
+        // 根据 provider 选择正确的代理端点和请求格式
+        const providerLower = (provider || '').toLowerCase();
+
+        if (providerLower === 'google' || providerLower === 'gemini' || model?.includes('gemini')) {
+            // Google/Gemini API 使用不同格式
+            const contents = messages.map(msg => ({
+                role: msg.role === 'system' ? 'user' : msg.role,
+                parts: [{ text: msg.content }]
+            }));
+
+            // 提取 system instruction
+            const systemContent = messages.find(m => m.role === 'system')?.content;
+            const userContents = contents.filter(c => c.role !== 'user' || !systemContent);
+
+            const response = await fetch(`${API_BASE}/api/proxy/gemini`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    apiKey: apiKey || '',
+                    baseUrl: baseUrl || '',
+                    model: model || 'gemini-2.5-flash',
+                    contents: [{ role: 'user', parts: [{ text: userMessage }] }],
+                    config: {
+                        systemInstruction: systemPrompt,
+                        temperature: temperature ?? 0.7,
+                        maxOutputTokens: maxTokens ?? 2048,
+                    },
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ error: 'Request failed' }));
+                throw new Error(error.error || error.details?.error?.message || `Gemini API Error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            responseContent = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+            // Gemini token usage
+            const usage = data.usageMetadata;
+            estimatedTokens = usage ? {
+                promptTokens: usage.promptTokenCount || 0,
+                completionTokens: usage.candidatesTokenCount || 0,
+                totalTokens: usage.totalTokenCount || 0,
+            } : {
+                promptTokens: Math.ceil(userMessage.length / 4),
+                completionTokens: Math.ceil(responseContent.length / 4),
+                totalTokens: Math.ceil((userMessage.length + responseContent.length) / 4),
+            };
+        } else {
+            // OpenAI-compatible API (OpenAI, Anthropic via compatible, DeepSeek, Custom)
+            const response = await fetch(`${API_BASE}/api/proxy/openai`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    apiKey: apiKey || '',
+                    baseUrl: baseUrl || '',
+                    model: model || 'gpt-4o-mini',
+                    messages,
+                    temperature: temperature ?? 0.7,
+                    maxTokens: maxTokens ?? 2048,
+                }),
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ error: 'Request failed' }));
+                throw new Error(error.error || `API Error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            responseContent = data.choices?.[0]?.message?.content || '';
+
+            // OpenAI token usage
+            const actualUsage = data.usage;
+            estimatedTokens = actualUsage ? {
+                promptTokens: actualUsage.prompt_tokens || 0,
+                completionTokens: actualUsage.completion_tokens || 0,
+                totalTokens: actualUsage.total_tokens || 0,
+            } : {
+                promptTokens: Math.ceil(userMessage.length / 4),
+                completionTokens: Math.ceil(responseContent.length / 4),
+                totalTokens: Math.ceil((userMessage.length + responseContent.length) / 4),
+            };
         }
-
-        const data = await response.json();
-        const responseContent = data.choices?.[0]?.message?.content || '';
-
-        // 使用实际 token 或估算
-        const actualUsage = data.usage;
-        const estimatedTokens = actualUsage ? {
-            promptTokens: actualUsage.prompt_tokens || 0,
-            completionTokens: actualUsage.completion_tokens || 0,
-            totalTokens: actualUsage.total_tokens || 0,
-        } : {
-            promptTokens: Math.ceil(userMessage.length / 4),
-            completionTokens: Math.ceil(responseContent.length / 4),
-            totalTokens: Math.ceil((userMessage.length + responseContent.length) / 4),
-        };
 
         // 记录 token 使用
         context.nodeStates[node.id].tokenUsage = estimatedTokens;
