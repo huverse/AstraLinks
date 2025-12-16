@@ -245,6 +245,15 @@ export function WorkflowEditor({
 
     return (
         <div className="h-full w-full bg-slate-950 relative">
+            {/* Override ReactFlow default node styles */}
+            <style>{`
+                .react-flow__node {
+                    background: transparent !important;
+                    border: none !important;
+                    box-shadow: none !important;
+                    padding: 0 !important;
+                }
+            `}</style>
             <ReactFlow
                 nodes={nodes}
                 edges={edges}
