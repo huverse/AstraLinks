@@ -629,6 +629,235 @@ const executeMCPNode: NodeExecutor = async (node, input, context) => {
 };
 
 // ============================================
+// HTTP 请求节点执行器
+// ============================================
+
+const executeHttpNode: NodeExecutor = async (node, input, context) => {
+    const { url, method = 'GET', headers = {}, body } = node.data;
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `执行 HTTP 请求: ${method} ${url}`,
+    });
+
+    if (!url) {
+        throw new Error('HTTP 节点需要配置 URL');
+    }
+
+    try {
+        // 替换 URL 中的变量
+        let targetUrl = url;
+        if (typeof input === 'string') {
+            targetUrl = url.replace(/\{\{input\}\}/g, encodeURIComponent(input));
+        }
+
+        const fetchOptions: RequestInit = {
+            method,
+            headers: {
+                'Content-Type': 'application/json',
+                ...headers,
+            },
+        };
+
+        if (method !== 'GET' && method !== 'HEAD') {
+            fetchOptions.body = body
+                ? (typeof body === 'string' ? body.replace(/\{\{input\}\}/g, JSON.stringify(input)) : JSON.stringify(body))
+                : JSON.stringify(input);
+        }
+
+        const response = await fetch(targetUrl, fetchOptions);
+        const contentType = response.headers.get('content-type');
+        const result = contentType?.includes('application/json')
+            ? await response.json()
+            : await response.text();
+
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'info',
+            message: `HTTP 请求完成: ${response.status}`,
+        });
+
+        return result;
+    } catch (error: any) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'error',
+            message: `HTTP 请求失败: ${error.message}`,
+        });
+        throw error;
+    }
+};
+
+// ============================================
+// 变量节点执行器
+// ============================================
+
+const executeVariableNode: NodeExecutor = async (node, input, context) => {
+    const { variableName, operation = 'get', value } = node.data;
+
+    if (!variableName) {
+        throw new Error('变量节点需要配置变量名');
+    }
+
+    if (operation === 'set') {
+        // 设置变量
+        const newValue = value ?? input;
+        context.variables[variableName] = newValue;
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'info',
+            message: `设置变量 ${variableName}`,
+        });
+        return newValue;
+    } else {
+        // 获取变量
+        const storedValue = context.variables[variableName];
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'info',
+            message: `读取变量 ${variableName}`,
+        });
+        return storedValue ?? input;
+    }
+};
+
+// ============================================
+// 数据转换节点执行器
+// ============================================
+
+const executeTransformNode: NodeExecutor = async (node, input, context) => {
+    const { transformType = 'json', template, code } = node.data;
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `执行数据转换: ${transformType}`,
+    });
+
+    try {
+        switch (transformType) {
+            case 'json':
+                // JSON 解析
+                return typeof input === 'string' ? JSON.parse(input) : input;
+            case 'text':
+                // 转为文本
+                return typeof input === 'string' ? input : JSON.stringify(input, null, 2);
+            case 'split':
+                // 分割字符串
+                if (typeof input === 'string') {
+                    return input.split(node.data.separator || '\n');
+                }
+                return input;
+            case 'merge':
+                // 合并数组
+                if (Array.isArray(input)) {
+                    return input.join(node.data.separator || '\n');
+                }
+                return input;
+            case 'filter':
+                // 过滤数组
+                if (Array.isArray(input) && code) {
+                    const filterFn = new Function('item', 'index', `return ${code}`);
+                    return input.filter((item, index) => filterFn(item, index));
+                }
+                return input;
+            case 'map':
+                // 映射数组
+                if (Array.isArray(input) && code) {
+                    const mapFn = new Function('item', 'index', `return ${code}`);
+                    return input.map((item, index) => mapFn(item, index));
+                }
+                return input;
+            default:
+                return input;
+        }
+    } catch (error: any) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'error',
+            message: `数据转换失败: ${error.message}`,
+        });
+        throw error;
+    }
+};
+
+// ============================================
+// 延迟节点执行器
+// ============================================
+
+const executeDelayNode: NodeExecutor = async (node, input, context) => {
+    const { delay = 1000, unit = 'ms' } = node.data;
+
+    let delayMs = delay;
+    if (unit === 's') delayMs = delay * 1000;
+    if (unit === 'm') delayMs = delay * 60000;
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `等待 ${delay}${unit === 'ms' ? '毫秒' : unit === 's' ? '秒' : '分钟'}`,
+    });
+
+    await new Promise(resolve => setTimeout(resolve, delayMs));
+
+    return input;
+};
+
+// ============================================
+// 循环节点执行器 (暂时透传)
+// ============================================
+
+const executeLoopNode: NodeExecutor = async (node, input, context) => {
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: '循环节点 (待完善)',
+    });
+    // 循环逻辑需要更复杂的执行引擎支持
+    return input;
+};
+
+// ============================================
+// 并行节点执行器 (暂时透传)
+// ============================================
+
+const executeParallelNode: NodeExecutor = async (node, input, context) => {
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: '并行节点 (待完善)',
+    });
+    // 并行逻辑需要更复杂的执行引擎支持
+    return input;
+};
+
+// ============================================
+// 子工作流节点执行器 (暂时透传)
+// ============================================
+
+const executeSubWorkflowNode: NodeExecutor = async (node, input, context) => {
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: '子工作流节点 (待完善)',
+    });
+    // 子工作流需要递归执行引擎
+    return input;
+};
+
+// ============================================
 // 执行器映射
 // ============================================
 
@@ -643,5 +872,13 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
     trigger: executeTriggerNode,
     knowledge: executeKnowledgeNode,
     mcp: executeMCPNode,
+    // 新增执行器
+    http: executeHttpNode,
+    variable: executeVariableNode,
+    transform: executeTransformNode,
+    delay: executeDelayNode,
+    loop: executeLoopNode,
+    parallel: executeParallelNode,
+    subworkflow: executeSubWorkflowNode,
 };
 
