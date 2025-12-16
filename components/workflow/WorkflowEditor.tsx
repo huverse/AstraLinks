@@ -131,7 +131,7 @@ export function WorkflowEditor({
                         ? 'https://astralinks.xyz'
                         : 'http://localhost:3001';
 
-                    const response = await fetch(`${API_BASE}/api/workflow/${workflowId}`, {
+                    const response = await fetch(`${API_BASE}/api/workflows/${workflowId}`, {
                         headers: {
                             'Authorization': token ? `Bearer ${token}` : '',
                         },
@@ -229,7 +229,7 @@ export function WorkflowEditor({
                 ? 'https://astralinks.xyz'
                 : 'http://localhost:3001';
 
-            const response = await fetch(`${API_BASE}/api/workflow/${workflowId}`, {
+            const response = await fetch(`${API_BASE}/api/workflows/${workflowId}`, {
                 method: 'PUT',
                 headers: {
                     'Content-Type': 'application/json',
