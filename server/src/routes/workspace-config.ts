@@ -735,19 +735,32 @@ router.post('/test-connection', async (req: Request, res: Response): Promise<voi
         let finalApiKey = apiKey;
 
         // 如果提供了 configId 但没有 apiKey，从数据库获取存储的 Key
+        // API Key 存储在 workspace_configs.model_configs JSON 字段中
         if (!apiKey && configId) {
             console.log('[test-connection] Looking up configId:', configId);
+
+            // 从 workspace_configs 表的 model_configs JSON 字段中查找
             const [rows] = await pool.execute(
-                'SELECT api_key FROM workspace_ai_configs WHERE id = ?',
-                [configId]
+                'SELECT model_configs FROM workspace_configs',
+                []
             );
-            const configs = rows as any[];
-            console.log('[test-connection] Found configs:', configs.length);
-            if (configs.length > 0 && configs[0].api_key) {
-                // 解密存储的 API Key
-                finalApiKey = decrypt(configs[0].api_key);
-                console.log('[test-connection] Decrypted API Key length:', finalApiKey?.length || 0);
-            } else {
+            const allConfigs = rows as any[];
+
+            // 遍历所有工作区配置，找到匹配的 configId
+            for (const row of allConfigs) {
+                const modelConfigs = row.model_configs
+                    ? (typeof row.model_configs === 'string' ? JSON.parse(row.model_configs) : row.model_configs)
+                    : [];
+
+                const foundConfig = modelConfigs.find((c: any) => c.id === configId);
+                if (foundConfig && foundConfig.apiKey) {
+                    finalApiKey = decrypt(foundConfig.apiKey);
+                    console.log('[test-connection] Found API Key for configId:', configId, 'length:', finalApiKey?.length || 0);
+                    break;
+                }
+            }
+
+            if (!finalApiKey) {
                 console.log('[test-connection] No API Key found in database for configId:', configId);
             }
         }
