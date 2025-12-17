@@ -551,6 +551,7 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                     {selectedWorkflowId ? (
                         <WorkflowEditor
                             workflowId={selectedWorkflowId}
+                            workspaceId={workspaceId}
                             onSave={handleSaveWorkflow}
                         />
                     ) : (
