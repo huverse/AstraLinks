@@ -14,7 +14,9 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParse = require('pdf-parse');
+const pdfParseModule = require('pdf-parse');
+// Handle both default export and direct export
+const pdfParse = pdfParseModule.default || pdfParseModule;
 
 const router = Router();
 router.use(authMiddleware);
