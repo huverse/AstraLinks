@@ -14,9 +14,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const pdfParseModule = require('pdf-parse');
-// Handle both default export and direct export
-const pdfParse = pdfParseModule.default || pdfParseModule;
+let pdfParse: any;
+try {
+    const pdfParseModule = require('pdf-parse');
+    console.log('[Knowledge] pdf-parse module type:', typeof pdfParseModule);
+    console.log('[Knowledge] pdf-parse module keys:', Object.keys(pdfParseModule || {}));
+    // Try different export patterns
+    pdfParse = typeof pdfParseModule === 'function'
+        ? pdfParseModule
+        : (pdfParseModule.default || pdfParseModule);
+    console.log('[Knowledge] pdfParse type:', typeof pdfParse);
+} catch (e: any) {
+    console.error('[Knowledge] Failed to load pdf-parse:', e.message);
+}
 
 const router = Router();
 router.use(authMiddleware);
