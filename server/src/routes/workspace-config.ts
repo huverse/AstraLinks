@@ -331,6 +331,9 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
             : [];
         console.log('[WorkspaceConfig] POST /ai step 4 - existing configs count:', existingConfigs.length);
 
+        // 新配置自动设为活跃，取消其他配置的活跃状态
+        const updatedExistingConfigs = existingConfigs.map((c: any) => ({ ...c, isActive: false }));
+
         const newConfig = {
             id: uuidv4(),
             name: name || `${provider} - ${model}`,
@@ -340,11 +343,11 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
             baseUrl: baseUrl || '',
             temperature: temperature ?? 0.7,
             maxTokens: maxTokens ?? 4096,
-            isActive: existingConfigs.length === 0, // 第一个配置默认激活
+            isActive: true, // 新配置始终设为活跃
             createdAt: Date.now(),
         };
 
-        existingConfigs.push(newConfig);
+        updatedExistingConfigs.push(newConfig);
         console.log('[WorkspaceConfig] POST /ai step 5 - new config created:', newConfig.id);
 
         // 检查记录是否存在，然后 INSERT 或 UPDATE
@@ -357,13 +360,13 @@ router.post('/:workspaceId/ai', async (req: Request, res: Response): Promise<voi
             console.log('[WorkspaceConfig] POST /ai step 6a - INSERT new record');
             await pool.execute(
                 `INSERT INTO workspace_configs (id, workspace_id, model_configs) VALUES (?, ?, ?)`,
-                [uuidv4(), workspaceId, JSON.stringify(existingConfigs)]
+                [uuidv4(), workspaceId, JSON.stringify(updatedExistingConfigs)]
             );
         } else {
             console.log('[WorkspaceConfig] POST /ai step 6b - UPDATE existing record');
             await pool.execute(
                 `UPDATE workspace_configs SET model_configs = ? WHERE workspace_id = ?`,
-                [JSON.stringify(existingConfigs), workspaceId]
+                [JSON.stringify(updatedExistingConfigs), workspaceId]
             );
         }
 
