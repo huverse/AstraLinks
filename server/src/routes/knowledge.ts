@@ -465,6 +465,8 @@ router.post('/:workspaceId/query', async (req: Request, res: Response): Promise<
         results.sort((a, b) => b.score - a.score);
         const topResults = results.slice(0, topK);
 
+        console.log(`[Knowledge] Query completed: ${topResults.length} results from ${store.chunks.length} chunks (threshold: ${threshold})`);
+
         // 构建上下文
         const context = topResults.map((r, i) =>
             `[参考资料 ${i + 1}] (相似度: ${(r.score * 100).toFixed(1)}%)\n${r.chunk.content}`
