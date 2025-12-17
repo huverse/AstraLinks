@@ -81,7 +81,7 @@ export async function searchServers(
             headers['Authorization'] = `Bearer ${SMITHERY_API_KEY}`;
         }
 
-        const response = await axios.get(`${SMITHERY_API_BASE}/servers?${params}`, { headers });
+        const response = await axios.get(`${SMITHERY_API_BASE}/servers?${params}`, { headers, timeout: 5000 });
 
         // 适配 Smithery API 响应格式
         const data = response.data;
@@ -98,14 +98,71 @@ export async function searchServers(
     } catch (error: any) {
         console.error('[Smithery] Search error:', error.message);
 
-        // 降级: 返回空结果
+        // 降级: 返回内置 MCP 工具作为后备
+        const builtinMcps: SmitheryServer[] = [
+            {
+                qualifiedName: 'builtin/web-search',
+                displayName: 'Web Search',
+                description: '网页搜索工具，支持 Google/Bing/DuckDuckGo',
+                useCount: 1000,
+                isDeployed: true,
+                isVerified: true,
+                tools: [
+                    { name: 'search', description: '搜索网页' },
+                ],
+            },
+            {
+                qualifiedName: 'builtin/file-system',
+                displayName: 'File System',
+                description: '文件系统操作 (沙箱内)',
+                useCount: 800,
+                isDeployed: true,
+                isVerified: true,
+                tools: [
+                    { name: 'read', description: '读取文件' },
+                    { name: 'write', description: '写入文件' },
+                    { name: 'list', description: '列出目录' },
+                ],
+            },
+            {
+                qualifiedName: 'builtin/code-executor',
+                displayName: 'Code Executor',
+                description: '安全代码执行 (JavaScript/Python)',
+                useCount: 600,
+                isDeployed: true,
+                isVerified: true,
+                tools: [
+                    { name: 'execute', description: '执行代码' },
+                ],
+            },
+            {
+                qualifiedName: 'builtin/http-client',
+                displayName: 'HTTP Client',
+                description: 'HTTP 请求工具',
+                useCount: 500,
+                isDeployed: true,
+                isVerified: true,
+                tools: [
+                    { name: 'request', description: '发送 HTTP 请求' },
+                ],
+            },
+        ];
+
+        // 过滤搜索
+        const filtered = query
+            ? builtinMcps.filter(m =>
+                m.displayName.toLowerCase().includes(query.toLowerCase()) ||
+                m.description?.toLowerCase().includes(query.toLowerCase())
+            )
+            : builtinMcps;
+
         return {
-            servers: [],
+            servers: filtered,
             pagination: {
                 currentPage: page,
                 pageSize: pageSize,
-                totalPages: 0,
-                totalCount: 0,
+                totalPages: 1,
+                totalCount: filtered.length,
             },
         };
     }

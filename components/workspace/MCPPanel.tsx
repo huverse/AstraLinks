@@ -55,7 +55,31 @@ export default function MCPPanel({ workspaceId, onClose }: MCPPanelProps) {
     // 获取工具参数描述
     const getToolParams = (mcp: MCPRegistryEntry, toolName: string) => {
         const tool = mcp.tools.find(t => t.name === toolName) as any;
-        return tool?.inputSchema?.properties || {};
+        if (!tool) return {};
+
+        // 支持两种格式：
+        // 1. inputSchema.properties (标准 JSON Schema 格式)
+        // 2. parameters 数组 (BUILTIN_MCPS 格式)
+        if (tool.inputSchema?.properties) {
+            return tool.inputSchema.properties;
+        }
+
+        if (tool.parameters && Array.isArray(tool.parameters)) {
+            // 将 parameters 数组转换为 properties 对象格式
+            const props: Record<string, any> = {};
+            for (const param of tool.parameters) {
+                props[param.name] = {
+                    type: param.type || 'string',
+                    description: param.description || param.name,
+                    required: param.required,
+                    enum: param.enum,
+                    default: param.default,
+                };
+            }
+            return props;
+        }
+
+        return {};
     };
 
     // 执行工具
