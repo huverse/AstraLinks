@@ -1488,6 +1488,114 @@ export function WorkflowEditor({
                                     </>
                                 )}
 
+                                {/* 输入节点配置 */}
+                                {selectedNode.type === 'input' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">输入类型</label>
+                                            <select
+                                                value={selectedNode.data?.inputType || 'text'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, inputType: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, inputType: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="text">文本</option>
+                                                <option value="number">数字</option>
+                                                <option value="json">JSON</option>
+                                                <option value="file">文件</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">提示文本</label>
+                                            <input
+                                                type="text"
+                                                value={selectedNode.data?.placeholder || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, placeholder: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, placeholder: e.target.value } });
+                                                }}
+                                                placeholder="请输入..."
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">默认值</label>
+                                            <input
+                                                type="text"
+                                                value={selectedNode.data?.defaultValue || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, defaultValue: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, defaultValue: e.target.value } });
+                                                }}
+                                                placeholder="可选默认值"
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* 输出节点配置 */}
+                                {selectedNode.type === 'output' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">输出格式</label>
+                                            <select
+                                                value={selectedNode.data?.outputFormat || 'text'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, outputFormat: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, outputFormat: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="text">纯文本</option>
+                                                <option value="json">JSON</option>
+                                                <option value="markdown">Markdown</option>
+                                                <option value="html">HTML</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">输出标题</label>
+                                            <input
+                                                type="text"
+                                                value={selectedNode.data?.outputTitle || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, outputTitle: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, outputTitle: e.target.value } });
+                                                }}
+                                                placeholder="结果"
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
                                 {/* 执行状态 */}
                                 {execution.nodeStates[selectedNode.id] && (
                                     <div className="pt-2 border-t border-slate-700">
