@@ -13,14 +13,13 @@ import { authMiddleware } from '../middleware/auth';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// pdf-parse v2.x uses class-based API
+// pdf-parse v1.x uses function-based API
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const { PDFParse } = require('pdf-parse');
+const pdfParse = require('pdf-parse');
 
-// Helper function to parse PDF buffer using pdf-parse v2.x API
+// Helper function to parse PDF buffer
 async function parsePdfBuffer(buffer: Buffer): Promise<{ text: string; numpages: number }> {
-    const parser = new PDFParse();
-    const result = await parser.loadBuffer(buffer);
+    const result = await pdfParse(buffer);
     return {
         text: result.text || '',
         numpages: result.numpages || 0
