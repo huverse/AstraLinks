@@ -80,7 +80,21 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
         const savedBaseUrl = localStorage.getItem('rag_base_url');
         if (saved) setApiKey(saved);
         if (savedProvider) setProvider(savedProvider);
-        if (savedModel) setEmbeddingModel(savedModel);
+        // 确保 embeddingModel 与 provider 匹配
+        if (savedModel && savedProvider) {
+            // 验证模型与 provider 匹配
+            if (savedProvider === 'gemini' && !savedModel.includes('gemini')) {
+                // Provider 是 Gemini 但模型不是 Gemini，重置
+                setEmbeddingModel('gemini-embedding-001');
+            } else if (savedProvider === 'openai' && !savedModel.includes('embedding-3')) {
+                // Provider 是 OpenAI 但模型不是 OpenAI，重置
+                setEmbeddingModel('text-embedding-3-small');
+            } else {
+                setEmbeddingModel(savedModel);
+            }
+        } else if (savedProvider === 'gemini') {
+            setEmbeddingModel('gemini-embedding-001');
+        }
         if (savedBaseUrl) setBaseUrl(savedBaseUrl);
     }, []);
 
