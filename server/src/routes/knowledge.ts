@@ -13,19 +13,18 @@ import { authMiddleware } from '../middleware/auth';
 import * as fs from 'fs';
 import * as path from 'path';
 
+// pdf-parse v2.x uses class-based API
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-let pdfParse: any;
-try {
-    const pdfParseModule = require('pdf-parse');
-    console.log('[Knowledge] pdf-parse module type:', typeof pdfParseModule);
-    console.log('[Knowledge] pdf-parse module keys:', Object.keys(pdfParseModule || {}));
-    // Try different export patterns
-    pdfParse = typeof pdfParseModule === 'function'
-        ? pdfParseModule
-        : (pdfParseModule.default || pdfParseModule);
-    console.log('[Knowledge] pdfParse type:', typeof pdfParse);
-} catch (e: any) {
-    console.error('[Knowledge] Failed to load pdf-parse:', e.message);
+const { PDFParse } = require('pdf-parse');
+
+// Helper function to parse PDF buffer using pdf-parse v2.x API
+async function parsePdfBuffer(buffer: Buffer): Promise<{ text: string; numpages: number }> {
+    const parser = new PDFParse();
+    const result = await parser.loadBuffer(buffer);
+    return {
+        text: result.text || '',
+        numpages: result.numpages || 0
+    };
 }
 
 const router = Router();
@@ -357,7 +356,7 @@ router.post('/:workspaceId/documents/pdf', async (req: Request, res: Response): 
 
         let pdfText: string;
         try {
-            const pdfData = await pdfParse(buffer);
+            const pdfData = await parsePdfBuffer(buffer);
             pdfText = pdfData.text;
             console.log(`[Knowledge] PDF parsed: ${pdfData.numpages} pages, ${pdfText.length} chars`);
         } catch (pdfError: any) {
