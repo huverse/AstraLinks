@@ -443,6 +443,9 @@ router.post('/:workspaceId/query', async (req: Request, res: Response): Promise<
             return;
         }
 
+        // Debug logging
+        console.log('[Knowledge] Query params:', { provider, embeddingModel, hasApiKey: !!apiKey });
+
         // 获取查询向量
         const queryEmbedding = await getEmbedding(query, apiKey, provider, embeddingModel);
 
