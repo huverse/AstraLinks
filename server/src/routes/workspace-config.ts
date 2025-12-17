@@ -139,6 +139,67 @@ router.get('/:workspaceId/ai', async (req: Request, res: Response): Promise<void
 });
 
 /**
+ * 获取工作区活跃 AI 配置 (用于工作流执行)
+ * GET /api/workspace-config/:workspaceId/ai/active
+ * 返回解密后的 API Key，仅供内部使用
+ */
+router.get('/:workspaceId/ai/active', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { workspaceId } = req.params;
+
+        console.log('[WorkspaceConfig] GET /ai/active request:', { workspaceId, userId });
+
+        if (!await verifyOwnership(workspaceId, userId)) {
+            console.log('[WorkspaceConfig] GET /ai/active ownership denied');
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            `SELECT model_configs FROM workspace_configs WHERE workspace_id = ?`,
+            [workspaceId]
+        );
+
+        if (rows.length === 0) {
+            console.log('[WorkspaceConfig] GET /ai/active no configs found');
+            res.json({ config: null });
+            return;
+        }
+
+        const modelConfigs = typeof rows[0].model_configs === 'string'
+            ? JSON.parse(rows[0].model_configs)
+            : rows[0].model_configs;
+
+        // 找到活跃的配置
+        const activeConfig = (modelConfigs || []).find((c: any) => c.isActive);
+
+        if (!activeConfig) {
+            console.log('[WorkspaceConfig] GET /ai/active no active config');
+            res.json({ config: null });
+            return;
+        }
+
+        // 返回解密后的 API Key (用于工作流执行)
+        const configWithDecryptedKey = {
+            ...activeConfig,
+            apiKey: activeConfig.apiKey ? decrypt(activeConfig.apiKey) : '',
+        };
+
+        console.log('[WorkspaceConfig] GET /ai/active returning config:', {
+            provider: configWithDecryptedKey.provider,
+            model: configWithDecryptedKey.model,
+            hasApiKey: !!configWithDecryptedKey.apiKey,
+        });
+
+        res.json({ config: configWithDecryptedKey });
+    } catch (error: any) {
+        console.error('[WorkspaceConfig] GET /ai/active ERROR:', error.message, error.stack);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
  * 保存工作区 AI 配置
  * PUT /api/workspace-config/:workspaceId/ai
  */
