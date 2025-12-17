@@ -147,24 +147,32 @@ function chunkText(text: string, documentId: string, workspaceId: string, chunkS
 // Embedding 调用
 // ============================================
 
-async function getEmbedding(text: string, apiKey: string, provider: string = 'openai'): Promise<number[]> {
+async function getEmbedding(text: string, apiKey: string, provider: string = 'openai', model?: string): Promise<number[]> {
     if (provider === 'gemini') {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${apiKey}`;
+        // Default to gemini-embedding-001 if no model specified
+        const embeddingModel = model || 'gemini-embedding-001';
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${embeddingModel}:embedContent?key=${apiKey}`;
+        console.log('[Knowledge] Calling Gemini embedding:', embeddingModel);
         const response = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                model: 'models/text-embedding-004',
                 content: { parts: [{ text }] }
             }),
         });
-        if (!response.ok) throw new Error('Gemini embedding failed');
+        if (!response.ok) {
+            const errorData = await response.json() as any;
+            console.error('[Knowledge] Gemini embedding error:', errorData);
+            throw new Error(`Gemini embedding failed: ${errorData.error?.message || response.statusText}`);
+        }
         const data = await response.json() as any;
         return data.embedding.values;
     }
 
     // OpenAI
+    const embeddingModel = model || 'text-embedding-3-small';
     const url = 'https://api.openai.com/v1/embeddings';
+    console.log('[Knowledge] Calling OpenAI embedding:', embeddingModel);
     const response = await fetch(url, {
         method: 'POST',
         headers: {
@@ -172,11 +180,15 @@ async function getEmbedding(text: string, apiKey: string, provider: string = 'op
             'Authorization': `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-            model: 'text-embedding-3-small',
+            model: embeddingModel,
             input: text,
         }),
     });
-    if (!response.ok) throw new Error('OpenAI embedding failed');
+    if (!response.ok) {
+        const errorData = await response.json() as any;
+        console.error('[Knowledge] OpenAI embedding error:', errorData);
+        throw new Error(`OpenAI embedding failed: ${errorData.error?.message || response.statusText}`);
+    }
     const data = await response.json() as any;
     return data.data[0].embedding;
 }
@@ -241,7 +253,7 @@ router.post('/:workspaceId/documents', async (req: Request, res: Response): Prom
     try {
         const { workspaceId } = req.params;
         const userId = (req as any).user?.id;
-        const { name, content, type = 'txt', apiKey, provider = 'openai' } = req.body;
+        const { name, content, type = 'txt', apiKey, provider = 'openai', embeddingModel } = req.body;
 
         if (!await verifyOwnership(workspaceId, userId)) {
             res.status(403).json({ error: '无权访问' });
@@ -260,7 +272,7 @@ router.post('/:workspaceId/documents', async (req: Request, res: Response): Prom
         console.log(`[Knowledge] Processing ${chunks.length} chunks...`);
         for (const chunk of chunks) {
             try {
-                chunk.embedding = await getEmbedding(chunk.content, apiKey, provider);
+                chunk.embedding = await getEmbedding(chunk.content, apiKey, provider, embeddingModel);
             } catch (e: any) {
                 console.error(`[Knowledge] Embedding error for chunk ${chunk.index}:`, e.message);
             }
@@ -337,7 +349,7 @@ router.post('/:workspaceId/documents/pdf', async (req: Request, res: Response): 
     try {
         const { workspaceId } = req.params;
         const userId = (req as any).user?.id;
-        const { name, fileBase64, apiKey, provider = 'openai' } = req.body;
+        const { name, fileBase64, apiKey, provider = 'openai', embeddingModel } = req.body;
 
         if (!await verifyOwnership(workspaceId, userId)) {
             res.status(403).json({ error: '无权访问' });
@@ -376,7 +388,7 @@ router.post('/:workspaceId/documents/pdf', async (req: Request, res: Response): 
         console.log(`[Knowledge] Processing ${chunks.length} chunks from PDF...`);
         for (const chunk of chunks) {
             try {
-                chunk.embedding = await getEmbedding(chunk.content, apiKey, provider);
+                chunk.embedding = await getEmbedding(chunk.content, apiKey, provider, embeddingModel);
             } catch (e: any) {
                 console.error(`[Knowledge] Embedding error for chunk ${chunk.index}:`, e.message);
             }
@@ -419,7 +431,7 @@ router.post('/:workspaceId/query', async (req: Request, res: Response): Promise<
     try {
         const { workspaceId } = req.params;
         const userId = (req as any).user?.id;
-        const { query, apiKey, provider = 'openai', topK = 5, threshold = 0.7 } = req.body;
+        const { query, apiKey, provider = 'openai', embeddingModel, topK = 5, threshold = 0.7 } = req.body;
 
         if (!await verifyOwnership(workspaceId, userId)) {
             res.status(403).json({ error: '无权访问' });
@@ -432,7 +444,7 @@ router.post('/:workspaceId/query', async (req: Request, res: Response): Promise<
         }
 
         // 获取查询向量
-        const queryEmbedding = await getEmbedding(query, apiKey, provider);
+        const queryEmbedding = await getEmbedding(query, apiKey, provider, embeddingModel);
 
         // 搜索相似块
         const store = getVectorStore(workspaceId);

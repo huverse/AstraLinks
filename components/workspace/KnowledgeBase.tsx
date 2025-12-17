@@ -137,6 +137,7 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                     type: 'txt',
                     apiKey,
                     provider,
+                    embeddingModel,
                 }),
             });
 
@@ -196,6 +197,7 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                     query: queryText,
                     apiKey,
                     provider,
+                    embeddingModel,
                     topK: 5,
                     threshold: 0.6,
                 }),
@@ -389,6 +391,7 @@ export default function KnowledgeBasePanel({ workspaceId, onClose }: KnowledgeBa
                                                             fileBase64: base64,
                                                             apiKey,
                                                             provider,
+                                                            embeddingModel,
                                                         }),
                                                     });
 
