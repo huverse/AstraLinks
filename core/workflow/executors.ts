@@ -95,20 +95,38 @@ export const executeAINode: NodeExecutor = async (node, input, context) => {
     let { model, provider, systemPrompt, temperature, maxTokens, apiKey, baseUrl, configSource } = node.data;
     const workspaceId = context.variables.workspaceId;
 
+    console.log('[AI Node] Starting execution:', { configSource, workspaceId: workspaceId || '(empty)', hasNodeApiKey: !!apiKey });
+
     // 如果使用工作区配置，从 API 获取当前活跃配置
-    if (configSource === 'workspace' && workspaceId) {
+    if (configSource === 'workspace') {
+        if (!workspaceId) {
+            console.error('[AI Node] configSource is workspace but workspaceId is empty!');
+            throw new Error('工作区配置错误：无法获取工作区 ID。请刷新页面后重试。');
+        }
         try {
             const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
                 ? 'https://astralinks.xyz'
                 : 'http://localhost:3001';
 
             const token = typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : '';
+
+            console.log('[AI Node] Fetching workspace config:', { workspaceId, API_BASE, hasToken: !!token });
+
             const configResponse = await fetch(`${API_BASE}/api/workspace-config/${workspaceId}/ai/active`, {
                 headers: { 'Authorization': `Bearer ${token}` },
             });
 
+            console.log('[AI Node] Config response status:', configResponse.status);
+
             if (configResponse.ok) {
                 const configData = await configResponse.json();
+                console.log('[AI Node] Config data received:', {
+                    hasConfig: !!configData.config,
+                    provider: configData.config?.provider,
+                    model: configData.config?.model,
+                    hasApiKey: !!configData.config?.apiKey
+                });
+
                 if (configData.config) {
                     provider = configData.config.provider || provider;
                     model = configData.config.model || model;
@@ -117,9 +135,13 @@ export const executeAINode: NodeExecutor = async (node, input, context) => {
                     temperature = configData.config.temperature ?? temperature;
                     maxTokens = configData.config.maxTokens ?? maxTokens;
                 }
+            } else {
+                const errorText = await configResponse.text();
+                console.error('[AI Node] Config fetch failed:', configResponse.status, errorText);
             }
-        } catch (e) {
-            // 忽略配置加载错误，使用节点本身的配置
+        } catch (e: any) {
+            console.error('[AI Node] Config fetch error:', e.message);
+            // 不再静默忽略，而是记录错误
         }
     }
 
