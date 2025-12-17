@@ -748,6 +748,136 @@ export function WorkflowEditor({
                                     </>
                                 )}
 
+                                {/* 知识库节点配置 */}
+                                {selectedNode.type === 'knowledge' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">Embedding API Key</label>
+                                            <input
+                                                type="password"
+                                                value={selectedNode.data?.apiKey || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, apiKey: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, apiKey: e.target.value } });
+                                                }}
+                                                placeholder="sk-... 或 Gemini API Key"
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">Provider</label>
+                                            <select
+                                                value={selectedNode.data?.provider || 'gemini'}
+                                                onChange={(e) => {
+                                                    const provider = e.target.value;
+                                                    const defaultModel = provider === 'gemini' ? 'gemini-embedding-001' : 'text-embedding-3-small';
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, provider, embeddingModel: defaultModel } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, provider, embeddingModel: defaultModel } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="gemini">Gemini</option>
+                                                <option value="openai">OpenAI</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">Embedding 模型</label>
+                                            <select
+                                                value={selectedNode.data?.embeddingModel || 'gemini-embedding-001'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, embeddingModel: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, embeddingModel: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                {selectedNode.data?.provider === 'openai' ? (
+                                                    <>
+                                                        <option value="text-embedding-3-small">text-embedding-3-small</option>
+                                                        <option value="text-embedding-3-large">text-embedding-3-large</option>
+                                                    </>
+                                                ) : (
+                                                    <option value="gemini-embedding-001">gemini-embedding-001</option>
+                                                )}
+                                            </select>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
+                                                <label className="text-xs text-slate-400 block mb-1">Top K</label>
+                                                <input
+                                                    type="number"
+                                                    value={selectedNode.data?.topK || 5}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, topK: parseInt(e.target.value) || 5 } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, topK: parseInt(e.target.value) || 5 } });
+                                                    }}
+                                                    min={1}
+                                                    max={20}
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-xs text-slate-400 block mb-1">阈值</label>
+                                                <input
+                                                    type="number"
+                                                    value={selectedNode.data?.threshold || 0.6}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, threshold: parseFloat(e.target.value) || 0.6 } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, threshold: parseFloat(e.target.value) || 0.6 } });
+                                                    }}
+                                                    step={0.1}
+                                                    min={0}
+                                                    max={1}
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">查询内容 (可选)</label>
+                                            <input
+                                                type="text"
+                                                value={selectedNode.data?.query || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, query: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, query: e.target.value } });
+                                                }}
+                                                placeholder="留空则使用上游节点输出"
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            />
+                                            <p className="text-[10px] text-slate-500 mt-1">💡 支持 {"{{变量}}"} 语法引用上下文</p>
+                                        </div>
+                                    </>
+                                )}
+
                                 {/* 条件节点配置 */}
                                 {selectedNode.type === 'condition' && (
                                     <div>
