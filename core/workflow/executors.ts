@@ -460,7 +460,7 @@ export const executeTriggerNode: NodeExecutor = async (node, input, context) => 
 // ============================================
 
 export const executeKnowledgeNode: NodeExecutor = async (node, input, context) => {
-    const { query, apiKey, provider = 'openai', topK = 5, threshold = 0.6 } = node.data;
+    const { query, apiKey, provider = 'openai', embeddingModel, topK = 5, threshold = 0.6 } = node.data;
     const workspaceId = context.variables.workspaceId;
 
     context.logs.push({
@@ -493,6 +493,7 @@ export const executeKnowledgeNode: NodeExecutor = async (node, input, context) =
                 query: searchQuery,
                 apiKey,
                 provider,
+                embeddingModel,
                 topK,
                 threshold,
             }),
