@@ -170,8 +170,12 @@ function ConfigForm({
 
     // 测试连接
     const testConnection = async () => {
-        if (!form.apiKey || form.apiKey.startsWith('••••')) {
-            setTestResult({ success: false, message: '请输入新的 API Key 进行测试' });
+        // 如果没有 API Key 且不是编辑现有配置，则提示输入
+        const hasStoredKey = initialConfig?.hasApiKey && form.apiKey.startsWith('••••');
+        const hasNewKey = form.apiKey && !form.apiKey.startsWith('••••');
+
+        if (!hasStoredKey && !hasNewKey) {
+            setTestResult({ success: false, message: '请输入 API Key 进行测试' });
             return;
         }
 
@@ -190,13 +194,15 @@ function ConfigForm({
                 body: JSON.stringify({
                     provider: form.provider,
                     model: form.model,
-                    apiKey: form.apiKey,
+                    // 如果是已保存的 Key，发送 configId 让服务器使用存储的 Key
+                    apiKey: hasNewKey ? form.apiKey : undefined,
+                    configId: hasStoredKey ? initialConfig?.id : undefined,
                     baseUrl
                 })
             });
 
             if (response.ok) {
-                setTestResult({ success: true, message: '连接成功！' });
+                setTestResult({ success: true, message: '连接成功！API 配置有效' });
             } else {
                 const data = await response.json();
                 setTestResult({ success: false, message: data.error || '连接失败' });

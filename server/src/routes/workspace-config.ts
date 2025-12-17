@@ -730,9 +730,24 @@ function getMimeType(filename: string): string {
  */
 router.post('/test-connection', async (req: Request, res: Response): Promise<void> => {
     try {
-        const { provider, model, apiKey, baseUrl } = req.body;
+        const { provider, model, apiKey, configId, baseUrl } = req.body;
 
-        if (!apiKey) {
+        let finalApiKey = apiKey;
+
+        // 如果提供了 configId 但没有 apiKey，从数据库获取存储的 Key
+        if (!apiKey && configId) {
+            const [rows] = await pool.execute(
+                'SELECT api_key FROM workspace_ai_configs WHERE id = ?',
+                [configId]
+            );
+            const configs = rows as any[];
+            if (configs.length > 0 && configs[0].api_key) {
+                // 解密存储的 API Key
+                finalApiKey = decrypt(configs[0].api_key);
+            }
+        }
+
+        if (!finalApiKey) {
             res.status(400).json({ error: '请提供 API Key' });
             return;
         }
@@ -747,7 +762,7 @@ router.post('/test-connection', async (req: Request, res: Response): Promise<voi
                 testUrl = (baseUrl || 'https://api.openai.com/v1') + '/chat/completions';
                 headers = {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'Authorization': `Bearer ${finalApiKey}`
                 };
                 body = {
                     model: model || 'gpt-4o-mini',
@@ -760,7 +775,7 @@ router.post('/test-connection', async (req: Request, res: Response): Promise<voi
                 testUrl = (baseUrl || 'https://api.anthropic.com') + '/v1/messages';
                 headers = {
                     'Content-Type': 'application/json',
-                    'x-api-key': apiKey,
+                    'x-api-key': finalApiKey,
                     'anthropic-version': '2023-06-01'
                 };
                 body = {
@@ -771,7 +786,7 @@ router.post('/test-connection', async (req: Request, res: Response): Promise<voi
                 break;
 
             case 'google':
-                testUrl = `${baseUrl || 'https://generativelanguage.googleapis.com'}/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${apiKey}`;
+                testUrl = `${baseUrl || 'https://generativelanguage.googleapis.com'}/v1beta/models/${model || 'gemini-2.0-flash'}:generateContent?key=${finalApiKey}`;
                 headers = { 'Content-Type': 'application/json' };
                 body = {
                     contents: [{ parts: [{ text: 'Hi' }] }],
@@ -783,7 +798,7 @@ router.post('/test-connection', async (req: Request, res: Response): Promise<voi
                 testUrl = (baseUrl || 'https://api.deepseek.com') + '/v1/chat/completions';
                 headers = {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'Authorization': `Bearer ${finalApiKey}`
                 };
                 body = {
                     model: model || 'deepseek-chat',
@@ -797,7 +812,7 @@ router.post('/test-connection', async (req: Request, res: Response): Promise<voi
                 testUrl = (baseUrl || 'https://api.openai.com/v1') + '/chat/completions';
                 headers = {
                     'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
+                    'Authorization': `Bearer ${finalApiKey}`
                 };
                 body = {
                     model: model || 'gpt-4o-mini',
