@@ -736,19 +736,29 @@ router.post('/test-connection', async (req: Request, res: Response): Promise<voi
 
         // 如果提供了 configId 但没有 apiKey，从数据库获取存储的 Key
         if (!apiKey && configId) {
+            console.log('[test-connection] Looking up configId:', configId);
             const [rows] = await pool.execute(
                 'SELECT api_key FROM workspace_ai_configs WHERE id = ?',
                 [configId]
             );
             const configs = rows as any[];
+            console.log('[test-connection] Found configs:', configs.length);
             if (configs.length > 0 && configs[0].api_key) {
                 // 解密存储的 API Key
                 finalApiKey = decrypt(configs[0].api_key);
+                console.log('[test-connection] Decrypted API Key length:', finalApiKey?.length || 0);
+            } else {
+                console.log('[test-connection] No API Key found in database for configId:', configId);
             }
         }
 
         if (!finalApiKey) {
-            res.status(400).json({ error: '请提供 API Key' });
+            // 提供更详细的错误信息
+            let errorMsg = '请提供 API Key';
+            if (configId && !apiKey) {
+                errorMsg = `未能从配置 ${configId} 中获取 API Key，请重新输入`;
+            }
+            res.status(400).json({ error: errorMsg });
             return;
         }
 
