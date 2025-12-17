@@ -299,18 +299,48 @@ function MCPConfigPanel({
     enabledMCPs: string[];
     setEnabledMCPs: React.Dispatch<React.SetStateAction<string[]>>;
 }) {
-    const availableMCPs = [
-        { id: 'mcp-web-search', name: 'Web Search', description: '网页搜索' },
-        { id: 'mcp-file-system', name: 'File System', description: '文件操作' },
-        { id: 'mcp-code-exec', name: 'Code Executor', description: '代码执行' },
-        { id: 'mcp-http', name: 'HTTP Client', description: 'HTTP请求' },
-    ];
+    const [availableMCPs, setAvailableMCPs] = useState<{ id: string; name: string; description: string }[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    // 从 API 加载可用 MCP 列表
+    useEffect(() => {
+        const loadMCPs = async () => {
+            try {
+                const token = localStorage.getItem('galaxyous_token');
+                const response = await fetch('/api/mcp/available', {
+                    headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setAvailableMCPs(data.mcps || []);
+                } else {
+                    throw new Error('Failed to load MCPs');
+                }
+            } catch (e) {
+                console.error('Failed to load MCPs, using defaults:', e);
+                // 后备: 使用内置 MCP
+                setAvailableMCPs([
+                    { id: 'mcp-web-search', name: 'Web Search', description: '网页搜索' },
+                    { id: 'mcp-file-system', name: 'File System', description: '文件操作' },
+                    { id: 'mcp-code-exec', name: 'Code Executor', description: '代码执行' },
+                    { id: 'mcp-http', name: 'HTTP Client', description: 'HTTP请求' },
+                ]);
+            } finally {
+                setLoading(false);
+            }
+        };
+        loadMCPs();
+    }, []);
 
     const toggleMCP = (id: string) => {
         setEnabledMCPs(prev =>
             prev.includes(id) ? prev.filter(m => m !== id) : [...prev, id]
         );
     };
+
+    if (loading) {
+        return <div className="text-center py-8 text-slate-400">加载 MCP 列表...</div>;
+    }
 
     return (
         <div className="space-y-3">

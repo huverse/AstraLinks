@@ -58,6 +58,58 @@ router.get('/platforms', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/mcp/available
+ * Get all available MCP tools for user panels
+ * This provides a unified list for Workspace Settings, Profile Center, etc.
+ */
+router.get('/available', async (req: Request, res: Response) => {
+    // 内置 MCP 工具 - 与 core/mcp/types.ts BUILTIN_MCPS 保持同步
+    const builtinMCPs = [
+        {
+            id: 'mcp-web-search',
+            name: 'Web Search',
+            description: '网页搜索工具 (Google/Bing/DuckDuckGo)',
+            category: 'search',
+            status: 'active',
+        },
+        {
+            id: 'mcp-file-system',
+            name: 'File System',
+            description: '文件系统操作 (沙箱内)',
+            category: 'filesystem',
+            status: 'active',
+        },
+        {
+            id: 'mcp-code-exec',
+            name: 'Code Executor',
+            description: '安全代码执行 (JavaScript/Python)',
+            category: 'execution',
+            status: 'active',
+        },
+        {
+            id: 'mcp-http',
+            name: 'HTTP Client',
+            description: 'HTTP 请求工具',
+            category: 'network',
+            status: 'active',
+        },
+        {
+            id: 'mcp-trends',
+            name: '热点趋势',
+            description: '获取微博、知乎、B站等平台热搜',
+            category: 'trends',
+            status: 'active',
+            platforms: Object.keys(PLATFORMS),
+        },
+    ];
+
+    res.json({
+        success: true,
+        mcps: builtinMCPs,
+    });
+});
+
+/**
  * GET /api/mcp/trends/:platform
  * Get trending topics from a specific platform
  */
