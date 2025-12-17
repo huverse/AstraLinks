@@ -1743,40 +1743,41 @@ const App: React.FC = () => {
             </div>
           </div>
           {/* ... Header Buttons ... */}
-          <div className="flex gap-2">
+          <div className="flex gap-1 md:gap-2 items-center">
+            {/* Auto Loop - Always visible */}
             <button
               title={activeSession.isAutoLoop ? "停止自动循环 (Auto Loop ON)" : "开启自动循环 (Auto Loop OFF)"}
               onClick={() => updateActiveSession({ isAutoLoop: !activeSession.isAutoLoop, isAutoPlayStopped: false })}
-              className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isAutoLoop ? 'text-pink-500 bg-pink-50 dark:bg-pink-900/20 animate-pulse' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+              className={`p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isAutoLoop ? 'text-pink-500 bg-pink-50 dark:bg-pink-900/20 animate-pulse' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
             >
-              <RefreshCw className={`w-5 h-5 md:w-5 md:h-5 ${activeSession.isAutoLoop ? 'animate-spin-slow' : ''}`} />
+              <RefreshCw className={`w-5 h-5 ${activeSession.isAutoLoop ? 'animate-spin-slow' : ''}`} />
             </button>
 
-            <div className="w-px h-6 bg-slate-300 dark:bg-white/20 mx-1 self-center"></div>
-
+            {/* Mode Toggles - Hidden on Mobile, visible on md+ */}
             {!isJudgeModeActive && (
-              <>
+              <div className="hidden md:flex items-center gap-1">
+                <div className="w-px h-6 bg-slate-300 dark:bg-white/20 mx-1"></div>
                 <button
                   title="逻辑模式开关 (STEM/Rational) - 仅当前会话"
                   onClick={() => updateActiveSession({
                     isLogicMode: !activeSession.isLogicMode,
                     isHumanMode: false,
-                    isSocialMode: false // Mutually Exclusive
+                    isSocialMode: false
                   })}
-                  className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isLogicMode ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+                  className={`p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isLogicMode ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
-                  <Cpu className="w-5 h-5 md:w-5 md:h-5" />
+                  <Cpu className="w-5 h-5" />
                 </button>
                 <button
                   title="完全拟人社会模式 (Social Infinite Loop) - 仅当前会话"
                   onClick={() => updateActiveSession({
                     isSocialMode: !activeSession.isSocialMode,
-                    isHumanMode: false, // Social mode supersedes standard human mode
+                    isHumanMode: false,
                     isLogicMode: false
                   })}
-                  className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isSocialMode ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+                  className={`p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isSocialMode ? 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
-                  <Coffee className="w-5 h-5 md:w-5 md:h-5" />
+                  <Coffee className="w-5 h-5" />
                 </button>
                 <button
                   title="真人模式开关 (Human/Slang) - 仅当前会话"
@@ -1785,51 +1786,67 @@ const App: React.FC = () => {
                     isLogicMode: false,
                     isSocialMode: false
                   })}
-                  className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isHumanMode ? 'text-green-500 bg-green-50 dark:bg-green-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+                  className={`p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isHumanMode ? 'text-green-500 bg-green-50 dark:bg-green-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
                 >
-                  <User className="w-5 h-5 md:w-5 md:h-5" />
+                  <User className="w-5 h-5" />
                 </button>
-              </>
-            )}
-
-            {isJudgeModeActive && (
-              <div className="px-3 py-1 bg-amber-100 dark:bg-amber-900/20 rounded-full text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 border border-amber-200 dark:border-amber-800">
-                <Gavel size={14} /> 裁判模式
               </div>
             )}
 
+            {/* Mobile Mode Indicator - Show active mode as badge on mobile */}
+            {!isJudgeModeActive && (activeSession.isLogicMode || activeSession.isSocialMode || activeSession.isHumanMode) && (
+              <div className="md:hidden px-2 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1" style={{
+                color: activeSession.isLogicMode ? '#3b82f6' : activeSession.isSocialMode ? '#f97316' : '#22c55e',
+                backgroundColor: activeSession.isLogicMode ? 'rgba(59,130,246,0.1)' : activeSession.isSocialMode ? 'rgba(249,115,22,0.1)' : 'rgba(34,197,94,0.1)',
+                borderColor: activeSession.isLogicMode ? 'rgba(59,130,246,0.3)' : activeSession.isSocialMode ? 'rgba(249,115,22,0.3)' : 'rgba(34,197,94,0.3)'
+              }}>
+                {activeSession.isLogicMode && <><Cpu size={10} /> 逻辑</>}
+                {activeSession.isSocialMode && <><Coffee size={10} /> 社交</>}
+                {activeSession.isHumanMode && <><User size={10} /> 拟人</>}
+              </div>
+            )}
+
+            {isJudgeModeActive && (
+              <div className="px-2 py-1 bg-amber-100 dark:bg-amber-900/20 rounded-full text-[10px] md:text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1 border border-amber-200 dark:border-amber-800">
+                <Gavel size={12} /> <span className="hidden sm:inline">裁判模式</span>
+              </div>
+            )}
+
+            {/* Deep Think - Always visible */}
             <button
               title="深度思考开关 - 仅当前会话"
               onClick={() => updateActiveSession({ isDeepThinking: !activeSession.isDeepThinking })}
-              className={`p-2.5 md:p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isDeepThinking ? 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
+              className={`p-2 rounded-full transition-colors flex items-center justify-center ${activeSession.isDeepThinking ? 'text-purple-500 bg-purple-50 dark:bg-purple-900/20' : 'text-slate-400 hover:bg-slate-100 dark:hover:bg-white/10'}`}
             >
-              <BrainCircuit className="w-5 h-5 md:w-5 md:h-5" />
+              <BrainCircuit className="w-5 h-5" />
             </button>
+
+            {/* Clear - Hidden on mobile */}
             <button
               title="清空记录"
               onClick={clearHistory}
-              className="p-2.5 md:p-2 text-slate-400 hover:text-red-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full flex items-center justify-center"
+              className="hidden sm:flex p-2 text-slate-400 hover:text-red-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full items-center justify-center"
             >
-              <Trash2 className="w-5 h-5 md:w-5 md:h-5" />
+              <Trash2 className="w-5 h-5" />
             </button>
 
-            {/* Auth Button */}
+            {/* Auth Button - Always visible */}
             {isAuthenticated ? (
               <button
                 onClick={() => setIsProfileOpen(true)}
                 title={`个人中心: ${user?.username}`}
-                className="p-2.5 md:p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors rounded-full relative flex items-center justify-center"
+                className="p-2 text-green-500 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors rounded-full relative flex items-center justify-center"
               >
-                <UserCheck className="w-5 h-5 md:w-5 md:h-5" />
-                <span className="absolute bottom-0.5 right-0.5 w-2 h-2 bg-green-500 rounded-full ring-2 ring-white dark:ring-slate-800"></span>
+                <UserCheck className="w-5 h-5" />
+                <span className="absolute bottom-0 right-0 w-2 h-2 bg-green-500 rounded-full ring-2 ring-white dark:ring-slate-800"></span>
               </button>
             ) : (
               <button
                 onClick={() => setIsLoginOpen(true)}
                 title="登录/注册"
-                className="p-2.5 md:p-2 text-slate-400 hover:text-blue-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full flex items-center justify-center"
+                className="p-2 text-slate-400 hover:text-blue-500 transition-colors hover:bg-slate-100 dark:hover:bg-white/10 rounded-full flex items-center justify-center"
               >
-                <LogIn className="w-5 h-5 md:w-5 md:h-5" />
+                <LogIn className="w-5 h-5" />
               </button>
             )}
           </div>
