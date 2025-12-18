@@ -212,7 +212,8 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        if (rows[0].owner_id !== userId) {
+        // 类型安全的比较 (owner_id 可能是字符串, userId 可能是数字)
+        if (String(rows[0].owner_id) !== String(userId)) {
             res.status(403).json({ error: '无权修改此工作流' });
             return;
         }
