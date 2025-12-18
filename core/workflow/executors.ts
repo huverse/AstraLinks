@@ -190,9 +190,26 @@ export const executeAINode: NodeExecutor = async (node, input, context) => {
         }
 
         // 将输入转换为用户消息
-        const userMessage = typeof input === 'string'
-            ? input
-            : JSON.stringify(input, null, 2);
+        // 智能处理来自网页搜索的上下文
+        let userMessage: string;
+        if (typeof input === 'string') {
+            userMessage = input;
+        } else if (input?.searchContext || input?.synthesizedContext) {
+            // 如果是来自网页搜索的结果，使用合成上下文
+            userMessage = input.searchContext || input.synthesizedContext;
+            context.logs.push({
+                timestamp: Date.now(),
+                nodeId: node.id,
+                level: 'debug',
+                message: `使用网页搜索上下文: ${(userMessage as string).slice(0, 100)}...`,
+            });
+        } else if (input?.ragContext) {
+            // 来自知识库检索的结果
+            userMessage = input.ragContext;
+        } else {
+            // 其他对象类型，转换为 JSON
+            userMessage = JSON.stringify(input, null, 2);
+        }
         messages.push({ role: 'user', content: userMessage });
 
         // 使用后端代理直接调用 AI API
@@ -867,6 +884,18 @@ const executeMCPNode: NodeExecutor = async (node, input, context) => {
                     : `MCP 工具执行成功`,
                 data: { feedback: context.nodeStates[node.id].feedback }
             });
+
+            // 对于搜索工具，增强返回值以包含合成上下文
+            if (isSearchTool && result?.synthesizedContext) {
+                return {
+                    ...result,
+                    // 便于 AI 节点直接使用的字符串格式
+                    searchContext: result.synthesizedContext,
+                    // 原始搜索结果保留
+                    results: result.results,
+                    query: result.query,
+                };
+            }
 
             return result;
         } else {
