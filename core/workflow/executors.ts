@@ -33,6 +33,31 @@ export interface NodeExecutionState {
         completionTokens: number;
         totalTokens: number;
     };
+    // 结构化反馈信息 - 用于向用户展示清晰的节点执行详情
+    feedback?: NodeFeedback;
+}
+
+// 节点反馈详情
+export interface NodeFeedback {
+    title: string;              // 执行标题 (如 "调用 Gemini 2.5 Pro")
+    inputSummary?: string;      // 输入摘要 (如 "接收到 2 条搜索结果作为上下文")
+    outputSummary?: string;     // 输出摘要 (如 "生成 512 字符的分析报告")
+    details?: FeedbackDetail[]; // 详细信息列表
+    sources?: FeedbackSource[]; // 数据来源 (网页搜索等)
+}
+
+// 反馈详情项
+export interface FeedbackDetail {
+    label: string;              // 标签 (如 "系统提示词")
+    value: string;              // 值
+    type?: 'text' | 'code' | 'json' | 'link'; // 展示类型
+}
+
+// 数据来源
+export interface FeedbackSource {
+    title: string;              // 来源标题
+    url?: string;               // 来源 URL
+    snippet?: string;           // 摘要片段
 }
 
 export interface ExecutionLog {
@@ -266,11 +291,54 @@ export const executeAINode: NodeExecutor = async (node, input, context) => {
         // 记录 token 使用
         context.nodeStates[node.id].tokenUsage = estimatedTokens;
 
+        // 构建结构化反馈
+        const inputPreview = userMessage.length > 200 ? userMessage.slice(0, 200) + '...' : userMessage;
+        const outputPreview = responseContent.length > 200 ? responseContent.slice(0, 200) + '...' : responseContent;
+
+        context.nodeStates[node.id].feedback = {
+            title: `🤖 ${provider || 'AI'} / ${model || 'unknown'}`,
+            inputSummary: `接收输入: ${userMessage.length} 字符`,
+            outputSummary: `生成输出: ${responseContent.length} 字符 | ${estimatedTokens.totalTokens} tokens`,
+            details: [
+                {
+                    label: '使用模型',
+                    value: `${provider || 'custom'} / ${model || 'gpt-4o-mini'}`,
+                    type: 'text'
+                },
+                {
+                    label: '配置来源',
+                    value: configSource === 'workspace' ? '📁 工作区配置' : '⚙️ 节点配置',
+                    type: 'text'
+                },
+                ...(systemPrompt ? [{
+                    label: '系统提示词',
+                    value: systemPrompt.length > 100 ? systemPrompt.slice(0, 100) + '...' : systemPrompt,
+                    type: 'text' as const
+                }] : []),
+                {
+                    label: '📥 输入内容',
+                    value: inputPreview,
+                    type: 'text'
+                },
+                {
+                    label: '📤 输出内容',
+                    value: outputPreview,
+                    type: 'text'
+                },
+                {
+                    label: 'Token 统计',
+                    value: `输入: ${estimatedTokens.promptTokens} | 输出: ${estimatedTokens.completionTokens} | 总计: ${estimatedTokens.totalTokens}`,
+                    type: 'text'
+                }
+            ]
+        };
+
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'info',
-            message: `AI 响应完成, tokens: ${estimatedTokens.totalTokens}`,
+            message: `AI 响应完成 (${provider}/${model}), ${estimatedTokens.totalTokens} tokens`,
+            data: { feedback: context.nodeStates[node.id].feedback }
         });
 
         return responseContent;
@@ -326,11 +394,40 @@ export const executeConditionNode: NodeExecutor = async (node, input, context) =
             result = !!input;
         }
 
+        // 构建结构化反馈
+        const inputPreview = typeof input === 'string'
+            ? (input.length > 50 ? input.slice(0, 50) + '...' : input)
+            : JSON.stringify(input).slice(0, 50) + '...';
+
+        context.nodeStates[node.id].feedback = {
+            title: `🔀 条件判断: ${result ? '✅ true' : '❌ false'}`,
+            inputSummary: `输入: ${inputPreview}`,
+            outputSummary: `分支: ${result ? 'true (继续)' : 'false (跳过)'}`,
+            details: [
+                {
+                    label: '条件表达式',
+                    value: condition || '(默认: 检查输入是否存在)',
+                    type: 'code'
+                },
+                {
+                    label: '输入值',
+                    value: typeof input === 'string' ? input : JSON.stringify(input),
+                    type: 'text'
+                },
+                {
+                    label: '判断结果',
+                    value: result ? '✅ true - 执行 true 分支' : '❌ false - 执行 false 分支',
+                    type: 'text'
+                }
+            ]
+        };
+
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'info',
-            message: `条件结果: ${result ? 'true' : 'false'}`,
+            message: `🔀 条件结果: ${result ? 'true' : 'false'}`,
+            data: { feedback: context.nodeStates[node.id].feedback }
         });
 
         // 返回带有分支标识的结果
@@ -440,11 +537,41 @@ export const executeCodeNode: NodeExecutor = async (node, input, context) => {
         const fn = new Function('input', 'variables', 'console', `return ${wrappedCode}`);
         const result = fn(safeContext.input, safeContext.variables, safeContext.console);
 
+        // 构建结构化反馈
+        const codePreview = code.length > 100 ? code.slice(0, 100) + '...' : code;
+        const resultPreview = typeof result === 'string'
+            ? (result.length > 100 ? result.slice(0, 100) + '...' : result)
+            : JSON.stringify(result).slice(0, 100) + '...';
+
+        context.nodeStates[node.id].feedback = {
+            title: `💻 代码执行 (${language || 'JavaScript'})`,
+            inputSummary: `输入类型: ${typeof input}`,
+            outputSummary: `输出类型: ${typeof result}`,
+            details: [
+                {
+                    label: '📝 执行代码',
+                    value: codePreview,
+                    type: 'code'
+                },
+                {
+                    label: '📥 输入',
+                    value: typeof input === 'string' ? input.slice(0, 100) : JSON.stringify(input).slice(0, 100),
+                    type: 'json'
+                },
+                {
+                    label: '📤 输出',
+                    value: resultPreview,
+                    type: typeof result === 'string' ? 'text' : 'json'
+                }
+            ]
+        };
+
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'info',
-            message: '代码执行完成',
+            message: `💻 代码执行完成`,
+            data: { feedback: context.nodeStates[node.id].feedback }
         });
 
         return result;
@@ -528,11 +655,47 @@ export const executeKnowledgeNode: NodeExecutor = async (node, input, context) =
 
         const data = await response.json();
 
+        // 提取检索结果作为来源
+        const sources: FeedbackSource[] = (data.results || []).slice(0, 5).map((r: any) => ({
+            title: r.documentName || r.title || '文档片段',
+            snippet: (r.content || r.text || '').slice(0, 150) + '...',
+        }));
+
+        context.nodeStates[node.id].feedback = {
+            title: `📚 知识库检索`,
+            inputSummary: `查询: "${searchQuery.slice(0, 50)}${searchQuery.length > 50 ? '...' : ''}"`,
+            outputSummary: `找到 ${data.results?.length || 0} 条相关内容`,
+            details: [
+                {
+                    label: '🔍 搜索查询',
+                    value: searchQuery,
+                    type: 'text'
+                },
+                {
+                    label: 'Embedding 模型',
+                    value: `${provider || 'openai'} / ${embeddingModel || 'text-embedding-ada-002'}`,
+                    type: 'text'
+                },
+                {
+                    label: '参数设置',
+                    value: `TopK: ${topK || 5} | 阈值: ${threshold || 0.7}`,
+                    type: 'text'
+                },
+                {
+                    label: '检索结果数',
+                    value: `${data.results?.length || 0} 条`,
+                    type: 'text'
+                }
+            ],
+            sources
+        };
+
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'info',
-            message: `检索完成: 找到 ${data.results?.length || 0} 条相关内容`,
+            message: `📚 检索完成: 找到 ${data.results?.length || 0} 条相关内容`,
+            data: { feedback: context.nodeStates[node.id].feedback }
         });
 
         // 返回结构化结果
@@ -626,14 +789,72 @@ const executeMCPNode: NodeExecutor = async (node, input, context) => {
         });
 
         if (response.success) {
+            // 构建结构化反馈
+            const result = response.result;
+            const isSearchTool = tool.includes('search') || tool === 'query';
+
+            // 提取搜索结果作为来源
+            const sources: FeedbackSource[] = [];
+            if (isSearchTool && result) {
+                // 尝试从不同格式的搜索结果中提取来源
+                const results = result.results || result.organic || result.items || result.webPages?.value || [];
+                if (Array.isArray(results)) {
+                    results.slice(0, 5).forEach((item: any) => {
+                        sources.push({
+                            title: item.title || item.name || '未知标题',
+                            url: item.url || item.link || item.href || '',
+                            snippet: (item.snippet || item.description || item.content || '').slice(0, 150) + '...'
+                        });
+                    });
+                }
+            }
+
+            // 计算结果摘要
+            let resultSummary = '';
+            if (typeof result === 'string') {
+                resultSummary = result.length > 100 ? result.slice(0, 100) + '...' : result;
+            } else if (Array.isArray(result)) {
+                resultSummary = `返回 ${result.length} 条结果`;
+            } else if (result?.results || result?.organic || result?.items) {
+                const count = (result.results || result.organic || result.items).length;
+                resultSummary = `找到 ${count} 条搜索结果`;
+            }
+
+            context.nodeStates[node.id].feedback = {
+                title: `🔧 ${mcpName || mcpId} / ${tool}`,
+                inputSummary: parsedParams.query ? `搜索: "${parsedParams.query}"` : `参数: ${JSON.stringify(parsedParams).slice(0, 50)}`,
+                outputSummary: resultSummary || '执行成功',
+                details: [
+                    {
+                        label: '工具',
+                        value: `${mcpName || mcpId} → ${tool}`,
+                        type: 'text'
+                    },
+                    ...(parsedParams.query ? [{
+                        label: '🔍 搜索关键词',
+                        value: parsedParams.query,
+                        type: 'text' as const
+                    }] : []),
+                    {
+                        label: '请求参数',
+                        value: JSON.stringify(parsedParams, null, 2),
+                        type: 'json'
+                    }
+                ],
+                sources: sources.length > 0 ? sources : undefined
+            };
+
             context.logs.push({
                 timestamp: Date.now(),
                 nodeId: node.id,
                 level: 'info',
-                message: `MCP 工具执行成功`,
-                data: response.result,
+                message: isSearchTool
+                    ? `🔍 搜索完成: 找到 ${sources.length} 条结果`
+                    : `MCP 工具执行成功`,
+                data: { feedback: context.nodeStates[node.id].feedback }
             });
-            return response.result;
+
+            return result;
         } else {
             const errMsg = typeof response.error === 'string'
                 ? response.error
@@ -696,11 +917,50 @@ const executeHttpNode: NodeExecutor = async (node, input, context) => {
             ? await response.json()
             : await response.text();
 
+        // 构建结构化反馈
+        const resultPreview = typeof result === 'string'
+            ? (result.length > 150 ? result.slice(0, 150) + '...' : result)
+            : JSON.stringify(result).slice(0, 150) + '...';
+
+        context.nodeStates[node.id].feedback = {
+            title: `🌐 HTTP ${method} ${response.status}`,
+            inputSummary: `请求: ${method} ${targetUrl.slice(0, 50)}${targetUrl.length > 50 ? '...' : ''}`,
+            outputSummary: `响应: ${response.status} ${response.statusText} (${contentType?.split(';')[0] || 'unknown'})`,
+            details: [
+                {
+                    label: '请求 URL',
+                    value: targetUrl,
+                    type: 'link'
+                },
+                {
+                    label: '请求方法',
+                    value: method,
+                    type: 'text'
+                },
+                {
+                    label: '状态码',
+                    value: `${response.status} ${response.statusText}`,
+                    type: 'text'
+                },
+                {
+                    label: '响应类型',
+                    value: contentType || 'unknown',
+                    type: 'text'
+                },
+                {
+                    label: '📤 响应内容',
+                    value: resultPreview,
+                    type: typeof result === 'string' ? 'text' : 'json'
+                }
+            ]
+        };
+
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'info',
-            message: `HTTP 请求完成: ${response.status}`,
+            message: `HTTP ${method} ${targetUrl.slice(0, 30)}... → ${response.status}`,
+            data: { feedback: context.nodeStates[node.id].feedback }
         });
 
         return result;

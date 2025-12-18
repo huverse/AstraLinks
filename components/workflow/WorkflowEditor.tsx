@@ -551,6 +551,68 @@ export function WorkflowEditor({
                                 </div>
                             )}
 
+                            {/* 节点反馈详情 */}
+                            {Object.entries(execution.nodeStates).some(([_, s]) => s.feedback) && (
+                                <div className="mt-3 space-y-2">
+                                    <div className="text-[10px] text-slate-500">📊 节点执行详情</div>
+                                    {Object.entries(execution.nodeStates)
+                                        .filter(([_, state]) => state.feedback)
+                                        .map(([nodeId, state]) => (
+                                            <div key={nodeId} className="bg-white/5 rounded-lg p-2 border border-slate-700/50">
+                                                <div className="text-xs font-medium text-white mb-1">{state.feedback?.title}</div>
+                                                {state.feedback?.inputSummary && (
+                                                    <div className="text-[10px] text-cyan-400/80">📥 {state.feedback.inputSummary}</div>
+                                                )}
+                                                {state.feedback?.outputSummary && (
+                                                    <div className="text-[10px] text-green-400/80">📤 {state.feedback.outputSummary}</div>
+                                                )}
+                                                {/* 详情列表 */}
+                                                {state.feedback?.details && state.feedback.details.length > 0 && (
+                                                    <details className="mt-1">
+                                                        <summary className="text-[10px] text-slate-400 cursor-pointer hover:text-white">
+                                                            查看详情 ({state.feedback.details.length} 项)
+                                                        </summary>
+                                                        <div className="mt-1 space-y-1 pl-2 border-l border-slate-600">
+                                                            {state.feedback.details.map((d, i) => (
+                                                                <div key={i} className="text-[10px]">
+                                                                    <span className="text-slate-500">{d.label}:</span>
+                                                                    <span className={`ml-1 ${d.type === 'code' ? 'font-mono text-amber-300' : 'text-slate-300'}`}>
+                                                                        {d.value.length > 80 ? d.value.slice(0, 80) + '...' : d.value}
+                                                                    </span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </details>
+                                                )}
+                                                {/* 数据来源 */}
+                                                {state.feedback?.sources && state.feedback.sources.length > 0 && (
+                                                    <details className="mt-1">
+                                                        <summary className="text-[10px] text-blue-400 cursor-pointer hover:text-blue-300">
+                                                            🔗 数据来源 ({state.feedback.sources.length})
+                                                        </summary>
+                                                        <div className="mt-1 space-y-1 max-h-[120px] overflow-y-auto">
+                                                            {state.feedback.sources.map((src, i) => (
+                                                                <div key={i} className="text-[10px] p-1 bg-blue-900/20 rounded border border-blue-800/30">
+                                                                    <div className="font-medium text-blue-300 truncate">{src.title}</div>
+                                                                    {src.url && (
+                                                                        <a href={src.url} target="_blank" rel="noopener noreferrer"
+                                                                            className="text-blue-400/60 hover:text-blue-400 truncate block">
+                                                                            {src.url.slice(0, 50)}...
+                                                                        </a>
+                                                                    )}
+                                                                    {src.snippet && (
+                                                                        <div className="text-slate-400 line-clamp-2">{src.snippet}</div>
+                                                                    )}
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </details>
+                                                )}
+                                            </div>
+                                        ))}
+                                </div>
+                            )}
+
                             {/* 错误信息 */}
                             {execution.error && (
                                 <div className="mt-2 p-2 bg-red-900/30 border border-red-800 rounded-lg">

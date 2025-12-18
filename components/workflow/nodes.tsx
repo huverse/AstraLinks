@@ -29,6 +29,7 @@ interface AINodeData {
     model?: string;
     provider?: string;
     systemPrompt?: string;
+    configSource?: 'manual' | 'workspace';
 }
 
 export const AINode = memo(({ data, selected }: NodeProps<AINodeData>) => (
@@ -42,11 +43,15 @@ export const AINode = memo(({ data, selected }: NodeProps<AINodeData>) => (
                 </div>
                 <span className="font-semibold text-white text-sm">{data.label || 'AI 节点'}</span>
             </div>
-            {data.model && (
+            {data.configSource === 'workspace' ? (
+                <div className="text-xs text-purple-100 bg-purple-400/30 px-2 py-1 rounded-lg flex items-center gap-1">
+                    <span>📁</span> 使用工作区配置
+                </div>
+            ) : data.model ? (
                 <div className="text-xs text-purple-200 bg-white/10 px-2 py-1 rounded-lg">
                     {data.provider || 'OpenAI'} / {data.model}
                 </div>
-            )}
+            ) : null}
         </div>
 
         <Handle type="source" position={Position.Bottom} style={handleStyle} className="!bg-purple-300" />
