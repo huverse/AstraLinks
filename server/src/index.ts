@@ -27,6 +27,7 @@ import adminMcpRoutes from './routes/admin-mcp';
 import promptRoutes from './routes/prompt';
 import knowledgeRoutes from './routes/knowledge';
 import mcpMarketplaceRoutes from './routes/mcp-marketplace';
+import workspaceProjectsRoutes from './routes/workspace-projects';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
@@ -72,6 +73,7 @@ app.use('/api/workspace-config', workspaceConfigRoutes);
 app.use('/api/prompt', promptRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/mcp-marketplace', mcpMarketplaceRoutes);
+app.use('/api/workspace-projects', workspaceProjectsRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

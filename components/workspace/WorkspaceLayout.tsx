@@ -9,7 +9,7 @@ import React, { useState } from 'react';
 import {
     GitBranch, History, FolderOpen, Settings,
     ChevronLeft, Plus, Search, Cloud, Wand2, Key, X, CheckCircle, AlertCircle, RefreshCw,
-    BookOpen, Users, Plug, BarChart3
+    BookOpen, Users, Plug, BarChart3, Folder, CheckSquare, Code
 } from 'lucide-react';
 import { useWorkflows, Workflow } from '../../hooks/useWorkspace';
 import { WorkflowEditor } from '../workflow';
@@ -21,6 +21,9 @@ import KnowledgeBasePanel from './KnowledgeBase';
 import AgentPanel from './AgentPanel';
 import MCPPanel from './MCPPanel';
 import TokenStatsPanel from './TokenStatsPanel';
+import ProjectPanel from './ProjectPanel';
+import TaskPanel from './TaskPanel';
+import SandboxPanel from './SandboxPanel';
 
 // ============================================
 // 执行历史面板
@@ -284,8 +287,8 @@ function PromptOptimizerPanel({ onClose }: { onClose: () => void }) {
 interface SidebarProps {
     workspaceId: string;
     workspaceName: string;
-    activeTab: 'workflows' | 'executions' | 'files' | 'settings';
-    onTabChange: (tab: 'workflows' | 'executions' | 'files' | 'settings') => void;
+    activeTab: 'workflows' | 'projects' | 'tasks' | 'executions' | 'files' | 'sandbox' | 'settings';
+    onTabChange: (tab: 'workflows' | 'projects' | 'tasks' | 'executions' | 'files' | 'sandbox' | 'settings') => void;
     onBack: () => void;
     workflows: Workflow[];
     selectedWorkflowId: string | null;
@@ -306,8 +309,11 @@ function Sidebar({
 }: SidebarProps) {
     const tabs = [
         { id: 'workflows' as const, icon: GitBranch, label: '工作流' },
-        { id: 'executions' as const, icon: History, label: '执行历史' },
+        { id: 'projects' as const, icon: Folder, label: '项目' },
+        { id: 'tasks' as const, icon: CheckSquare, label: '任务' },
+        { id: 'executions' as const, icon: History, label: '历史' },
         { id: 'files' as const, icon: FolderOpen, label: '文件' },
+        { id: 'sandbox' as const, icon: Code, label: '沙箱' },
         { id: 'settings' as const, icon: Settings, label: '设置' },
     ];
 
@@ -473,7 +479,7 @@ interface WorkspaceLayoutProps {
 }
 
 export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: WorkspaceLayoutProps) {
-    const [activeTab, setActiveTab] = useState<'workflows' | 'executions' | 'files' | 'settings'>('workflows');
+    const [activeTab, setActiveTab] = useState<'workflows' | 'projects' | 'tasks' | 'executions' | 'files' | 'sandbox' | 'settings'>('workflows');
     const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
     const [showSettings, setShowSettings] = useState(false);
     const [showConfigCenter, setShowConfigCenter] = useState(false);
@@ -547,20 +553,49 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
             {/* 主内容区 */}
             <div className="flex-1 flex flex-col overflow-hidden">
                 {/* 内容区 */}
-                <div className="flex-1 overflow-hidden">
-                    {selectedWorkflowId ? (
-                        <WorkflowEditor
-                            workflowId={selectedWorkflowId}
-                            workspaceId={workspaceId}
-                            onSave={handleSaveWorkflow}
-                        />
-                    ) : (
-                        <div className="h-full flex items-center justify-center text-slate-500">
-                            <div className="text-center">
-                                <GitBranch size={48} className="mx-auto mb-4 opacity-50" />
-                                <p>选择或创建一个工作流</p>
+                <div className="flex-1 overflow-hidden p-4">
+                    {activeTab === 'workflows' && (
+                        selectedWorkflowId ? (
+                            <WorkflowEditor
+                                workflowId={selectedWorkflowId}
+                                workspaceId={workspaceId}
+                                onSave={handleSaveWorkflow}
+                            />
+                        ) : (
+                            <div className="h-full flex items-center justify-center text-slate-500">
+                                <div className="text-center">
+                                    <GitBranch size={48} className="mx-auto mb-4 opacity-50" />
+                                    <p>选择或创建一个工作流</p>
+                                </div>
                             </div>
-                        </div>
+                        )
+                    )}
+
+                    {activeTab === 'projects' && (
+                        <ProjectPanel
+                            workspaceId={workspaceId}
+                            onNavigateToTasks={(projectId) => {
+                                setActiveTab('tasks');
+                            }}
+                        />
+                    )}
+
+                    {activeTab === 'tasks' && (
+                        <TaskPanel
+                            workspaceId={workspaceId}
+                        />
+                    )}
+
+                    {activeTab === 'executions' && (
+                        <ExecutionHistoryPanel workspaceId={workspaceId} />
+                    )}
+
+                    {activeTab === 'files' && (
+                        <FileManagerPanel workspaceId={workspaceId} />
+                    )}
+
+                    {activeTab === 'sandbox' && (
+                        <SandboxPanel workspaceId={workspaceId} />
                     )}
                 </div>
             </div>
