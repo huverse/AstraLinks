@@ -341,6 +341,20 @@ export const executeAINode: NodeExecutor = async (node, input, context) => {
             data: { feedback: context.nodeStates[node.id].feedback }
         });
 
+        // 记录到全局 Token 统计
+        try {
+            const { recordTokenUsage } = await import('../../components/workspace/TokenStatsPanel');
+            recordTokenUsage({
+                model: model || 'unknown',
+                promptTokens: estimatedTokens.promptTokens,
+                completionTokens: estimatedTokens.completionTokens,
+                totalTokens: estimatedTokens.totalTokens,
+                source: 'workflow'
+            });
+        } catch (e) {
+            console.warn('[AI Node] Failed to record token usage:', e);
+        }
+
         return responseContent;
     } catch (error: any) {
         context.logs.push({

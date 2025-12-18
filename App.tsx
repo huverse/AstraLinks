@@ -244,6 +244,7 @@ const App: React.FC = () => {
   const [isLoginOpen, setIsLoginOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isAnnouncementOpen, setIsAnnouncementOpen] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   // Workspace Mode State
   const [appMode, setAppMode] = useState<AppMode>('CHAT');
@@ -1793,16 +1794,68 @@ const App: React.FC = () => {
               </div>
             )}
 
-            {/* Mobile Mode Indicator - Show active mode as badge on mobile */}
-            {!isJudgeModeActive && (activeSession.isLogicMode || activeSession.isSocialMode || activeSession.isHumanMode) && (
-              <div className="md:hidden px-2 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1" style={{
-                color: activeSession.isLogicMode ? '#3b82f6' : activeSession.isSocialMode ? '#f97316' : '#22c55e',
-                backgroundColor: activeSession.isLogicMode ? 'rgba(59,130,246,0.1)' : activeSession.isSocialMode ? 'rgba(249,115,22,0.1)' : 'rgba(34,197,94,0.1)',
-                borderColor: activeSession.isLogicMode ? 'rgba(59,130,246,0.3)' : activeSession.isSocialMode ? 'rgba(249,115,22,0.3)' : 'rgba(34,197,94,0.3)'
-              }}>
-                {activeSession.isLogicMode && <><Cpu size={10} /> 逻辑</>}
-                {activeSession.isSocialMode && <><Coffee size={10} /> 社交</>}
-                {activeSession.isHumanMode && <><User size={10} /> 拟人</>}
+            {/* Mobile Mode Indicator with Dropdown Menu */}
+            {!isJudgeModeActive && (
+              <div className="md:hidden relative">
+                <button
+                  onClick={() => setShowMobileMenu(!showMobileMenu)}
+                  className={`px-2 py-1 rounded-full text-[10px] font-bold border flex items-center gap-1 ${activeSession.isLogicMode || activeSession.isSocialMode || activeSession.isHumanMode
+                    ? ''
+                    : 'text-slate-400 border-slate-300 dark:border-slate-600'
+                    }`}
+                  style={activeSession.isLogicMode || activeSession.isSocialMode || activeSession.isHumanMode ? {
+                    color: activeSession.isLogicMode ? '#3b82f6' : activeSession.isSocialMode ? '#f97316' : '#22c55e',
+                    backgroundColor: activeSession.isLogicMode ? 'rgba(59,130,246,0.1)' : activeSession.isSocialMode ? 'rgba(249,115,22,0.1)' : 'rgba(34,197,94,0.1)',
+                    borderColor: activeSession.isLogicMode ? 'rgba(59,130,246,0.3)' : activeSession.isSocialMode ? 'rgba(249,115,22,0.3)' : 'rgba(34,197,94,0.3)'
+                  } : {}}
+                >
+                  {activeSession.isLogicMode && <><Cpu size={10} /> 逻辑</>}
+                  {activeSession.isSocialMode && <><Coffee size={10} /> 社交</>}
+                  {activeSession.isHumanMode && <><User size={10} /> 拟人</>}
+                  {!activeSession.isLogicMode && !activeSession.isSocialMode && !activeSession.isHumanMode && <>模式</>}
+                  <ChevronDown size={10} />
+                </button>
+                {showMobileMenu && (
+                  <div className="absolute top-full right-0 mt-1 bg-white dark:bg-slate-800 rounded-xl shadow-xl border border-slate-200 dark:border-slate-700 py-1 min-w-[120px] z-50">
+                    <button
+                      onClick={() => {
+                        updateActiveSession({ isLogicMode: !activeSession.isLogicMode, isHumanMode: false, isSocialMode: false });
+                        setShowMobileMenu(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 ${activeSession.isLogicMode ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                    >
+                      <Cpu size={14} /> 逻辑模式
+                    </button>
+                    <button
+                      onClick={() => {
+                        updateActiveSession({ isSocialMode: !activeSession.isSocialMode, isHumanMode: false, isLogicMode: false });
+                        setShowMobileMenu(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 ${activeSession.isSocialMode ? 'bg-orange-50 dark:bg-orange-900/20 text-orange-600' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                    >
+                      <Coffee size={14} /> 社交模式
+                    </button>
+                    <button
+                      onClick={() => {
+                        updateActiveSession({ isHumanMode: !activeSession.isHumanMode, isLogicMode: false, isSocialMode: false });
+                        setShowMobileMenu(false);
+                      }}
+                      className={`w-full px-3 py-2 text-left text-xs flex items-center gap-2 ${activeSession.isHumanMode ? 'bg-green-50 dark:bg-green-900/20 text-green-600' : 'hover:bg-slate-50 dark:hover:bg-slate-700'}`}
+                    >
+                      <User size={14} /> 拟人模式
+                    </button>
+                    <div className="border-t border-slate-200 dark:border-slate-700 my-1"></div>
+                    <button
+                      onClick={() => {
+                        clearHistory();
+                        setShowMobileMenu(false);
+                      }}
+                      className="w-full px-3 py-2 text-left text-xs flex items-center gap-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      <Trash2 size={14} /> 清空记录
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 

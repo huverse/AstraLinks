@@ -136,7 +136,7 @@ export default function TokenStatsPanel({ onClose }: TokenStatsPanelProps) {
                 <div className="flex items-center justify-between p-4 border-b border-white/10">
                     <h2 className="text-lg font-bold text-white flex items-center gap-2">
                         <BarChart3 size={20} className="text-green-400" />
-                        Token 成本统计
+                        Token 统计
                     </h2>
                     <div className="flex items-center gap-2">
                         <button
@@ -159,8 +159,8 @@ export default function TokenStatsPanel({ onClose }: TokenStatsPanelProps) {
                                 key={range}
                                 onClick={() => setTimeRange(range)}
                                 className={`px-3 py-1 rounded-lg text-sm ${timeRange === range
-                                        ? 'bg-green-600 text-white'
-                                        : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                                    ? 'bg-green-600 text-white'
+                                    : 'bg-white/5 text-slate-400 hover:bg-white/10'
                                     }`}
                             >
                                 {range === 'today' ? '今日' : range === 'week' ? '本周' : range === 'month' ? '本月' : '全部'}
@@ -172,16 +172,7 @@ export default function TokenStatsPanel({ onClose }: TokenStatsPanelProps) {
                 {/* Content */}
                 <div className="flex-1 overflow-auto p-4 space-y-4">
                     {/* 总计卡片 */}
-                    <div className="grid grid-cols-4 gap-3">
-                        <div className="bg-gradient-to-br from-green-500/20 to-green-600/20 rounded-xl p-4 border border-green-500/30">
-                            <div className="flex items-center gap-2 text-green-400 mb-2">
-                                <DollarSign size={16} />
-                                <span className="text-xs">总费用</span>
-                            </div>
-                            <div className="text-2xl font-bold text-white">
-                                ${totalStats.totalCost.toFixed(4)}
-                            </div>
-                        </div>
+                    <div className="grid grid-cols-3 gap-3">
                         <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/20 rounded-xl p-4 border border-blue-500/30">
                             <div className="flex items-center gap-2 text-blue-400 mb-2">
                                 <Hash size={16} />
@@ -254,20 +245,6 @@ export default function TokenStatsPanel({ onClose }: TokenStatsPanelProps) {
                         )}
                     </div>
 
-                    {/* 价格参考表 */}
-                    <div className="bg-white/5 rounded-xl p-4">
-                        <h3 className="text-sm font-medium text-slate-400 mb-3">💰 模型价格参考 (每 1M tokens)</h3>
-                        <div className="grid grid-cols-2 gap-2 text-xs">
-                            {Object.entries(TOKEN_PRICES).slice(0, 8).map(([model, prices]) => (
-                                <div key={model} className="flex justify-between p-2 bg-black/20 rounded">
-                                    <span className="text-slate-300">{model}</span>
-                                    <span className="text-green-400">
-                                        ${prices.input}/{prices.output > 0 ? `$${prices.output}` : '-'}
-                                    </span>
-                                </div>
-                            ))}
-                        </div>
-                    </div>
                 </div>
             </div>
         </div>
