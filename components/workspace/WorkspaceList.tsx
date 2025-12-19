@@ -90,26 +90,7 @@ function CreateDialog({ isOpen, onClose, onCreate }: CreateDialogProps) {
                         />
                     </div>
 
-                    {/* 类型选择 */}
-                    <div>
-                        <label className="block text-sm text-slate-400 mb-2">类型</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            {(['WORKFLOW', 'PROJECT', 'TASK', 'SANDBOX'] as WorkspaceType[]).map(t => (
-                                <button
-                                    key={t}
-                                    type="button"
-                                    onClick={() => setType(t)}
-                                    className={`flex items-center gap-2 px-3 py-2 rounded-xl border transition-all ${type === t
-                                            ? TYPE_COLORS[t] + ' border-2'
-                                            : 'border-white/10 text-slate-400 hover:border-white/20'
-                                        }`}
-                                >
-                                    {TYPE_ICONS[t]}
-                                    <span className="text-sm">{TYPE_LABELS[t]}</span>
-                                </button>
-                            ))}
-                        </div>
-                    </div>
+                    {/* 类型固定为 WORKFLOW */}
 
                     {/* 描述 */}
                     <div>
@@ -281,21 +262,7 @@ export function WorkspaceList({ onSelectWorkspace }: WorkspaceListProps) {
                 </button>
             </div>
 
-            {/* 筛选 */}
-            <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-                {(['ALL', 'WORKFLOW', 'PROJECT', 'TASK', 'SANDBOX'] as const).map(t => (
-                    <button
-                        key={t}
-                        onClick={() => setFilter(t)}
-                        className={`px-4 py-1.5 rounded-full text-sm whitespace-nowrap transition-colors ${filter === t
-                                ? 'bg-purple-600 text-white'
-                                : 'bg-white/5 text-slate-400 hover:bg-white/10'
-                            }`}
-                    >
-                        {t === 'ALL' ? '全部' : TYPE_LABELS[t]}
-                    </button>
-                ))}
-            </div>
+            {/* 工作区列表标题 - 简化后无需筛选 */}
 
             {/* 错误提示 */}
             {error && (
