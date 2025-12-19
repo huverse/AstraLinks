@@ -28,8 +28,8 @@ interface AuthContextType {
     token: string | null;
     isLoading: boolean;
     isAuthenticated: boolean;
-    login: (username: string, password: string) => Promise<{ success: boolean; error?: string; needsPasswordReset?: boolean; userId?: number }>;
-    register: (username: string, email: string, password: string, invitationCode: string) => Promise<{ success: boolean; error?: string }>;
+    login: (username: string, password: string, turnstileToken?: string) => Promise<{ success: boolean; error?: string; needsPasswordReset?: boolean; userId?: number }>;
+    register: (username: string, email: string, password: string, invitationCode: string, turnstileToken?: string) => Promise<{ success: boolean; error?: string }>;
     resetPassword: (userId: number, username: string, newPassword: string) => Promise<{ success: boolean; error?: string }>;
     logout: () => void;
     // Proxy helper
@@ -128,12 +128,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     }, []);
 
-    const login = async (username: string, password: string) => {
+    const login = async (username: string, password: string, turnstileToken?: string) => {
         try {
             const response = await fetch(`${API_BASE}/api/auth/login`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
+                body: JSON.stringify({ username, password, turnstileToken })
             });
 
             const data = await response.json();
@@ -156,7 +156,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         }
     };
 
-    const register = async (username: string, email: string, password: string, invitationCode: string) => {
+    const register = async (username: string, email: string, password: string, invitationCode: string, turnstileToken?: string) => {
         try {
             // Generate device fingerprint
             const deviceFingerprint = generateFingerprint();
@@ -164,7 +164,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             const response = await fetch(`${API_BASE}/api/auth/register`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, email, password, invitationCode, deviceFingerprint })
+                body: JSON.stringify({ username, email, password, invitationCode, deviceFingerprint, turnstileToken })
             });
 
             const data = await response.json();

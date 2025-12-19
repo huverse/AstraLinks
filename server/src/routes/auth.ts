@@ -7,13 +7,51 @@ import axios from 'axios';
 
 const router = Router();
 
+// Cloudflare Turnstile Secret Key
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '0x4AAAAAACHmC9HzP5-XLQV6vLH5XzmJq3I';
+
+/**
+ * Verify Cloudflare Turnstile token
+ */
+async function verifyTurnstileToken(token: string, ip: string): Promise<{ success: boolean; error?: string }> {
+    try {
+        const response = await axios.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+            secret: TURNSTILE_SECRET_KEY,
+            response: token,
+            remoteip: ip,
+        }, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        if (response.data.success) {
+            return { success: true };
+        } else {
+            console.warn('[Turnstile] Verification failed:', response.data['error-codes']);
+            return { success: false, error: '人机验证失败，请刷新页面重试' };
+        }
+    } catch (error) {
+        console.error('[Turnstile] Verification error:', error);
+        return { success: false, error: '验证服务异常，请稍后重试' };
+    }
+}
+
 /**
  * POST /api/auth/register
  * Register a new user with invitation code (supports both normal and split codes)
  */
 router.post('/register', async (req: Request, res: Response) => {
     try {
-        const { username, email, password, invitationCode, deviceFingerprint } = req.body;
+        const { username, email, password, invitationCode, deviceFingerprint, turnstileToken } = req.body;
+
+        // Verify Turnstile token
+        if (turnstileToken) {
+            const clientIP = req.ip || req.socket.remoteAddress || '';
+            const turnstileResult = await verifyTurnstileToken(turnstileToken, clientIP);
+            if (!turnstileResult.success) {
+                res.status(400).json({ error: turnstileResult.error || '人机验证失败' });
+                return;
+            }
+        }
 
         // Validation
         if (!username || !password || !invitationCode) {
@@ -169,7 +207,17 @@ router.post('/register', async (req: Request, res: Response) => {
  */
 router.post('/login', async (req: Request, res: Response) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, turnstileToken } = req.body;
+
+        // Verify Turnstile token
+        if (turnstileToken) {
+            const clientIP = req.ip || req.socket.remoteAddress || '';
+            const turnstileResult = await verifyTurnstileToken(turnstileToken, clientIP);
+            if (!turnstileResult.success) {
+                res.status(400).json({ error: turnstileResult.error || '人机验证失败' });
+                return;
+            }
+        }
 
         if (!username || !password) {
             res.status(400).json({ error: '请输入用户名和密码' });

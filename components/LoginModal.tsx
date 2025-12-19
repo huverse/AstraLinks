@@ -1,8 +1,28 @@
-import React, { useState, useEffect } from 'react';
-import { X, User, Mail, Lock, Key, Loader2, AlertCircle, CheckCircle, FileText, Shield, Check } from 'lucide-react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { X, User, Mail, Lock, Key, Loader2, AlertCircle, CheckCircle, FileText, Shield, Check, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE } from '../utils/api';
 import MarkdownRenderer from './MarkdownRenderer';
+
+// Cloudflare Turnstile Site Key
+const TURNSTILE_SITE_KEY = '0x4AAAAAACHmC6NQQ8IJpFD8';
+
+// Declare turnstile type for TypeScript
+declare global {
+    interface Window {
+        turnstile?: {
+            render: (element: string | HTMLElement, options: {
+                sitekey: string;
+                callback: (token: string) => void;
+                'error-callback'?: () => void;
+                'expired-callback'?: () => void;
+                theme?: 'light' | 'dark' | 'auto';
+            }) => string;
+            reset: (widgetId: string) => void;
+            remove: (widgetId: string) => void;
+        };
+    }
+}
 
 interface LoginModalProps {
     isOpen: boolean;
@@ -36,6 +56,59 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     const [policyContent, setPolicyContent] = useState<{ title: string, content: string } | null>(null);
     const [loadingPolicy, setLoadingPolicy] = useState(false);
 
+    // Cloudflare Turnstile
+    const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+    const turnstileWidgetId = useRef<string | null>(null);
+    const turnstileContainerRef = useRef<HTMLDivElement>(null);
+
+    // Initialize Turnstile widget
+    useEffect(() => {
+        if (!isOpen || mode === 'resetPassword') return;
+
+        const initTurnstile = () => {
+            if (window.turnstile && turnstileContainerRef.current && !turnstileWidgetId.current) {
+                turnstileWidgetId.current = window.turnstile.render(turnstileContainerRef.current, {
+                    sitekey: TURNSTILE_SITE_KEY,
+                    callback: (token: string) => {
+                        setTurnstileToken(token);
+                    },
+                    'error-callback': () => {
+                        setTurnstileToken(null);
+                        setError('验证失败，请刷新页面重试');
+                    },
+                    'expired-callback': () => {
+                        setTurnstileToken(null);
+                    },
+                    theme: 'auto',
+                });
+            }
+        };
+
+        // Wait for turnstile script to load
+        const checkTurnstile = setInterval(() => {
+            if (window.turnstile) {
+                clearInterval(checkTurnstile);
+                initTurnstile();
+            }
+        }, 100);
+
+        return () => {
+            clearInterval(checkTurnstile);
+            if (turnstileWidgetId.current && window.turnstile) {
+                window.turnstile.remove(turnstileWidgetId.current);
+                turnstileWidgetId.current = null;
+            }
+        };
+    }, [isOpen, mode]);
+
+    // Reset turnstile when mode changes
+    useEffect(() => {
+        if (turnstileWidgetId.current && window.turnstile) {
+            window.turnstile.reset(turnstileWidgetId.current);
+            setTurnstileToken(null);
+        }
+    }, [mode]);
+
     const resetForm = () => {
         setUsername('');
         setEmail('');
@@ -47,6 +120,11 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         setResetUserId(null);
         setResetUsername('');
         setAgreedToTerms(false);
+        setTurnstileToken(null);
+        // Reset turnstile widget
+        if (turnstileWidgetId.current && window.turnstile) {
+            window.turnstile.reset(turnstileWidgetId.current);
+        }
     };
 
     const handleModeSwitch = (newMode: ModalMode) => {
@@ -86,9 +164,15 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
+
+        if (!turnstileToken) {
+            setError('请完成人机验证');
+            return;
+        }
+
         setIsLoading(true);
 
-        const result = await login(username, password);
+        const result = await login(username, password, turnstileToken);
 
         setIsLoading(false);
 
@@ -113,6 +197,11 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         e.preventDefault();
         setError(null);
 
+        if (!turnstileToken) {
+            setError('请完成人机验证');
+            return;
+        }
+
         if (password !== confirmPassword) {
             setError('两次输入的密码不一致');
             return;
@@ -134,7 +223,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         }
 
         setIsLoading(true);
-        const result = await register(username, email, password, invitationCode);
+        const result = await register(username, email, password, invitationCode, turnstileToken);
         setIsLoading(false);
 
         if (result.success) {
@@ -337,10 +426,23 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                         </div>
                     )}
 
+                    {/* Cloudflare Turnstile Widget */}
+                    {mode !== 'resetPassword' && (
+                        <div className="flex flex-col items-center gap-2">
+                            <div ref={turnstileContainerRef} className="cf-turnstile" />
+                            {turnstileToken && (
+                                <div className="flex items-center gap-1 text-xs text-green-500">
+                                    <ShieldCheck size={14} />
+                                    <span>验证通过</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={isLoading}
+                        disabled={isLoading || (mode !== 'resetPassword' && !turnstileToken)}
                         className="w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {isLoading ? (
