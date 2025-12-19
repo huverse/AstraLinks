@@ -108,7 +108,7 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
                 siteEnabled: cachedSiteEnabled === 'true',
                 loginEnabled: cachedLoginEnabled === 'true',
                 siteKey: cachedSiteKey,
-                expiryHours: parseInt(cachedExpiryHours) || 24,
+                expiryHours: cachedExpiryHours !== null ? parseInt(cachedExpiryHours) : 24,
                 cached: true
             });
             return;
@@ -125,7 +125,9 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
         const siteEnabled = settingsMap['turnstile_site_enabled'] === 'true';
         const loginEnabled = settingsMap['turnstile_login_enabled'] === 'true';
         const siteKey = settingsMap['turnstile_site_key'] || '0x4AAAAAACHmC6NQQ8IJpFD8';
-        const expiryHours = parseInt(settingsMap['turnstile_expiry_hours']) || 24;
+        const expiryHours = settingsMap['turnstile_expiry_hours'] !== undefined
+            ? parseInt(settingsMap['turnstile_expiry_hours'])
+            : 24;
 
         // Cache the values
         setCache('turnstile_site_enabled', String(siteEnabled));
