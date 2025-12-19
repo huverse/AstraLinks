@@ -29,16 +29,17 @@ export default function TurnstileGate({ children }: TurnstileGateProps) {
                     const data = await response.json();
                     setSiteEnabled(data.siteEnabled);
                     setSiteKey(data.siteKey);
-                    if (data.expiryHours) {
+                    if (data.expiryHours !== undefined) {
                         setExpiryHours(data.expiryHours);
                     }
 
                     // Check if already verified (with dynamic expiry)
+                    // expiryHours === 0 means "every visit" mode - never use cached verification
                     const stored = sessionStorage.getItem(VERIFIED_KEY);
-                    if (stored && data.siteEnabled) {
+                    if (stored && data.siteEnabled && data.expiryHours > 0) {
                         try {
                             const storedData = JSON.parse(stored);
-                            const expiryMs = (data.expiryHours || DEFAULT_EXPIRY_HOURS) * 60 * 60 * 1000;
+                            const expiryMs = data.expiryHours * 60 * 60 * 1000;
                             if (storedData.timestamp && Date.now() - storedData.timestamp < expiryMs) {
                                 setVerified(true);
                             } else {
@@ -47,6 +48,9 @@ export default function TurnstileGate({ children }: TurnstileGateProps) {
                         } catch {
                             sessionStorage.removeItem(VERIFIED_KEY);
                         }
+                    } else if (data.expiryHours === 0) {
+                        // Every visit mode - clear any stored verification
+                        sessionStorage.removeItem(VERIFIED_KEY);
                     }
                 }
             } catch (err) {
@@ -68,7 +72,10 @@ export default function TurnstileGate({ children }: TurnstileGateProps) {
                     sitekey: siteKey,
                     callback: (token: string) => {
                         // Token received, user verified
-                        sessionStorage.setItem(VERIFIED_KEY, JSON.stringify({ timestamp: Date.now() }));
+                        // Only store in sessionStorage if expiryHours > 0 (not "every visit" mode)
+                        if (expiryHours > 0) {
+                            sessionStorage.setItem(VERIFIED_KEY, JSON.stringify({ timestamp: Date.now() }));
+                        }
                         setVerified(true);
                     },
                     'error-callback': () => {
@@ -108,7 +115,7 @@ export default function TurnstileGate({ children }: TurnstileGateProps) {
                 turnstileWidgetId.current = null;
             }
         };
-    }, [loading, siteEnabled, verified, siteKey]);
+    }, [loading, siteEnabled, verified, siteKey, expiryHours]);
 
     // Loading state
     if (loading) {

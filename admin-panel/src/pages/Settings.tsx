@@ -255,26 +255,70 @@ export default function Settings() {
                             </button>
                         </div>
 
-                        {/* Expiry Hours Input */}
+                        {/* Expiry Mode Selection */}
                         {turnstileSiteEnabled && (
-                            <div className="space-y-2">
+                            <div className="space-y-4 p-4 bg-gray-50 dark:bg-slate-900 rounded-lg">
                                 <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                                    ⏱️ 验证有效期（小时）
+                                    ⏱️ 验证触发时机
                                 </label>
-                                <div className="flex items-center gap-4">
+
+                                {/* Every Visit Option */}
+                                <label className="flex items-center gap-3 cursor-pointer">
                                     <input
-                                        type="number"
-                                        min="1"
-                                        max="720"
-                                        value={turnstileExpiryHours}
-                                        onChange={e => setTurnstileExpiryHours(Math.max(1, Math.min(720, parseInt(e.target.value) || 24)))}
-                                        className="w-32 px-4 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none text-center"
+                                        type="radio"
+                                        name="expiryMode"
+                                        checked={turnstileExpiryHours === 0}
+                                        onChange={() => setTurnstileExpiryHours(0)}
+                                        className="w-4 h-4 text-blue-600"
                                     />
-                                    <span className="text-sm text-gray-500 dark:text-gray-400">
-                                        用户通过验证后，{turnstileExpiryHours} 小时内无需再次验证
-                                    </span>
-                                </div>
-                                <p className="text-xs text-gray-500">建议值：24 小时（1天）至 168 小时（1周）</p>
+                                    <div>
+                                        <span className="font-medium">每次进入网站</span>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">用户每次访问都需要验证</p>
+                                    </div>
+                                </label>
+
+                                {/* Custom Hours Option */}
+                                <label className="flex items-center gap-3 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        name="expiryMode"
+                                        checked={turnstileExpiryHours > 0}
+                                        onChange={() => setTurnstileExpiryHours(24)}
+                                        className="w-4 h-4 text-blue-600"
+                                    />
+                                    <div className="flex-1">
+                                        <span className="font-medium">自定义时间间隔</span>
+                                        <p className="text-xs text-gray-500 dark:text-gray-400">验证通过后一段时间内无需再次验证</p>
+                                    </div>
+                                </label>
+
+                                {/* Custom Hours Input (only show when custom mode selected) */}
+                                {turnstileExpiryHours > 0 && (
+                                    <div className="ml-7 flex items-center gap-3">
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="720"
+                                            value={turnstileExpiryHours}
+                                            onChange={e => setTurnstileExpiryHours(Math.max(1, Math.min(720, parseInt(e.target.value) || 1)))}
+                                            className="w-24 px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none text-center"
+                                        />
+                                        <span className="text-sm text-gray-600 dark:text-gray-300">小时</span>
+                                        <span className="text-xs text-gray-500 dark:text-gray-400">
+                                            ≈ {turnstileExpiryHours >= 24
+                                                ? `${Math.floor(turnstileExpiryHours / 24)} 天 ${turnstileExpiryHours % 24 > 0 ? `${turnstileExpiryHours % 24} 小时` : ''}`
+                                                : `${turnstileExpiryHours} 小时`
+                                            }
+                                        </span>
+                                    </div>
+                                )}
+
+                                <p className="text-xs text-gray-500 mt-2">
+                                    {turnstileExpiryHours === 0
+                                        ? '⚠️ 每次进入模式会增加用户验证负担，建议仅在高安全需求时使用'
+                                        : '建议值：24 小时（1天）至 168 小时（1周）'
+                                    }
+                                </p>
                             </div>
                         )}
 
