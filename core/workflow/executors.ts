@@ -118,9 +118,14 @@ export const executeEndNode: NodeExecutor = async (node, input, context) => {
 
 export const executeAINode: NodeExecutor = async (node, input, context) => {
     let { model, provider, systemPrompt, temperature, maxTokens, apiKey, baseUrl, configSource } = node.data;
+
+    // 新增: 编排模式支持
+    const orchestrationMode = node.data.orchestrationMode || 'basic';
+    const workerAgents = node.data.workerAgents || [];
+
     const workspaceId = context.variables.workspaceId;
 
-    console.log('[AI Node] Starting execution:', { configSource, workspaceId: workspaceId || '(empty)', hasNodeApiKey: !!apiKey });
+    console.log('[AI Node] Starting execution:', { configSource, orchestrationMode, workspaceId: workspaceId || '(empty)', hasNodeApiKey: !!apiKey });
 
     // 如果使用工作区配置，从 API 获取当前活跃配置
     if (configSource === 'workspace') {
@@ -174,6 +179,102 @@ export const executeAINode: NodeExecutor = async (node, input, context) => {
     if (!apiKey) {
         throw new Error('API Key is required. 请在节点配置中填写 API Key 或使用工作区配置。');
     }
+
+    // ============================================
+    // 编排模式处理 (Sequential / Supervisor)
+    // ============================================
+    if (orchestrationMode !== 'basic' && workerAgents.length > 0) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'info',
+            message: `启动 ${orchestrationMode} 编排模式, ${workerAgents.length} 个 Worker Agents`,
+        });
+
+        try {
+            // 动态导入编排器
+            const { runOrchestration } = await import('../agent/orchestrator');
+            const { v4: uuidv4 } = await import('uuid');
+
+            // 将 workerAgents 配置转换为 Agent 对象
+            const agents = workerAgents.map((wa: any, index: number) => ({
+                id: wa.id || uuidv4(),
+                name: wa.name || `Worker ${index + 1}`,
+                role: wa.role || 'custom',
+                description: wa.description || '',
+                systemPrompt: wa.systemPrompt || '',
+                model: wa.model || model,
+                provider: wa.provider || provider,
+                temperature: wa.temperature ?? temperature,
+            }));
+
+            // 准备输入
+            const orchestrationInput = typeof input === 'string' ? input : JSON.stringify(input);
+
+            // 执行编排
+            const task = await runOrchestration(
+                `AI Node Orchestration: ${node.data.label || node.id}`,
+                agents,
+                orchestrationInput,
+                {
+                    mode: orchestrationMode as 'sequential' | 'parallel' | 'supervisor',
+                    apiKey,
+                    baseUrl,
+                    onAgentStart: (agent, index) => {
+                        context.logs.push({
+                            timestamp: Date.now(),
+                            nodeId: node.id,
+                            level: 'debug',
+                            message: `Agent "${agent.name}" 开始执行 (${index + 1}/${agents.length})`,
+                        });
+                    },
+                    onAgentComplete: (agent, result) => {
+                        context.logs.push({
+                            timestamp: Date.now(),
+                            nodeId: node.id,
+                            level: 'debug',
+                            message: `Agent "${agent.name}" 完成: ${result.status}`,
+                        });
+                    },
+                }
+            );
+
+            // 构建反馈
+            context.nodeStates[node.id].feedback = {
+                title: `🤖 ${orchestrationMode.toUpperCase()} 编排完成`,
+                inputSummary: `输入: ${orchestrationInput.length} 字符`,
+                outputSummary: `${agents.length} 个 Agent 执行完成`,
+                details: [
+                    { label: '编排模式', value: orchestrationMode, type: 'text' },
+                    { label: 'Agent 数量', value: String(agents.length), type: 'text' },
+                    { label: '执行状态', value: task.status, type: 'text' },
+                    { label: '总耗时', value: `${(task.endTime || Date.now()) - (task.startTime || Date.now())}ms`, type: 'text' },
+                ],
+            };
+
+            context.logs.push({
+                timestamp: Date.now(),
+                nodeId: node.id,
+                level: 'info',
+                message: `编排完成: ${task.status}`,
+            });
+
+            // 返回最终输出
+            return task.finalOutput;
+        } catch (error: any) {
+            context.logs.push({
+                timestamp: Date.now(),
+                nodeId: node.id,
+                level: 'error',
+                message: `编排执行失败: ${error.message}`,
+            });
+            throw error;
+        }
+    }
+
+    // ============================================
+    // 基础模式: 单次 AI 调用 (原有逻辑)
+    // ============================================
 
     context.logs.push({
         timestamp: Date.now(),
@@ -1460,6 +1561,329 @@ const executeSubWorkflowNode: NodeExecutor = async (node, input, context) => {
 };
 
 // ============================================
+// 图像生成节点执行器
+// ============================================
+
+const executeImageGenNode: NodeExecutor = async (node, input, context) => {
+    let { model, apiKey, baseUrl, configSource, provider } = node.data;
+    const workspaceId = context.variables.workspaceId;
+
+    // 支持 workspace 配置
+    if (configSource === 'workspace' && workspaceId) {
+        try {
+            const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+                ? 'https://astralinks.xyz' : 'http://localhost:3001';
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : '';
+            const configResponse = await fetch(`${API_BASE}/api/workspace-config/${workspaceId}/ai/active`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (configResponse.ok) {
+                const configData = await configResponse.json();
+                if (configData.config) {
+                    apiKey = configData.config.apiKey || apiKey;
+                    baseUrl = configData.config.baseUrl || baseUrl;
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    if (!apiKey) {
+        throw new Error('API Key is required for image generation.');
+    }
+
+    const prompt = typeof input === 'string' ? input : (input?.prompt || JSON.stringify(input));
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `生成图像: ${prompt.slice(0, 50)}...`,
+    });
+
+    try {
+        const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+            ? 'https://astralinks.xyz' : 'http://localhost:3001';
+
+        const response = await fetch(`${API_BASE}/api/proxy/gemini/images`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                apiKey,
+                model: model || 'imagen-3.0-generate-002',
+                prompt,
+                config: {},
+                baseUrl,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Request failed' }));
+            throw new Error(error.error || `Image Generation Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const imageUrl = data.imageUrl || data.image || '';
+
+        context.nodeStates[node.id].feedback = {
+            title: '🖼️ 图像生成完成',
+            inputSummary: `Prompt: ${prompt.slice(0, 100)}...`,
+            outputSummary: imageUrl ? '图像生成成功' : '无图像返回',
+            details: [
+                { label: '模型', value: model || 'imagen-3.0-generate-002', type: 'text' },
+                { label: '图像 URL', value: imageUrl, type: 'link' },
+            ],
+        };
+
+        return { imageUrl, prompt };
+    } catch (error: any) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'error',
+            message: `图像生成失败: ${error.message}`,
+        });
+        throw error;
+    }
+};
+
+// ============================================
+// 视频生成节点执行器
+// ============================================
+
+const executeVideoGenNode: NodeExecutor = async (node, input, context) => {
+    let { model, apiKey, baseUrl, configSource, duration } = node.data;
+    const workspaceId = context.variables.workspaceId;
+
+    // 支持 workspace 配置
+    if (configSource === 'workspace' && workspaceId) {
+        try {
+            const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+                ? 'https://astralinks.xyz' : 'http://localhost:3001';
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : '';
+            const configResponse = await fetch(`${API_BASE}/api/workspace-config/${workspaceId}/ai/active`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (configResponse.ok) {
+                const configData = await configResponse.json();
+                if (configData.config) {
+                    apiKey = configData.config.apiKey || apiKey;
+                    baseUrl = configData.config.baseUrl || baseUrl;
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    if (!apiKey) {
+        throw new Error('API Key is required for video generation.');
+    }
+
+    const prompt = typeof input === 'string' ? input : (input?.prompt || JSON.stringify(input));
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `生成视频: ${prompt.slice(0, 50)}... (可能需要几分钟)`,
+    });
+
+    try {
+        const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+            ? 'https://astralinks.xyz' : 'http://localhost:3001';
+
+        const response = await fetch(`${API_BASE}/api/proxy/gemini/videos`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                apiKey,
+                model: model || 'veo-3.1-fast-generate-preview',
+                prompt,
+                config: { durationSeconds: duration || 5 },
+                baseUrl,
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Request failed' }));
+            throw new Error(error.error || `Video Generation Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const videoUrl = data.videoUrl || data.video || '';
+
+        context.nodeStates[node.id].feedback = {
+            title: '🎬 视频生成完成',
+            inputSummary: `Prompt: ${prompt.slice(0, 100)}...`,
+            outputSummary: videoUrl ? '视频生成成功' : '无视频返回',
+            details: [
+                { label: '模型', value: model || 'veo-3.1-fast-generate-preview', type: 'text' },
+                { label: '时长', value: `${duration || 5}秒`, type: 'text' },
+                { label: '视频 URL', value: videoUrl, type: 'link' },
+            ],
+        };
+
+        return { videoUrl, prompt, duration };
+    } catch (error: any) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'error',
+            message: `视频生成失败: ${error.message}`,
+        });
+        throw error;
+    }
+};
+
+// ============================================
+// 语音合成节点执行器 (TTS)
+// ============================================
+
+const executeAudioTTSNode: NodeExecutor = async (node, input, context) => {
+    let { model, apiKey, baseUrl, configSource, voice } = node.data;
+    const workspaceId = context.variables.workspaceId;
+
+    // 支持 workspace 配置
+    if (configSource === 'workspace' && workspaceId) {
+        try {
+            const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+                ? 'https://astralinks.xyz' : 'http://localhost:3001';
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : '';
+            const configResponse = await fetch(`${API_BASE}/api/workspace-config/${workspaceId}/ai/active`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (configResponse.ok) {
+                const configData = await configResponse.json();
+                if (configData.config) {
+                    apiKey = configData.config.apiKey || apiKey;
+                    baseUrl = configData.config.baseUrl || baseUrl;
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    if (!apiKey) {
+        throw new Error('API Key is required for TTS.');
+    }
+
+    const text = typeof input === 'string' ? input : (input?.text || JSON.stringify(input));
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `语音合成: ${text.slice(0, 50)}...`,
+    });
+
+    try {
+        const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
+            ? 'https://astralinks.xyz' : 'http://localhost:3001';
+
+        const response = await fetch(`${API_BASE}/api/proxy/openai/audio/speech`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                apiKey,
+                baseUrl,
+                model: model || 'tts-1',
+                input: text,
+                voice: voice || 'alloy',
+            }),
+        });
+
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ error: 'Request failed' }));
+            throw new Error(error.error || `TTS Error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        const audioUrl = data.audioUrl || data.audio || '';
+
+        context.nodeStates[node.id].feedback = {
+            title: '🔊 语音合成完成',
+            inputSummary: `文本: ${text.slice(0, 100)}...`,
+            outputSummary: audioUrl ? '语音生成成功' : '无音频返回',
+            details: [
+                { label: '模型', value: model || 'tts-1', type: 'text' },
+                { label: '声音', value: voice || 'alloy', type: 'text' },
+                { label: '音频 URL', value: audioUrl, type: 'link' },
+            ],
+        };
+
+        return { audioUrl, text, voice };
+    } catch (error: any) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'error',
+            message: `语音合成失败: ${error.message}`,
+        });
+        throw error;
+    }
+};
+
+// ============================================
+// 合并节点执行器 (Merge/Join)
+// ============================================
+
+const executeMergeNode: NodeExecutor = async (node, input, context) => {
+    const {
+        mergeStrategy = 'array',  // 'array' | 'object' | 'text' | 'first' | 'last'
+        textSeparator = '\n---\n'
+    } = node.data;
+
+    context.logs.push({
+        timestamp: Date.now(),
+        nodeId: node.id,
+        level: 'info',
+        message: `执行合并节点: 策略=${mergeStrategy}`,
+    });
+
+    // 如果输入不是数组（非并行分支输入），直接透传
+    if (!Array.isArray(input)) {
+        context.logs.push({
+            timestamp: Date.now(),
+            nodeId: node.id,
+            level: 'debug',
+            message: '输入非数组，直接透传',
+        });
+        return input;
+    }
+
+    let result: any;
+
+    switch (mergeStrategy) {
+        case 'array':
+            result = input;
+            break;
+        case 'object':
+            result = Object.assign({}, ...input.filter(i => typeof i === 'object' && i !== null));
+            break;
+        case 'text':
+            result = input.map(i => typeof i === 'string' ? i : JSON.stringify(i)).join(textSeparator);
+            break;
+        case 'first':
+            result = input[0];
+            break;
+        case 'last':
+            result = input[input.length - 1];
+            break;
+        default:
+            result = input;
+    }
+
+    context.nodeStates[node.id].feedback = {
+        title: '⚙️ 合并完成',
+        inputSummary: `${input.length} 个分支输入`,
+        outputSummary: `策略: ${mergeStrategy}`,
+        details: [
+            { label: '输入数量', value: String(input.length), type: 'text' },
+            { label: '合并策略', value: mergeStrategy, type: 'text' },
+        ],
+    };
+
+    return result;
+};
+
+// ============================================
 // 执行器映射
 // ============================================
 
@@ -1482,5 +1906,11 @@ export const nodeExecutors: Record<string, NodeExecutor> = {
     loop: executeLoopNode,
     parallel: executeParallelNode,
     subworkflow: executeSubWorkflowNode,
+    // 多模态节点
+    image_gen: executeImageGenNode,
+    video_gen: executeVideoGenNode,
+    audio_tts: executeAudioTTSNode,
+    // 控制节点
+    merge: executeMergeNode,
 };
 

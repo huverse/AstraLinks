@@ -560,6 +560,132 @@ export const KnowledgeNode = memo(({ data, selected }: NodeProps<KnowledgeNodeDa
 KnowledgeNode.displayName = 'KnowledgeNode';
 
 // ============================================
+// 图像生成节点
+// ============================================
+
+interface ImageGenNodeData {
+    label: string;
+    model?: string;
+}
+
+export const ImageGenNode = memo(({ data, selected }: NodeProps<ImageGenNodeData>) => (
+    <div className={`${baseNodeStyle} bg-gradient-to-br from-pink-500/90 to-rose-600/90 border-pink-400/50 ${selected ? 'ring-2 ring-pink-400' : ''}`}>
+        <Handle type="target" position={Position.Top} style={handleStyle} className="!bg-pink-300" />
+
+        <div className="p-3">
+            <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 bg-white/20 rounded-lg">
+                    <span className="text-white text-sm">🖼️</span>
+                </div>
+                <span className="font-semibold text-white text-sm">{data.label || '图像生成'}</span>
+            </div>
+            <div className="text-xs text-pink-200 bg-white/10 px-2 py-1 rounded-lg">
+                {data.model || 'Imagen 3'}
+            </div>
+        </div>
+
+        <Handle type="source" position={Position.Bottom} style={handleStyle} className="!bg-pink-300" />
+    </div>
+));
+
+ImageGenNode.displayName = 'ImageGenNode';
+
+// ============================================
+// 视频生成节点
+// ============================================
+
+interface VideoGenNodeData {
+    label: string;
+    model?: string;
+    duration?: number;
+}
+
+export const VideoGenNode = memo(({ data, selected }: NodeProps<VideoGenNodeData>) => (
+    <div className={`${baseNodeStyle} bg-gradient-to-br from-rose-500/90 to-red-600/90 border-rose-400/50 ${selected ? 'ring-2 ring-rose-400' : ''}`}>
+        <Handle type="target" position={Position.Top} style={handleStyle} className="!bg-rose-300" />
+
+        <div className="p-3">
+            <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 bg-white/20 rounded-lg">
+                    <span className="text-white text-sm">🎬</span>
+                </div>
+                <span className="font-semibold text-white text-sm">{data.label || '视频生成'}</span>
+            </div>
+            <div className="text-xs text-rose-200 bg-white/10 px-2 py-1 rounded-lg">
+                {data.model || 'Veo'} · {data.duration || 5}s
+            </div>
+        </div>
+
+        <Handle type="source" position={Position.Bottom} style={handleStyle} className="!bg-rose-300" />
+    </div>
+));
+
+VideoGenNode.displayName = 'VideoGenNode';
+
+// ============================================
+// 语音合成节点 (TTS)
+// ============================================
+
+interface AudioTTSNodeData {
+    label: string;
+    model?: string;
+    voice?: string;
+}
+
+export const AudioTTSNode = memo(({ data, selected }: NodeProps<AudioTTSNodeData>) => (
+    <div className={`${baseNodeStyle} bg-gradient-to-br from-indigo-500/90 to-violet-600/90 border-indigo-400/50 ${selected ? 'ring-2 ring-indigo-400' : ''}`}>
+        <Handle type="target" position={Position.Top} style={handleStyle} className="!bg-indigo-300" />
+
+        <div className="p-3">
+            <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 bg-white/20 rounded-lg">
+                    <span className="text-white text-sm">🔊</span>
+                </div>
+                <span className="font-semibold text-white text-sm">{data.label || '语音合成'}</span>
+            </div>
+            <div className="text-xs text-indigo-200 bg-white/10 px-2 py-1 rounded-lg">
+                {data.model || 'TTS-1'} · {data.voice || 'alloy'}
+            </div>
+        </div>
+
+        <Handle type="source" position={Position.Bottom} style={handleStyle} className="!bg-indigo-300" />
+    </div>
+));
+
+AudioTTSNode.displayName = 'AudioTTSNode';
+
+// ============================================
+// 合并/汇聚节点
+// ============================================
+
+interface MergeNodeData {
+    label: string;
+    mergeStrategy?: 'array' | 'object' | 'text' | 'first' | 'last';
+}
+
+export const MergeNode = memo(({ data, selected }: NodeProps<MergeNodeData>) => (
+    <div className={`${baseNodeStyle} bg-gradient-to-br from-cyan-500/90 to-teal-600/90 border-cyan-400/50 ${selected ? 'ring-2 ring-cyan-400' : ''}`}>
+        <Handle type="target" position={Position.Top} style={handleStyle} className="!bg-cyan-300" />
+
+        <div className="p-3">
+            <div className="flex items-center gap-2 mb-2">
+                <div className="p-1.5 bg-white/20 rounded-lg">
+                    <span className="text-white text-sm">⚙️</span>
+                </div>
+                <span className="font-semibold text-white text-sm">{data.label || '汇聚'}</span>
+            </div>
+            <div className="text-xs text-cyan-200 bg-white/10 px-2 py-1 rounded-lg">
+                策略: {data.mergeStrategy || 'array'}
+            </div>
+        </div>
+
+        <Handle type="source" position={Position.Bottom} style={handleStyle} className="!bg-cyan-300" />
+    </div>
+));
+
+MergeNode.displayName = 'MergeNode';
+
+// ============================================
 // 导出节点类型映射
 // ============================================
 
@@ -571,10 +697,15 @@ export const nodeTypes = {
     ai: AINode,
     // 知识库节点 (RAG)
     knowledge: KnowledgeNode,
+    // 多模态节点
+    image_gen: ImageGenNode,
+    video_gen: VideoGenNode,
+    audio_tts: AudioTTSNode,
     // 控制流节点
     condition: ConditionNode,
     loop: LoopNode,
     parallel: ParallelNode,
+    merge: MergeNode,
     // 数据节点
     input: InputNode,
     output: OutputNode,

@@ -1,10 +1,3 @@
-/**
- * 工作流可视化编辑器
- * 
- * @module components/workflow/WorkflowEditor
- * @description 基于 React Flow 的工作流可视化编辑器，支持执行和状态查看
- */
-
 import React, { useCallback, useState, useEffect } from 'react';
 import ReactFlow, {
     Background,
@@ -24,7 +17,8 @@ import {
     Bot, GitBranch, Play, Square, FileInput,
     FileOutput, Zap, Code, Save, Trash2, StopCircle,
     Loader2, CheckCircle, XCircle, AlertCircle, X,
-    Globe, Repeat, Plug, ArrowLeftRight, Timer, GitMerge, Workflow, Database
+    Globe, Repeat, Plug, ArrowLeftRight, Timer, GitMerge, Workflow, Database,
+    Image, Video, Music, Merge
 } from 'lucide-react';
 import { nodeTypes, NodeType } from './nodes';
 import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
@@ -52,10 +46,15 @@ const nodeToolItems: NodeToolItem[] = [
     { type: 'ai', label: 'AI', icon: <Bot size={16} />, color: 'bg-purple-500' },
     // 知识库节点 (RAG)
     { type: 'knowledge', label: '知识库', icon: <Database size={16} />, color: 'bg-blue-500' },
+    // 多模态节点
+    { type: 'image_gen', label: '图像生成', icon: <Image size={16} />, color: 'bg-pink-500' },
+    { type: 'video_gen', label: '视频生成', icon: <Video size={16} />, color: 'bg-rose-500' },
+    { type: 'audio_tts', label: '语音合成', icon: <Music size={16} />, color: 'bg-indigo-500' },
     // 控制流节点
     { type: 'condition', label: '条件', icon: <GitBranch size={16} />, color: 'bg-amber-500' },
     { type: 'loop', label: '循环', icon: <Repeat size={16} />, color: 'bg-yellow-500' },
     { type: 'parallel', label: '并行', icon: <GitMerge size={16} />, color: 'bg-sky-500' },
+    { type: 'merge', label: '汇聚', icon: <Merge size={16} />, color: 'bg-cyan-600' },
     // 数据节点
     { type: 'input', label: '输入', icon: <FileInput size={16} />, color: 'bg-cyan-500' },
     { type: 'output', label: '输出', icon: <FileOutput size={16} />, color: 'bg-teal-500' },
@@ -787,6 +786,122 @@ export function WorkflowEditor({
                                         {selectedNode.data?.configSource === 'workspace' && (
                                             <div className="p-2 bg-purple-900/30 border border-purple-500/30 rounded-lg">
                                                 <p className="text-xs text-purple-300">将使用AI配置中心的当前配置 (模型、API Key等)</p>
+                                            </div>
+                                        )}
+
+                                        {/* 编排模式选择器 */}
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">编排模式</label>
+                                            <select
+                                                value={selectedNode.data?.orchestrationMode || 'basic'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, orchestrationMode: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, orchestrationMode: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="basic">🔹 单次调用 (Basic)</option>
+                                                <option value="sequential">🔗 顺序链 (Sequential)</option>
+                                                <option value="supervisor">👔 监督者模式 (Supervisor)</option>
+                                            </select>
+                                            <p className="text-[10px] text-slate-500 mt-1">
+                                                {selectedNode.data?.orchestrationMode === 'sequential' && '多个 Agent 按顺序执行，前一个输出作为后一个输入'}
+                                                {selectedNode.data?.orchestrationMode === 'supervisor' && '主 Agent 分配任务，Worker Agents 并行执行后汇总'}
+                                                {(!selectedNode.data?.orchestrationMode || selectedNode.data?.orchestrationMode === 'basic') && '单个 AI 调用，使用系统提示词和用户输入'}
+                                            </p>
+                                        </div>
+
+                                        {/* Worker Agent 配置 (仅非 basic 模式显示) */}
+                                        {selectedNode.data?.orchestrationMode && selectedNode.data.orchestrationMode !== 'basic' && (
+                                            <div className="space-y-2">
+                                                <div className="flex items-center justify-between">
+                                                    <label className="text-xs text-slate-400">Worker Agents</label>
+                                                    <button
+                                                        onClick={() => {
+                                                            const currentAgents = selectedNode.data?.workerAgents || [];
+                                                            const newAgent = {
+                                                                id: `agent-${Date.now()}`,
+                                                                name: `Agent ${currentAgents.length + 1}`,
+                                                                role: 'custom',
+                                                                systemPrompt: '',
+                                                            };
+                                                            const updated = nodes.map(n =>
+                                                                n.id === selectedNode.id
+                                                                    ? { ...n, data: { ...n.data, workerAgents: [...currentAgents, newAgent] } }
+                                                                    : n
+                                                            );
+                                                            setNodes(updated);
+                                                            setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, workerAgents: [...currentAgents, newAgent] } });
+                                                        }}
+                                                        className="text-xs px-2 py-1 bg-purple-600 hover:bg-purple-500 text-white rounded"
+                                                    >
+                                                        + 添加 Agent
+                                                    </button>
+                                                </div>
+
+                                                {(selectedNode.data?.workerAgents || []).map((agent: any, index: number) => (
+                                                    <div key={agent.id || index} className="p-2 bg-slate-900/50 border border-slate-700 rounded-lg space-y-2">
+                                                        <div className="flex items-center justify-between">
+                                                            <input
+                                                                type="text"
+                                                                value={agent.name || ''}
+                                                                onChange={(e) => {
+                                                                    const agents = [...(selectedNode.data?.workerAgents || [])];
+                                                                    agents[index] = { ...agents[index], name: e.target.value };
+                                                                    const updated = nodes.map(n =>
+                                                                        n.id === selectedNode.id
+                                                                            ? { ...n, data: { ...n.data, workerAgents: agents } }
+                                                                            : n
+                                                                    );
+                                                                    setNodes(updated);
+                                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, workerAgents: agents } });
+                                                                }}
+                                                                placeholder="Agent 名称"
+                                                                className="flex-1 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white"
+                                                            />
+                                                            <button
+                                                                onClick={() => {
+                                                                    const agents = (selectedNode.data?.workerAgents || []).filter((_: any, i: number) => i !== index);
+                                                                    const updated = nodes.map(n =>
+                                                                        n.id === selectedNode.id
+                                                                            ? { ...n, data: { ...n.data, workerAgents: agents } }
+                                                                            : n
+                                                                    );
+                                                                    setNodes(updated);
+                                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, workerAgents: agents } });
+                                                                }}
+                                                                className="ml-2 text-red-400 hover:text-red-300"
+                                                            >
+                                                                <X size={14} />
+                                                            </button>
+                                                        </div>
+                                                        <textarea
+                                                            value={agent.systemPrompt || ''}
+                                                            onChange={(e) => {
+                                                                const agents = [...(selectedNode.data?.workerAgents || [])];
+                                                                agents[index] = { ...agents[index], systemPrompt: e.target.value };
+                                                                const updated = nodes.map(n =>
+                                                                    n.id === selectedNode.id
+                                                                        ? { ...n, data: { ...n.data, workerAgents: agents } }
+                                                                        : n
+                                                                );
+                                                                setNodes(updated);
+                                                                setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, workerAgents: agents } });
+                                                            }}
+                                                            placeholder="系统提示词..."
+                                                            className="w-full h-12 px-2 py-1 bg-slate-800 border border-slate-600 rounded text-xs text-white resize-none"
+                                                        />
+                                                    </div>
+                                                ))}
+
+                                                {(!selectedNode.data?.workerAgents || selectedNode.data.workerAgents.length === 0) && (
+                                                    <p className="text-xs text-slate-500 italic">点击 "+ 添加 Agent" 配置 Worker Agents</p>
+                                                )}
                                             </div>
                                         )}
 
