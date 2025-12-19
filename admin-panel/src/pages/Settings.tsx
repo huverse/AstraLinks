@@ -13,6 +13,7 @@ export default function Settings() {
     const [turnstileSiteEnabled, setTurnstileSiteEnabled] = useState(false);
     const [turnstileLoginEnabled, setTurnstileLoginEnabled] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('0x4AAAAAACHmC6NQQ8IJpFD8');
+    const [turnstileExpiryHours, setTurnstileExpiryHours] = useState(24);
 
     const loadSettings = async () => {
         setLoading(true);
@@ -25,15 +26,19 @@ export default function Settings() {
             setPrivacyContent(privacyData.setting?.setting_value || '');
 
             // Load security settings
-            const [siteEnabled, loginEnabled, siteKey] = await Promise.all([
+            const [siteEnabled, loginEnabled, siteKey, expiryHours] = await Promise.all([
                 adminAPI.getSetting('turnstile_site_enabled'),
                 adminAPI.getSetting('turnstile_login_enabled'),
-                adminAPI.getSetting('turnstile_site_key')
+                adminAPI.getSetting('turnstile_site_key'),
+                adminAPI.getSetting('turnstile_expiry_hours')
             ]);
             setTurnstileSiteEnabled(siteEnabled.setting?.setting_value === 'true');
             setTurnstileLoginEnabled(loginEnabled.setting?.setting_value === 'true');
             if (siteKey.setting?.setting_value) {
                 setTurnstileSiteKey(siteKey.setting.setting_value);
+            }
+            if (expiryHours.setting?.setting_value) {
+                setTurnstileExpiryHours(parseInt(expiryHours.setting.setting_value) || 24);
             }
         } catch (err) {
             console.error('Failed to load settings:', err);
@@ -55,7 +60,8 @@ export default function Settings() {
                 await Promise.all([
                     adminAPI.updateSetting('turnstile_site_enabled', String(turnstileSiteEnabled)),
                     adminAPI.updateSetting('turnstile_login_enabled', String(turnstileLoginEnabled)),
-                    adminAPI.updateSetting('turnstile_site_key', turnstileSiteKey)
+                    adminAPI.updateSetting('turnstile_site_key', turnstileSiteKey),
+                    adminAPI.updateSetting('turnstile_expiry_hours', String(turnstileExpiryHours))
                 ]);
             }
             alert('保存成功');
@@ -248,6 +254,29 @@ export default function Settings() {
                                     }`} />
                             </button>
                         </div>
+
+                        {/* Expiry Hours Input */}
+                        {turnstileSiteEnabled && (
+                            <div className="space-y-2">
+                                <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                    ⏱️ 验证有效期（小时）
+                                </label>
+                                <div className="flex items-center gap-4">
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="720"
+                                        value={turnstileExpiryHours}
+                                        onChange={e => setTurnstileExpiryHours(Math.max(1, Math.min(720, parseInt(e.target.value) || 24)))}
+                                        className="w-32 px-4 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none text-center"
+                                    />
+                                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                                        用户通过验证后，{turnstileExpiryHours} 小时内无需再次验证
+                                    </span>
+                                </div>
+                                <p className="text-xs text-gray-500">建议值：24 小时（1天）至 168 小时（1周）</p>
+                            </div>
+                        )}
 
                         {/* Warning */}
                         {turnstileSiteEnabled && (

@@ -101,12 +101,14 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
         const cachedSiteEnabled = getCached('turnstile_site_enabled');
         const cachedLoginEnabled = getCached('turnstile_login_enabled');
         const cachedSiteKey = getCached('turnstile_site_key');
+        const cachedExpiryHours = getCached('turnstile_expiry_hours');
 
-        if (cachedSiteEnabled !== null && cachedLoginEnabled !== null && cachedSiteKey !== null) {
+        if (cachedSiteEnabled !== null && cachedLoginEnabled !== null && cachedSiteKey !== null && cachedExpiryHours !== null) {
             res.json({
                 siteEnabled: cachedSiteEnabled === 'true',
                 loginEnabled: cachedLoginEnabled === 'true',
                 siteKey: cachedSiteKey,
+                expiryHours: parseInt(cachedExpiryHours) || 24,
                 cached: true
             });
             return;
@@ -114,7 +116,7 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
 
         const [settings] = await pool.execute<RowDataPacket[]>(
             `SELECT setting_key, setting_value FROM site_settings 
-             WHERE setting_key IN ('turnstile_site_enabled', 'turnstile_login_enabled', 'turnstile_site_key')`
+             WHERE setting_key IN ('turnstile_site_enabled', 'turnstile_login_enabled', 'turnstile_site_key', 'turnstile_expiry_hours')`
         );
 
         const settingsMap: Record<string, string> = {};
@@ -123,13 +125,15 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
         const siteEnabled = settingsMap['turnstile_site_enabled'] === 'true';
         const loginEnabled = settingsMap['turnstile_login_enabled'] === 'true';
         const siteKey = settingsMap['turnstile_site_key'] || '0x4AAAAAACHmC6NQQ8IJpFD8';
+        const expiryHours = parseInt(settingsMap['turnstile_expiry_hours']) || 24;
 
         // Cache the values
         setCache('turnstile_site_enabled', String(siteEnabled));
         setCache('turnstile_login_enabled', String(loginEnabled));
         setCache('turnstile_site_key', siteKey);
+        setCache('turnstile_expiry_hours', String(expiryHours));
 
-        res.json({ siteEnabled, loginEnabled, siteKey });
+        res.json({ siteEnabled, loginEnabled, siteKey, expiryHours });
     } catch (error: any) {
         console.error('Get Turnstile settings error:', error);
         res.status(500).json({ error: 'Failed to fetch Turnstile settings' });

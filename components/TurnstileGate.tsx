@@ -8,35 +8,19 @@ interface TurnstileGateProps {
 }
 
 const VERIFIED_KEY = 'turnstile_site_verified';
-const VERIFIED_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours
+const DEFAULT_EXPIRY_HOURS = 24;
 
 export default function TurnstileGate({ children }: TurnstileGateProps) {
     const [loading, setLoading] = useState(true);
     const [siteEnabled, setSiteEnabled] = useState(false);
     const [siteKey, setSiteKey] = useState('');
+    const [expiryHours, setExpiryHours] = useState(DEFAULT_EXPIRY_HOURS);
     const [verified, setVerified] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const turnstileWidgetId = useRef<string | null>(null);
     const turnstileContainerRef = useRef<HTMLDivElement>(null);
 
-    // Check if already verified (from sessionStorage)
-    useEffect(() => {
-        const stored = sessionStorage.getItem(VERIFIED_KEY);
-        if (stored) {
-            try {
-                const data = JSON.parse(stored);
-                if (data.timestamp && Date.now() - data.timestamp < VERIFIED_EXPIRY) {
-                    setVerified(true);
-                } else {
-                    sessionStorage.removeItem(VERIFIED_KEY);
-                }
-            } catch {
-                sessionStorage.removeItem(VERIFIED_KEY);
-            }
-        }
-    }, []);
-
-    // Fetch Turnstile settings
+    // Fetch Turnstile settings first
     useEffect(() => {
         const fetchSettings = async () => {
             try {
@@ -45,6 +29,25 @@ export default function TurnstileGate({ children }: TurnstileGateProps) {
                     const data = await response.json();
                     setSiteEnabled(data.siteEnabled);
                     setSiteKey(data.siteKey);
+                    if (data.expiryHours) {
+                        setExpiryHours(data.expiryHours);
+                    }
+
+                    // Check if already verified (with dynamic expiry)
+                    const stored = sessionStorage.getItem(VERIFIED_KEY);
+                    if (stored && data.siteEnabled) {
+                        try {
+                            const storedData = JSON.parse(stored);
+                            const expiryMs = (data.expiryHours || DEFAULT_EXPIRY_HOURS) * 60 * 60 * 1000;
+                            if (storedData.timestamp && Date.now() - storedData.timestamp < expiryMs) {
+                                setVerified(true);
+                            } else {
+                                sessionStorage.removeItem(VERIFIED_KEY);
+                            }
+                        } catch {
+                            sessionStorage.removeItem(VERIFIED_KEY);
+                        }
+                    }
                 }
             } catch (err) {
                 console.error('Failed to fetch Turnstile settings:', err);
