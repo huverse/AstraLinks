@@ -58,17 +58,39 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
 
     // Cloudflare Turnstile
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+    const [turnstileLoginEnabled, setTurnstileLoginEnabled] = useState(true); // Default to enabled for safety
+    const [turnstileSiteKey, setTurnstileSiteKey] = useState(TURNSTILE_SITE_KEY);
     const turnstileWidgetId = useRef<string | null>(null);
     const turnstileContainerRef = useRef<HTMLDivElement>(null);
 
-    // Initialize Turnstile widget
+    // Fetch Turnstile settings from API
     useEffect(() => {
-        if (!isOpen || mode === 'resetPassword') return;
+        const fetchTurnstileSettings = async () => {
+            try {
+                const response = await fetch('/api/settings/public/turnstile');
+                if (response.ok) {
+                    const data = await response.json();
+                    setTurnstileLoginEnabled(data.loginEnabled);
+                    if (data.siteKey) {
+                        setTurnstileSiteKey(data.siteKey);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to fetch Turnstile settings:', err);
+                // Keep default (enabled) if fetch fails
+            }
+        };
+        fetchTurnstileSettings();
+    }, []);
+
+    // Initialize Turnstile widget (only if login Turnstile is enabled)
+    useEffect(() => {
+        if (!isOpen || mode === 'resetPassword' || !turnstileLoginEnabled) return;
 
         const initTurnstile = () => {
             if (window.turnstile && turnstileContainerRef.current && !turnstileWidgetId.current) {
                 turnstileWidgetId.current = window.turnstile.render(turnstileContainerRef.current, {
-                    sitekey: TURNSTILE_SITE_KEY,
+                    sitekey: turnstileSiteKey,
                     callback: (token: string) => {
                         setTurnstileToken(token);
                     },
@@ -99,7 +121,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                 turnstileWidgetId.current = null;
             }
         };
-    }, [isOpen, mode]);
+    }, [isOpen, mode, turnstileLoginEnabled, turnstileSiteKey]);
 
     // Reset turnstile when mode changes
     useEffect(() => {
@@ -165,14 +187,14 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         e.preventDefault();
         setError(null);
 
-        if (!turnstileToken) {
+        if (turnstileLoginEnabled && !turnstileToken) {
             setError('请完成人机验证');
             return;
         }
 
         setIsLoading(true);
 
-        const result = await login(username, password, turnstileToken);
+        const result = await login(username, password, turnstileLoginEnabled ? turnstileToken : undefined);
 
         setIsLoading(false);
 
@@ -197,7 +219,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         e.preventDefault();
         setError(null);
 
-        if (!turnstileToken) {
+        if (turnstileLoginEnabled && !turnstileToken) {
             setError('请完成人机验证');
             return;
         }
@@ -223,7 +245,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         }
 
         setIsLoading(true);
-        const result = await register(username, email, password, invitationCode, turnstileToken);
+        const result = await register(username, email, password, invitationCode, turnstileLoginEnabled ? turnstileToken : undefined);
         setIsLoading(false);
 
         if (result.success) {
@@ -427,7 +449,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     )}
 
                     {/* Cloudflare Turnstile Widget */}
-                    {mode !== 'resetPassword' && (
+                    {/* Cloudflare Turnstile Widget */}
+                    {mode !== 'resetPassword' && turnstileLoginEnabled && (
                         <div className="flex flex-col items-center gap-2">
                             <div ref={turnstileContainerRef} className="cf-turnstile" />
                             {turnstileToken && (
@@ -442,7 +465,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={isLoading || (mode !== 'resetPassword' && !turnstileToken)}
+                        disabled={isLoading || (mode !== 'resetPassword' && turnstileLoginEnabled && !turnstileToken)}
                         className="w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {isLoading ? (
