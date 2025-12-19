@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { X, User, Mail, Lock, Key, Loader2, AlertCircle, CheckCircle, FileText, Shield, Check, ShieldCheck } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { API_BASE } from '../utils/api';
