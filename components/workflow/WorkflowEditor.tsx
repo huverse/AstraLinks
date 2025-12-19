@@ -120,10 +120,10 @@ export function WorkflowEditor({
     const [mcpList, setMcpList] = useState<MCPRegistryEntry[]>([]);
     const [showTemplates, setShowTemplates] = useState(false);
 
-    // 从 API 获取工作流的真实 workspaceId
+    // 从 API 获取工作流数据（包括 nodes 和 edges）
     useEffect(() => {
-        if (!propWorkspaceId && workflowId) {
-            const fetchWorkspaceId = async () => {
+        if (workflowId) {
+            const fetchWorkflow = async () => {
                 try {
                     const token = typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : null;
                     const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
@@ -138,18 +138,28 @@ export function WorkflowEditor({
 
                     if (response.ok) {
                         const data = await response.json();
-                        if (data.workspaceId) {
-                            console.log('[WorkflowEditor] Resolved workspaceId:', data.workspaceId);
+                        console.log('[WorkflowEditor] Loaded workflow:', data.id, 'nodes:', data.nodes?.length, 'edges:', data.edges?.length);
+
+                        // 更新 workspaceId
+                        if (data.workspaceId && !propWorkspaceId) {
                             setResolvedWorkspaceId(data.workspaceId);
+                        }
+
+                        // 更新 nodes 和 edges（如果存在）
+                        if (data.nodes && Array.isArray(data.nodes) && data.nodes.length > 0) {
+                            setNodes(data.nodes);
+                        }
+                        if (data.edges && Array.isArray(data.edges)) {
+                            setEdges(data.edges);
                         }
                     }
                 } catch (error) {
-                    console.error('[WorkflowEditor] Failed to fetch workspaceId:', error);
+                    console.error('[WorkflowEditor] Failed to fetch workflow:', error);
                 }
             };
-            fetchWorkspaceId();
+            fetchWorkflow();
         }
-    }, [workflowId, propWorkspaceId]);
+    }, [workflowId, propWorkspaceId, setNodes, setEdges]);
 
     // 加载 MCP 列表
     useEffect(() => {
