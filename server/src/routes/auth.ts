@@ -7,13 +7,34 @@ import axios from 'axios';
 
 const router = Router();
 
-// Cloudflare Turnstile Secret Key
-const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY || '0x4AAAAAACHmC9HzP5-XLQV6vLH5XzmJq3I';
+// Cloudflare Turnstile Secret Key (from environment only - no hardcoded fallback for security)
+const TURNSTILE_SECRET_KEY = process.env.TURNSTILE_SECRET_KEY;
+
+/**
+ * Check if login Turnstile is enabled from database settings
+ */
+async function isTurnstileLoginEnabled(): Promise<boolean> {
+    try {
+        const [settings] = await pool.execute<RowDataPacket[]>(
+            `SELECT setting_value FROM site_settings WHERE setting_key = 'turnstile_login_enabled'`
+        );
+        return settings.length > 0 && settings[0].setting_value === 'true';
+    } catch (error) {
+        console.error('[Turnstile] Failed to check settings:', error);
+        return false; // Default to disabled if error
+    }
+}
 
 /**
  * Verify Cloudflare Turnstile token
  */
 async function verifyTurnstileToken(token: string, ip: string): Promise<{ success: boolean; error?: string }> {
+    // If no secret key configured, skip verification
+    if (!TURNSTILE_SECRET_KEY) {
+        console.warn('[Turnstile] No secret key configured, skipping verification');
+        return { success: true };
+    }
+
     try {
         const response = await axios.post('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
             secret: TURNSTILE_SECRET_KEY,

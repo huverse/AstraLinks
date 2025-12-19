@@ -1,0 +1,9 @@
+# Git-crypt encrypted files
+# These files will be automatically encrypted when committed
+
+# Server environment file (if you choose to track it)
+server/.env filter=git-crypt diff=git-crypt
+
+# Other sensitive config files
+*.secret filter=git-crypt diff=git-crypt
+secrets/** filter=git-crypt diff=git-crypt

@@ -12,6 +12,7 @@ import LoginModal from './components/LoginModal';
 import FeedbackWidget from './components/FeedbackWidget';
 import ProfileCenter from './components/ProfileCenter';
 import AnnouncementBanner from './components/AnnouncementBanner';
+import TurnstileGate from './components/TurnstileGate';
 import { WorkspaceSwitch, WorkspaceList, WorkspaceLayout, AppMode } from './components/workspace';
 import { useWorkspace } from './hooks/useWorkspace';
 import { useAuth } from './contexts/AuthContext';
@@ -2307,4 +2308,11 @@ const App: React.FC = () => {
   );
 };
 
-export default App;
+// Wrap App with TurnstileGate for site-wide protection
+const AppWithTurnstile: React.FC = () => (
+  <TurnstileGate>
+    <App />
+  </TurnstileGate>
+);
+
+export default AppWithTurnstile;

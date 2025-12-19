@@ -91,6 +91,51 @@ router.get('/public/privacy', async (req: Request, res: Response) => {
     }
 });
 
+/**
+ * GET /api/settings/public/turnstile
+ * Get Turnstile settings (public, no auth needed, cached)
+ */
+router.get('/public/turnstile', async (req: Request, res: Response) => {
+    try {
+        // Check cache first
+        const cachedSiteEnabled = getCached('turnstile_site_enabled');
+        const cachedLoginEnabled = getCached('turnstile_login_enabled');
+        const cachedSiteKey = getCached('turnstile_site_key');
+
+        if (cachedSiteEnabled !== null && cachedLoginEnabled !== null && cachedSiteKey !== null) {
+            res.json({
+                siteEnabled: cachedSiteEnabled === 'true',
+                loginEnabled: cachedLoginEnabled === 'true',
+                siteKey: cachedSiteKey,
+                cached: true
+            });
+            return;
+        }
+
+        const [settings] = await pool.execute<RowDataPacket[]>(
+            `SELECT setting_key, setting_value FROM site_settings 
+             WHERE setting_key IN ('turnstile_site_enabled', 'turnstile_login_enabled', 'turnstile_site_key')`
+        );
+
+        const settingsMap: Record<string, string> = {};
+        settings.forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
+
+        const siteEnabled = settingsMap['turnstile_site_enabled'] === 'true';
+        const loginEnabled = settingsMap['turnstile_login_enabled'] === 'true';
+        const siteKey = settingsMap['turnstile_site_key'] || '0x4AAAAAACHmC6NQQ8IJpFD8';
+
+        // Cache the values
+        setCache('turnstile_site_enabled', String(siteEnabled));
+        setCache('turnstile_login_enabled', String(loginEnabled));
+        setCache('turnstile_site_key', siteKey);
+
+        res.json({ siteEnabled, loginEnabled, siteKey });
+    } catch (error: any) {
+        console.error('Get Turnstile settings error:', error);
+        res.status(500).json({ error: 'Failed to fetch Turnstile settings' });
+    }
+});
+
 // ==================== ADMIN ROUTES (REQUIRES AUTH) ====================
 // Apply admin middleware to remaining routes
 router.use(authMiddleware, adminMiddleware);

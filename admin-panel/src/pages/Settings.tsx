@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react';
 import { adminAPI } from '../services/api';
-import { Save, FileText, RefreshCw } from 'lucide-react';
+import { Save, FileText, RefreshCw, Shield, Key, Globe } from 'lucide-react';
 
 export default function Settings() {
     const [termsContent, setTermsContent] = useState('');
     const [privacyContent, setPrivacyContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'terms' | 'privacy'>('terms');
+    const [activeTab, setActiveTab] = useState<'terms' | 'privacy' | 'security'>('terms');
+
+    // Security settings
+    const [turnstileSiteEnabled, setTurnstileSiteEnabled] = useState(false);
+    const [turnstileLoginEnabled, setTurnstileLoginEnabled] = useState(false);
+    const [turnstileSiteKey, setTurnstileSiteKey] = useState('0x4AAAAAACHmC6NQQ8IJpFD8');
 
     const loadSettings = async () => {
         setLoading(true);
@@ -18,6 +23,18 @@ export default function Settings() {
             ]);
             setTermsContent(termsData.setting?.setting_value || '');
             setPrivacyContent(privacyData.setting?.setting_value || '');
+
+            // Load security settings
+            const [siteEnabled, loginEnabled, siteKey] = await Promise.all([
+                adminAPI.getSetting('turnstile_site_enabled'),
+                adminAPI.getSetting('turnstile_login_enabled'),
+                adminAPI.getSetting('turnstile_site_key')
+            ]);
+            setTurnstileSiteEnabled(siteEnabled.setting?.setting_value === 'true');
+            setTurnstileLoginEnabled(loginEnabled.setting?.setting_value === 'true');
+            if (siteKey.setting?.setting_value) {
+                setTurnstileSiteKey(siteKey.setting.setting_value);
+            }
         } catch (err) {
             console.error('Failed to load settings:', err);
         } finally {
@@ -32,8 +49,14 @@ export default function Settings() {
         try {
             if (activeTab === 'terms') {
                 await adminAPI.updateSetting('user_agreement', termsContent);
-            } else {
+            } else if (activeTab === 'privacy') {
                 await adminAPI.updateSetting('privacy_policy', privacyContent);
+            } else if (activeTab === 'security') {
+                await Promise.all([
+                    adminAPI.updateSetting('turnstile_site_enabled', String(turnstileSiteEnabled)),
+                    adminAPI.updateSetting('turnstile_login_enabled', String(turnstileLoginEnabled)),
+                    adminAPI.updateSetting('turnstile_site_key', turnstileSiteKey)
+                ]);
             }
             alert('保存成功');
         } catch (err: any) {
@@ -118,7 +141,7 @@ export default function Settings() {
             </div>
 
             {/* Tabs */}
-            <div className="flex gap-2 mb-6">
+            <div className="flex gap-2 mb-6 flex-wrap">
                 <button
                     onClick={() => setActiveTab('terms')}
                     className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${activeTab === 'terms'
@@ -139,13 +162,116 @@ export default function Settings() {
                     <FileText size={18} />
                     隐私政策
                 </button>
+                <button
+                    onClick={() => setActiveTab('security')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${activeTab === 'security'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-600'
+                        }`}
+                >
+                    <Shield size={18} />
+                    安全设置
+                </button>
             </div>
 
             {/* Editor */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
                 {loading ? (
                     <div className="text-center py-20 text-gray-500 dark:text-gray-400">加载中...</div>
+                ) : activeTab === 'security' ? (
+                    /* Security Settings Panel */
+                    <div className="p-6 space-y-6">
+                        <div className="border-b border-gray-200 dark:border-slate-700 pb-4 mb-4">
+                            <h2 className="text-xl font-semibold flex items-center gap-2">
+                                <Shield size={24} className="text-blue-500" />
+                                Cloudflare Turnstile 人机验证
+                            </h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                配置 Cloudflare Turnstile 以保护网站免受机器人攻击
+                            </p>
+                        </div>
+
+                        {/* Site Key */}
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                <Key size={16} />
+                                站点密钥 (Site Key)
+                            </label>
+                            <input
+                                type="text"
+                                value={turnstileSiteKey}
+                                onChange={e => setTurnstileSiteKey(e.target.value)}
+                                placeholder="0x4AAAAAACHmC6NQQ8IJpFD8"
+                                className="w-full px-4 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 outline-none font-mono text-sm"
+                            />
+                            <p className="text-xs text-gray-500">从 Cloudflare Dashboard 获取</p>
+                        </div>
+
+                        {/* Site-wide Protection Toggle */}
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                <Globe size={24} className="text-orange-500" />
+                                <div>
+                                    <h3 className="font-medium">全站入口验证</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        用户必须通过验证才能访问网站任何页面
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setTurnstileSiteEnabled(!turnstileSiteEnabled)}
+                                className={`relative w-14 h-8 rounded-full transition-colors ${turnstileSiteEnabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-slate-600'
+                                    }`}
+                            >
+                                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${turnstileSiteEnabled ? 'translate-x-7' : 'translate-x-1'
+                                    }`} />
+                            </button>
+                        </div>
+
+                        {/* Login/Register Protection Toggle */}
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                <Shield size={24} className="text-blue-500" />
+                                <div>
+                                    <h3 className="font-medium">登录/注册验证</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        登录和注册表单需要通过人机验证
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setTurnstileLoginEnabled(!turnstileLoginEnabled)}
+                                className={`relative w-14 h-8 rounded-full transition-colors ${turnstileLoginEnabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-slate-600'
+                                    }`}
+                            >
+                                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${turnstileLoginEnabled ? 'translate-x-7' : 'translate-x-1'
+                                    }`} />
+                            </button>
+                        </div>
+
+                        {/* Warning */}
+                        {turnstileSiteEnabled && (
+                            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
+                                <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                                    ⚠️ 全站入口验证已启用。所有用户（包括已登录用户）在每次会话开始时都需要完成验证。
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Save Button */}
+                        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-slate-700">
+                            <button
+                                onClick={handleSave}
+                                disabled={saving}
+                                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            >
+                                <Save size={18} />
+                                {saving ? '保存中...' : '保存设置'}
+                            </button>
+                        </div>
+                    </div>
                 ) : (
+                    /* Terms/Privacy Editor */
                     <div className="p-6">
                         <div className="mb-4">
                             <p className="text-sm text-gray-500 dark:text-gray-400">
@@ -192,27 +318,29 @@ export default function Settings() {
                 )}
             </div>
 
-            {/* Preview */}
-            <div className="mt-8 bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
-                <div className="p-4 bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
-                    <h3 className="font-semibold">预览</h3>
+            {/* Preview (only for terms/privacy) */}
+            {(activeTab === 'terms' || activeTab === 'privacy') && (
+                <div className="mt-8 bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
+                    <div className="p-4 bg-gray-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
+                        <h3 className="font-semibold">预览</h3>
+                    </div>
+                    <div className="p-6 prose dark:prose-invert max-w-none">
+                        <div
+                            dangerouslySetInnerHTML={{
+                                __html: (activeTab === 'terms' ? termsContent : privacyContent)
+                                    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                                    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                                    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                                    .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
+                                    .replace(/\*(.*)\*/gim, '<em>$1</em>')
+                                    .replace(/^- (.*$)/gim, '<li>$1</li>')
+                                    .replace(/\n/gim, '<br />')
+                                    .replace(/---/gim, '<hr />')
+                            }}
+                        />
+                    </div>
                 </div>
-                <div className="p-6 prose dark:prose-invert max-w-none">
-                    <div
-                        dangerouslySetInnerHTML={{
-                            __html: (activeTab === 'terms' ? termsContent : privacyContent)
-                                .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-                                .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-                                .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-                                .replace(/\*\*(.*)\*\*/gim, '<strong>$1</strong>')
-                                .replace(/\*(.*)\*/gim, '<em>$1</em>')
-                                .replace(/^- (.*$)/gim, '<li>$1</li>')
-                                .replace(/\n/gim, '<br />')
-                                .replace(/---/gim, '<hr />')
-                        }}
-                    />
-                </div>
-            </div>
+            )}
         </div>
     );
 }
