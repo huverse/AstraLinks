@@ -1414,6 +1414,391 @@ export function WorkflowEditor({
                                     </>
                                 )}
 
+                                {/* 图像生成节点配置 */}
+                                {selectedNode.type === 'image_gen' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">配置来源</label>
+                                            <select
+                                                value={selectedNode.data?.configSource || 'workspace'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, configSource: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, configSource: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="workspace">使用工作区配置</option>
+                                                <option value="manual">手动配置</option>
+                                            </select>
+                                        </div>
+                                        {selectedNode.data?.configSource === 'manual' && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">API Key</label>
+                                                <input
+                                                    type="password"
+                                                    value={selectedNode.data?.apiKey || ''}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, apiKey: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, apiKey: e.target.value } });
+                                                    }}
+                                                    placeholder="Gemini API Key"
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">模型</label>
+                                            <select
+                                                value={selectedNode.data?.model || 'imagen-3.0-generate-001'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, model: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, model: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="imagen-3.0-generate-001">Imagen 3</option>
+                                                <option value="imagen-3.0-fast-generate-001">Imagen 3 Fast</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">提示词</label>
+                                            <textarea
+                                                value={selectedNode.data?.prompt || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, prompt: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, prompt: e.target.value } });
+                                                }}
+                                                placeholder="描述要生成的图像... 或使用 {{input}} 引用上游"
+                                                className="w-full h-16 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500 resize-none"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">宽高比</label>
+                                            <select
+                                                value={selectedNode.data?.aspectRatio || '1:1'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, aspectRatio: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, aspectRatio: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="1:1">1:1 方形</option>
+                                                <option value="16:9">16:9 横屏</option>
+                                                <option value="9:16">9:16 竖屏</option>
+                                                <option value="4:3">4:3</option>
+                                                <option value="3:4">3:4</option>
+                                            </select>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* 视频生成节点配置 */}
+                                {selectedNode.type === 'video_gen' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">配置来源</label>
+                                            <select
+                                                value={selectedNode.data?.configSource || 'workspace'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, configSource: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, configSource: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="workspace">使用工作区配置</option>
+                                                <option value="manual">手动配置</option>
+                                            </select>
+                                        </div>
+                                        {selectedNode.data?.configSource === 'manual' && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">API Key</label>
+                                                <input
+                                                    type="password"
+                                                    value={selectedNode.data?.apiKey || ''}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, apiKey: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, apiKey: e.target.value } });
+                                                    }}
+                                                    placeholder="Gemini API Key"
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">模型</label>
+                                            <select
+                                                value={selectedNode.data?.model || 'veo-3.1-fast-generate-preview'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, model: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, model: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="veo-3.1-fast-generate-preview">Veo 3.1 Fast</option>
+                                                <option value="veo-3.1-generate-preview">Veo 3.1</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">提示词</label>
+                                            <textarea
+                                                value={selectedNode.data?.prompt || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, prompt: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, prompt: e.target.value } });
+                                                }}
+                                                placeholder="描述要生成的视频... 或使用 {{input}} 引用上游"
+                                                className="w-full h-16 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500 resize-none"
+                                            />
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <div className="flex-1">
+                                                <label className="text-xs text-slate-400 block mb-1">时长 (秒)</label>
+                                                <input
+                                                    type="number"
+                                                    min={5}
+                                                    max={60}
+                                                    value={selectedNode.data?.duration || 5}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, duration: parseInt(e.target.value) || 5 } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, duration: parseInt(e.target.value) || 5 } });
+                                                    }}
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="text-xs text-slate-400 block mb-1">宽高比</label>
+                                                <select
+                                                    value={selectedNode.data?.aspectRatio || '16:9'}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, aspectRatio: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, aspectRatio: e.target.value } });
+                                                    }}
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                >
+                                                    <option value="16:9">16:9</option>
+                                                    <option value="9:16">9:16</option>
+                                                    <option value="1:1">1:1</option>
+                                                </select>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* 语音合成节点配置 */}
+                                {selectedNode.type === 'audio_tts' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">配置来源</label>
+                                            <select
+                                                value={selectedNode.data?.configSource || 'workspace'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, configSource: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, configSource: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="workspace">使用工作区配置</option>
+                                                <option value="manual">手动配置</option>
+                                            </select>
+                                        </div>
+                                        {selectedNode.data?.configSource === 'manual' && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">API Key</label>
+                                                <input
+                                                    type="password"
+                                                    value={selectedNode.data?.apiKey || ''}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, apiKey: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, apiKey: e.target.value } });
+                                                    }}
+                                                    placeholder="OpenAI API Key"
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                        )}
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">模型</label>
+                                            <select
+                                                value={selectedNode.data?.model || 'tts-1'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, model: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, model: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="tts-1">TTS-1 (标准)</option>
+                                                <option value="tts-1-hd">TTS-1-HD (高清)</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">语音</label>
+                                            <select
+                                                value={selectedNode.data?.voice || 'alloy'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, voice: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, voice: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="alloy">Alloy</option>
+                                                <option value="echo">Echo</option>
+                                                <option value="fable">Fable</option>
+                                                <option value="onyx">Onyx</option>
+                                                <option value="nova">Nova</option>
+                                                <option value="shimmer">Shimmer</option>
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">文本内容</label>
+                                            <textarea
+                                                value={selectedNode.data?.text || ''}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, text: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, text: e.target.value } });
+                                                }}
+                                                placeholder="要合成的文本... 或使用 {{input}} 引用上游"
+                                                className="w-full h-16 px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500 resize-none"
+                                            />
+                                        </div>
+                                    </>
+                                )}
+
+                                {/* 汇聚节点配置 */}
+                                {selectedNode.type === 'merge' && (
+                                    <>
+                                        <div>
+                                            <label className="text-xs text-slate-400 block mb-1">合并策略</label>
+                                            <select
+                                                value={selectedNode.data?.mergeStrategy || 'array'}
+                                                onChange={(e) => {
+                                                    const updated = nodes.map(n =>
+                                                        n.id === selectedNode.id
+                                                            ? { ...n, data: { ...n.data, mergeStrategy: e.target.value } }
+                                                            : n
+                                                    );
+                                                    setNodes(updated);
+                                                    setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, mergeStrategy: e.target.value } });
+                                                }}
+                                                className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                            >
+                                                <option value="array">数组 - 保持所有结果为数组</option>
+                                                <option value="object">对象 - 合并为单个对象</option>
+                                                <option value="text">文本 - 拼接为文本</option>
+                                                <option value="first">取第一个结果</option>
+                                                <option value="last">取最后一个结果</option>
+                                            </select>
+                                            <p className="text-[10px] text-slate-500 mt-1">
+                                                {selectedNode.data?.mergeStrategy === 'array' && '所有上游结果保存为数组 [result1, result2, ...]'}
+                                                {selectedNode.data?.mergeStrategy === 'object' && '将所有结果合并为一个对象 {...result1, ...result2}'}
+                                                {selectedNode.data?.mergeStrategy === 'text' && '使用分隔符拼接所有结果为文本'}
+                                                {selectedNode.data?.mergeStrategy === 'first' && '只保留第一个完成的分支结果'}
+                                                {selectedNode.data?.mergeStrategy === 'last' && '只保留最后一个完成的分支结果'}
+                                                {!selectedNode.data?.mergeStrategy && '所有上游结果保存为数组 [result1, result2, ...]'}
+                                            </p>
+                                        </div>
+                                        {selectedNode.data?.mergeStrategy === 'text' && (
+                                            <div>
+                                                <label className="text-xs text-slate-400 block mb-1">分隔符</label>
+                                                <input
+                                                    type="text"
+                                                    value={selectedNode.data?.separator || '\n'}
+                                                    onChange={(e) => {
+                                                        const updated = nodes.map(n =>
+                                                            n.id === selectedNode.id
+                                                                ? { ...n, data: { ...n.data, separator: e.target.value } }
+                                                                : n
+                                                        );
+                                                        setNodes(updated);
+                                                        setSelectedNode({ ...selectedNode, data: { ...selectedNode.data, separator: e.target.value } });
+                                                    }}
+                                                    placeholder="\n 或 , 或 ---"
+                                                    className="w-full px-2 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-sm text-white focus:outline-none focus:border-purple-500"
+                                                />
+                                            </div>
+                                        )}
+                                    </>
+                                )}
+
                                 {/* HTTP 节点配置 */}
                                 {selectedNode.type === 'http' && (
                                     <>
