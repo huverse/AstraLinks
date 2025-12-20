@@ -29,7 +29,7 @@ interface LoginModalProps {
     onClose: () => void;
 }
 
-type ModalMode = 'login' | 'register' | 'resetPassword';
+type ModalMode = 'login' | 'register' | 'resetPassword' | 'emailLogin';
 
 const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     const { login, register, resetPassword } = useAuth();
@@ -45,6 +45,14 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
     const [invitationCode, setInvitationCode] = useState('');
+
+    // Email login states
+    const [emailLoginEmail, setEmailLoginEmail] = useState('');
+    const [emailCode, setEmailCode] = useState('');
+    const [emailCodeId, setEmailCodeId] = useState<string | null>(null);
+    const [emailCodeSending, setEmailCodeSending] = useState(false);
+    const [emailCodeSent, setEmailCodeSent] = useState(false);
+    const [emailCooldown, setEmailCooldown] = useState(0);
 
     // For password reset (synced users)
     const [resetUserId, setResetUserId] = useState<number | null>(null);
@@ -143,6 +151,12 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         setResetUsername('');
         setAgreedToTerms(false);
         setTurnstileToken(null);
+        // Reset email login states
+        setEmailLoginEmail('');
+        setEmailCode('');
+        setEmailCodeId(null);
+        setEmailCodeSent(false);
+        setEmailCooldown(0);
         // Reset turnstile widget
         if (turnstileWidgetId.current && window.turnstile) {
             window.turnstile.reset(turnstileWidgetId.current);
@@ -293,6 +307,103 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         }
     };
 
+    // Email login: send verification code
+    const handleSendEmailCode = async () => {
+        if (!emailLoginEmail || !emailLoginEmail.includes('@')) {
+            setError('请输入有效的邮箱地址');
+            return;
+        }
+
+        setError(null);
+        setEmailCodeSending(true);
+
+        try {
+            const res = await fetch(`${API_BASE}/api/auth/email/send-code`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: emailLoginEmail }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                setError(data.error || '发送验证码失败');
+                setEmailCodeSending(false);
+                return;
+            }
+
+            setEmailCodeId(data.codeId);
+            setEmailCodeSent(true);
+            setEmailCooldown(60);
+            setEmailCodeSending(false);
+
+            // Countdown timer
+            const timer = setInterval(() => {
+                setEmailCooldown(prev => {
+                    if (prev <= 1) {
+                        clearInterval(timer);
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        } catch (err) {
+            setError('网络错误，请稍后重试');
+            setEmailCodeSending(false);
+        }
+    };
+
+    // Email login: verify code
+    const handleEmailVerify = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setError(null);
+
+        if (!emailLoginEmail || !emailCode || !emailCodeId) {
+            setError('请输入邮箱和验证码');
+            return;
+        }
+
+        setIsLoading(true);
+
+        try {
+            const res = await fetch(`${API_BASE}/api/auth/email/verify`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: emailLoginEmail,
+                    code: emailCode,
+                    codeId: emailCodeId,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                setError(data.error || '验证失败');
+                setIsLoading(false);
+                return;
+            }
+
+            if (data.isExisting && data.token) {
+                // Existing user - login directly
+                localStorage.setItem('galaxyous_token', data.token);
+                setSuccess('登录成功！');
+                setTimeout(() => {
+                    onClose();
+                    resetForm();
+                    window.location.reload();
+                }, 1000);
+            } else if (data.emailSession) {
+                // New user - redirect to complete registration
+                window.location.href = `/complete-oauth?email_session=${data.emailSession}`;
+            }
+        } catch (err) {
+            setError('网络错误，请稍后重试');
+        }
+
+        setIsLoading(false);
+    };
+
     if (!isOpen) return null;
 
     return (
@@ -310,11 +421,13 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                         {mode === 'login' && '欢迎回来'}
                         {mode === 'register' && '加入我们'}
                         {mode === 'resetPassword' && '设置密码'}
+                        {mode === 'emailLogin' && '邮箱登录'}
                     </h2>
                     <p className="mt-1 text-blue-100">
                         {mode === 'login' && '登录您的 Galaxyous 账号'}
                         {mode === 'register' && '使用邀请码注册新账号'}
                         {mode === 'resetPassword' && '您的账号需要设置新密码'}
+                        {mode === 'emailLogin' && '使用邮箱验证码登录'}
                     </p>
                 </div>
 
@@ -323,7 +436,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     onSubmit={
                         mode === 'login' ? handleLogin :
                             mode === 'register' ? handleRegister :
-                                handleResetPassword
+                                mode === 'emailLogin' ? handleEmailVerify :
+                                    handleResetPassword
                     }
                     className="p-6 space-y-4"
                 >
@@ -342,7 +456,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     )}
 
                     {/* Username (Login/Register) */}
-                    {mode !== 'resetPassword' && (
+                    {(mode === 'login' || mode === 'register') && (
                         <div className="relative">
                             <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
@@ -354,6 +468,53 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                 required
                             />
                         </div>
+                    )}
+
+                    {/* Email Login Form */}
+                    {mode === 'emailLogin' && (
+                        <>
+                            <div className="relative">
+                                <Mail size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="email"
+                                    placeholder="请输入邮箱地址"
+                                    value={emailLoginEmail}
+                                    onChange={(e) => setEmailLoginEmail(e.target.value)}
+                                    className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                    required
+                                />
+                            </div>
+                            <div className="flex gap-2">
+                                <div className="relative flex-1">
+                                    <Key size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="验证码"
+                                        value={emailCode}
+                                        onChange={(e) => setEmailCode(e.target.value)}
+                                        maxLength={6}
+                                        className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                        required
+                                    />
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={handleSendEmailCode}
+                                    disabled={emailCodeSending || emailCooldown > 0}
+                                    className="px-4 py-3 bg-blue-500 text-white rounded-xl hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                                >
+                                    {emailCodeSending ? (
+                                        <Loader2 size={18} className="animate-spin" />
+                                    ) : emailCooldown > 0 ? (
+                                        `${emailCooldown}s`
+                                    ) : emailCodeSent ? (
+                                        '重新发送'
+                                    ) : (
+                                        '发送验证码'
+                                    )}
+                                </button>
+                            </div>
+                        </>
                     )}
 
                     {/* Email (Register only) */}
@@ -449,8 +610,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     )}
 
                     {/* Cloudflare Turnstile Widget */}
-                    {/* Cloudflare Turnstile Widget */}
-                    {mode !== 'resetPassword' && turnstileLoginEnabled && (
+                    {(mode === 'login' || mode === 'register') && turnstileLoginEnabled && (
                         <div className="flex flex-col items-center gap-2">
                             <div ref={turnstileContainerRef} className="cf-turnstile" />
                             {turnstileToken && (
@@ -465,7 +625,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     {/* Submit Button */}
                     <button
                         type="submit"
-                        disabled={isLoading || (mode !== 'resetPassword' && turnstileLoginEnabled && !turnstileToken)}
+                        disabled={isLoading || ((mode === 'login' || mode === 'register') && turnstileLoginEnabled && !turnstileToken) || (mode === 'emailLogin' && (!emailCodeSent || !emailCode))}
                         className="w-full py-3 bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-semibold rounded-xl hover:opacity-90 transition-opacity disabled:opacity-50 flex items-center justify-center gap-2"
                     >
                         {isLoading ? (
@@ -478,14 +638,15 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                 {mode === 'login' && '登录'}
                                 {mode === 'register' && '注册'}
                                 {mode === 'resetPassword' && '确认设置'}
+                                {mode === 'emailLogin' && '验证登录'}
                             </>
                         )}
                     </button>
 
                     {/* Mode Toggle */}
-                    {mode !== 'resetPassword' && (
+                    {(mode === 'login' || mode === 'register' || mode === 'emailLogin') && (
                         <div className="text-center text-sm text-slate-500">
-                            {mode === 'login' ? (
+                            {mode === 'login' && (
                                 <>
                                     还没有账号？
                                     <button
@@ -496,7 +657,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                         立即注册
                                     </button>
                                 </>
-                            ) : (
+                            )}
+                            {mode === 'register' && (
                                 <>
                                     已有账号？
                                     <button
@@ -508,27 +670,64 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                     </button>
                                 </>
                             )}
+                            {mode === 'emailLogin' && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleModeSwitch('login')}
+                                    className="text-blue-500 hover:underline"
+                                >
+                                    返回账号密码登录
+                                </button>
+                            )}
                         </div>
                     )}
 
-                    {/* QQ Login */}
+                    {/* Third-party Login */}
                     {mode === 'login' && (
                         <div className="pt-4 border-t border-slate-200 dark:border-slate-700">
-                            <div className="text-center text-xs text-slate-400 mb-3">或使用第三方登录</div>
+                            <div className="text-center text-xs text-slate-400 mb-3">或使用其他方式登录</div>
+                            <div className="flex gap-3 mb-3">
+                                {/* QQ Login */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const apiBase = (import.meta as any).env?.VITE_PROXY_API_BASE || 'http://localhost:3001';
+                                        window.location.href = `${apiBase}/api/auth/qq`;
+                                    }}
+                                    className="flex-1 py-3 bg-[#12B7F5] hover:bg-[#0DA8E3] text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <svg viewBox="0 0 1024 1024" className="w-5 h-5" fill="currentColor">
+                                        <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm210.5 612.4c-11.5 1.4-44.9-52.7-44.9-52.7 0 31.3-16.2 72.2-51.1 101.8 16.9 5.2 54.9 19.2 45.9 34.4-7.3 12.3-125.6 7.9-159.8 4-34.2 3.8-152.5 8.3-159.8-4-9.1-15.2 28.9-29.2 45.8-34.4-35-29.5-51.1-70.4-51.1-101.8 0 0-33.4 54.1-44.9 52.7-5.4-.7-12.4-29.6 9.4-99.7 10.3-33 22-60.5 40.2-105.8-3.1-116.9 45.3-215 160.4-215 113.9 0 162.4 98.1 160.4 215 18.1 45.2 29.9 72.8 40.2 105.8 21.7 70.1 14.6 99.1 9.3 99.7z" />
+                                    </svg>
+                                    QQ
+                                </button>
+
+                                {/* Google Login */}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        const apiBase = (import.meta as any).env?.VITE_PROXY_API_BASE || 'http://localhost:3001';
+                                        window.location.href = `${apiBase}/api/auth/google`;
+                                    }}
+                                    className="flex-1 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-semibold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors flex items-center justify-center gap-2"
+                                >
+                                    <svg viewBox="0 0 24 24" className="w-5 h-5">
+                                        <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                                        <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                                        <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
+                                        <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
+                                    </svg>
+                                    Google
+                                </button>
+                            </div>
+                            {/* Email Login Button */}
                             <button
                                 type="button"
-                                onClick={() => {
-                                    // Open QQ OAuth in current window
-                                    const apiBase = (import.meta as any).env?.VITE_PROXY_API_BASE || 'http://localhost:3001';
-                                    window.location.href = `${apiBase}/api/auth/qq`;
-                                }}
-                                className="w-full py-3 bg-[#12B7F5] hover:bg-[#0DA8E3] text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                                onClick={() => handleModeSwitch('emailLogin')}
+                                className="w-full py-3 bg-purple-500 hover:bg-purple-600 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
                             >
-                                {/* QQ Penguin Icon */}
-                                <svg viewBox="0 0 1024 1024" className="w-6 h-6" fill="currentColor">
-                                    <path d="M512 64C264.6 64 64 264.6 64 512s200.6 448 448 448 448-200.6 448-448S759.4 64 512 64zm210.5 612.4c-11.5 1.4-44.9-52.7-44.9-52.7 0 31.3-16.2 72.2-51.1 101.8 16.9 5.2 54.9 19.2 45.9 34.4-7.3 12.3-125.6 7.9-159.8 4-34.2 3.8-152.5 8.3-159.8-4-9.1-15.2 28.9-29.2 45.8-34.4-35-29.5-51.1-70.4-51.1-101.8 0 0-33.4 54.1-44.9 52.7-5.4-.7-12.4-29.6 9.4-99.7 10.3-33 22-60.5 40.2-105.8-3.1-116.9 45.3-215 160.4-215 113.9 0 162.4 98.1 160.4 215 18.1 45.2 29.9 72.8 40.2 105.8 21.7 70.1 14.6 99.1 9.3 99.7z" />
-                                </svg>
-                                QQ 快捷登录
+                                <Mail size={18} />
+                                邮箱验证码登录
                             </button>
                         </div>
                     )}

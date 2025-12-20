@@ -94,6 +94,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const callbackToken = urlParams.get('token');
         const qqLogin = urlParams.get('qq_login');
         const qqBind = urlParams.get('qq_bind');
+        const googleBound = urlParams.get('google_bound');
         const error = urlParams.get('error');
 
         // Handle errors
@@ -104,9 +105,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 'token_failed': '获取令牌失败',
                 'openid_failed': '获取用户信息失败',
                 'callback_failed': '授权回调失败',
-                'qq_already_bound': '该QQ已绑定其他账号'
+                'qq_already_bound': '该QQ已绑定其他账号',
+                'google_already_bound': '该Google账号已绑定其他账号',
+                'google_auth_failed': 'Google授权失败，请重试',
+                'config_error': '服务配置错误，请联系管理员',
+                'qq_blacklisted': '该QQ账号已被封禁'
             };
-            alert(errorMessages[error] || `登录失败: ${error}`);
+            const reason = urlParams.get('reason');
+            const displayError = errorMessages[error] || `登录失败: ${error}`;
+            alert(reason ? `${displayError}\n原因: ${decodeURIComponent(reason)}` : displayError);
             // Clean URL
             window.history.replaceState({}, '', window.location.pathname);
             return;
@@ -119,8 +126,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
             return;
         }
 
-        // Handle QQ login with token
-        if (callbackToken && qqLogin === 'success') {
+        // Handle successful Google bind
+        if (googleBound === 'success') {
+            alert('Google绑定成功！');
+            window.history.replaceState({}, '', window.location.pathname);
+            return;
+        }
+
+        // Handle OAuth login with token (QQ or Google direct login)
+        if (callbackToken) {
             localStorage.setItem('galaxyous_token', callbackToken);
             setToken(callbackToken);
             // Clean URL

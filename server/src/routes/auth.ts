@@ -3,6 +3,7 @@ import { pool } from '../config/database';
 import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { hashPassword, verifyPassword, generateDeviceFingerprint } from '../utils/crypto';
 import { generateToken, authMiddleware, AuthenticatedRequest } from '../middleware/auth';
+import { sendVerificationEmail, generateVerificationCode } from '../services/email';
 import axios from 'axios';
 
 const router = Router();
@@ -1063,5 +1064,812 @@ router.post('/qq/complete', async (req: Request, res: Response) => {
     }
 });
 
+// ============================================
+// Email Verification Auth
+// ============================================
+
+// Email verification code store (in-memory, consider Redis for production)
+const emailCodeStore = new Map<string, { code: string; email: string; expires: number }>();
+
+// Email session store for new users (similar to QQ session)
+const emailSessionStore = new Map<string, { email: string; expires: number }>();
+
+/**
+ * POST /api/auth/email/send-code
+ * Send verification code to email
+ */
+router.post('/email/send-code', async (req: Request, res: Response) => {
+    try {
+        const { email } = req.body;
+
+        if (!email || !email.includes('@')) {
+            res.status(400).json({ error: '请输入有效的邮箱地址' });
+            return;
+        }
+
+        // Rate limiting - check if code was sent recently
+        const existingCode = Array.from(emailCodeStore.values()).find(
+            v => v.email === email && v.expires > Date.now()
+        );
+        if (existingCode && (existingCode.expires - Date.now()) > 9 * 60 * 1000) {
+            res.status(429).json({ error: '验证码已发送，请稍后再试' });
+            return;
+        }
+
+        // Generate and store code
+        const code = generateVerificationCode();
+        const codeId = Math.random().toString(36).substring(2, 15);
+
+        emailCodeStore.set(codeId, {
+            code,
+            email,
+            expires: Date.now() + 10 * 60 * 1000 // 10 minutes
+        });
+
+        // Send email
+        const result = await sendVerificationEmail(email, code);
+
+        if (!result.success) {
+            emailCodeStore.delete(codeId);
+            res.status(500).json({ error: result.error || '发送失败' });
+            return;
+        }
+
+        res.json({
+            message: '验证码已发送',
+            codeId // Return codeId for verification
+        });
+    } catch (error: any) {
+        console.error('[Email] Send code error:', error);
+        res.status(500).json({ error: '发送验证码失败' });
+    }
+});
+
+/**
+ * POST /api/auth/email/verify
+ * Verify email code and login or start registration flow
+ */
+router.post('/email/verify', async (req: Request, res: Response) => {
+    try {
+        const { email, code, codeId } = req.body;
+
+        if (!email || !code || !codeId) {
+            res.status(400).json({ error: '请输入邮箱和验证码' });
+            return;
+        }
+
+        // Verify code
+        const storedCode = emailCodeStore.get(codeId);
+        if (!storedCode || storedCode.expires < Date.now()) {
+            emailCodeStore.delete(codeId);
+            res.status(400).json({ error: '验证码已过期，请重新获取' });
+            return;
+        }
+
+        if (storedCode.email !== email || storedCode.code !== code) {
+            res.status(400).json({ error: '验证码错误' });
+            return;
+        }
+
+        // Code is valid, delete it
+        emailCodeStore.delete(codeId);
+
+        // Check if email exists in users
+        const [existingUsers] = await pool.execute<RowDataPacket[]>(
+            'SELECT id, username, email, is_admin FROM users WHERE email = ?',
+            [email]
+        );
+
+        if (existingUsers.length > 0) {
+            // Existing user with this email - login directly
+            const user = existingUsers[0];
+            await pool.execute('UPDATE users SET last_login = NOW() WHERE id = ?', [user.id]);
+
+            const token = generateToken({
+                id: user.id,
+                username: user.username,
+                isAdmin: user.is_admin || false
+            });
+
+            res.json({
+                success: true,
+                isExisting: true,
+                token,
+                user: {
+                    id: user.id,
+                    username: user.username,
+                    isAdmin: user.is_admin || false
+                }
+            });
+        } else {
+            // New email - create session for registration
+            const emailSession = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            emailSessionStore.set(emailSession, {
+                email,
+                expires: Date.now() + 30 * 60 * 1000 // 30 minutes
+            });
+
+            res.json({
+                success: true,
+                isExisting: false,
+                emailSession
+            });
+        }
+    } catch (error: any) {
+        console.error('[Email] Verify error:', error);
+        res.status(500).json({ error: '验证失败' });
+    }
+});
+
+/**
+ * GET /api/auth/email/session
+ * Get email session info for completing registration
+ */
+router.get('/email/session', async (req: Request, res: Response) => {
+    try {
+        const emailSession = req.query.session as string;
+
+        if (!emailSession) {
+            res.status(400).json({ error: '缺少 session 参数' });
+            return;
+        }
+
+        const sessionData = emailSessionStore.get(emailSession);
+        if (!sessionData || sessionData.expires < Date.now()) {
+            emailSessionStore.delete(emailSession);
+            res.status(400).json({ error: 'Session 已过期' });
+            return;
+        }
+
+        res.json({ email: sessionData.email });
+    } catch (error) {
+        console.error('Email session error:', error);
+        res.status(500).json({ error: '获取 session 失败' });
+    }
+});
+
+/**
+ * POST /api/auth/email/complete
+ * Complete email registration - bind to existing account or create new
+ */
+router.post('/email/complete', async (req: Request, res: Response) => {
+    try {
+        const { emailSession, action, username, password, invitationCode } = req.body;
+
+        if (!emailSession) {
+            res.status(400).json({ error: '缺少 email session' });
+            return;
+        }
+
+        const sessionData = emailSessionStore.get(emailSession);
+        if (!sessionData || sessionData.expires < Date.now()) {
+            emailSessionStore.delete(emailSession);
+            res.status(400).json({ error: 'Session 已过期，请重新验证邮箱' });
+            return;
+        }
+
+        const { email } = sessionData;
+
+        if (!username || !password) {
+            res.status(400).json({ error: '请输入用户名和密码' });
+            return;
+        }
+
+        if (password.length < 6) {
+            res.status(400).json({ error: '密码长度至少 6 个字符' });
+            return;
+        }
+
+        if (action === 'bind') {
+            // Bind to existing account
+            const [users] = await pool.execute<RowDataPacket[]>(
+                'SELECT id, username, password_hash, is_admin, email FROM users WHERE username = ?',
+                [username]
+            );
+
+            if (users.length === 0) {
+                res.status(401).json({ error: '用户名或密码错误' });
+                return;
+            }
+
+            const user = users[0];
+
+            if (user.email) {
+                res.status(400).json({ error: '该账户已绑定其他邮箱' });
+                return;
+            }
+
+            const isValid = await verifyPassword(password, user.password_hash);
+            if (!isValid) {
+                res.status(401).json({ error: '用户名或密码错误' });
+                return;
+            }
+
+            // Bind email to this account
+            await pool.execute(
+                'UPDATE users SET email = ?, last_login = NOW() WHERE id = ?',
+                [email, user.id]
+            );
+
+            emailSessionStore.delete(emailSession);
+
+            const token = generateToken({
+                id: user.id,
+                username: user.username,
+                isAdmin: user.is_admin || false
+            });
+
+            res.json({
+                message: '邮箱绑定成功',
+                token,
+                user: { id: user.id, username: user.username, isAdmin: user.is_admin || false }
+            });
+
+        } else if (action === 'create') {
+            // Create new account
+            if (!invitationCode) {
+                res.status(400).json({ error: '请输入邀请码' });
+                return;
+            }
+
+            if (username.length < 3 || username.length > 60) {
+                res.status(400).json({ error: '用户名长度应为 3-60 个字符' });
+                return;
+            }
+
+            // Check if username exists
+            const [existingUser] = await pool.execute<RowDataPacket[]>(
+                'SELECT id FROM users WHERE username = ?',
+                [username]
+            );
+
+            if (existingUser.length > 0) {
+                res.status(400).json({ error: '用户名已存在' });
+                return;
+            }
+
+            // Validate invitation code
+            let codeType: 'normal' | 'split' | null = null;
+            let codeData: any = null;
+            let splitTreeId: string | null = null;
+
+            const [normalCodes] = await pool.execute<RowDataPacket[]>(
+                'SELECT id, is_used FROM invitation_codes WHERE code = ?',
+                [invitationCode]
+            );
+
+            if (normalCodes.length > 0) {
+                codeData = normalCodes[0];
+                codeType = 'normal';
+                if (codeData.is_used) {
+                    res.status(400).json({ error: '该邀请码已被使用' });
+                    return;
+                }
+            }
+
+            if (!codeData) {
+                const [splitCodes] = await pool.execute<RowDataPacket[]>(
+                    `SELECT c.*, t.is_banned as tree_banned 
+                     FROM split_invitation_codes c
+                     JOIN split_invitation_trees t ON c.tree_id = t.id
+                     WHERE c.code = ?`,
+                    [invitationCode]
+                );
+
+                if (splitCodes.length > 0) {
+                    codeData = splitCodes[0];
+                    codeType = 'split';
+                    splitTreeId = codeData.tree_id;
+
+                    if (codeData.is_used) {
+                        res.status(400).json({ error: '该邀请码已被使用' });
+                        return;
+                    }
+                    if (codeData.tree_banned) {
+                        res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
+                        return;
+                    }
+                }
+            }
+
+            if (!codeData) {
+                res.status(400).json({ error: '邀请码无效' });
+                return;
+            }
+
+            // Hash password and create user
+            const passwordHash = await hashPassword(password);
+
+            let insertSql: string;
+            let insertParams: any[];
+
+            if (codeType === 'split') {
+                insertSql = `INSERT INTO users (username, email, password_hash, split_code_used, split_tree_id)
+                             VALUES (?, ?, ?, ?, ?)`;
+                insertParams = [username, email, passwordHash, invitationCode, splitTreeId];
+            } else {
+                insertSql = `INSERT INTO users (username, email, password_hash, invitation_code_used)
+                             VALUES (?, ?, ?, ?)`;
+                insertParams = [username, email, passwordHash, invitationCode];
+            }
+
+            const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
+            const userId = result.insertId;
+
+            // Mark invitation code as used
+            if (codeType === 'normal') {
+                await pool.execute(
+                    `UPDATE invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
+                    [userId, codeData.id]
+                );
+            } else {
+                await pool.execute(
+                    `UPDATE split_invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
+                    [userId, codeData.id]
+                );
+            }
+
+            emailSessionStore.delete(emailSession);
+
+            const token = generateToken({ id: userId, username, isAdmin: false });
+
+            res.status(201).json({
+                message: '注册成功',
+                token,
+                user: { id: userId, username, isAdmin: false }
+            });
+
+        } else {
+            res.status(400).json({ error: '无效的 action' });
+        }
+    } catch (error: any) {
+        console.error('[Email] Complete error:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+// ============================================
+// Google OAuth
+// ============================================
+
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '1072683514568-9hfc68slh76pnjbgrmdoouag1o44vemj.apps.googleusercontent.com';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'https://astralinks.xyz/api/auth/google/callback';
+
+// Google session store for new users
+const googleSessionStore = new Map<string, { googleId: string; email: string; name: string; avatar: string; expires: number }>();
+// Google state store for CSRF protection
+const googleStateStore = new Map<string, { action: string; userId?: number; expires: number }>();
+
+// Add Google stores to cleanup interval (uses existing FRONTEND_URL and optionalAuthMiddleware from QQ OAuth section)
+
+/**
+ * GET /api/auth/google
+ * Initiate Google OAuth flow
+ */
+router.get('/google', optionalAuthMiddleware as any, async (req: Request, res: Response) => {
+    try {
+        const action = (req.query.action as string) === 'bind' ? 'bind' : 'login';
+        const userId = action === 'bind' ? (req as AuthenticatedRequest).user?.id : undefined;
+
+        if (action === 'bind' && !userId) {
+            res.status(401).json({ error: '请先登录后再绑定Google' });
+            return;
+        }
+
+        // Generate state for CSRF protection
+        const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        googleStateStore.set(state, { action, userId, expires: Date.now() + 10 * 60 * 1000 });
+
+        const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+        authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+        authUrl.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI);
+        authUrl.searchParams.set('response_type', 'code');
+        authUrl.searchParams.set('scope', 'openid email profile');
+        authUrl.searchParams.set('state', state);
+        authUrl.searchParams.set('access_type', 'offline');
+
+        res.redirect(authUrl.toString());
+    } catch (error) {
+        console.error('Google OAuth init error:', error);
+        res.status(500).json({ error: 'OAuth初始化失败' });
+    }
+});
+
+/**
+ * GET /api/auth/google/callback
+ * Handle Google OAuth callback
+ */
+router.get('/google/callback', async (req: Request, res: Response) => {
+    try {
+        const { code, state } = req.query;
+
+        if (!code || !state) {
+            res.redirect(`${FRONTEND_URL}?error=missing_params`);
+            return;
+        }
+
+        // Verify state
+        const stateData = googleStateStore.get(state as string);
+        if (!stateData || stateData.expires < Date.now()) {
+            googleStateStore.delete(state as string);
+            res.redirect(`${FRONTEND_URL}?error=invalid_state`);
+            return;
+        }
+        googleStateStore.delete(state as string);
+
+        if (!GOOGLE_CLIENT_SECRET) {
+            console.error('[Google] No client secret configured');
+            res.redirect(`${FRONTEND_URL}?error=config_error`);
+            return;
+        }
+
+        // Exchange code for tokens
+        const tokenResponse = await axios.post('https://oauth2.googleapis.com/token', {
+            client_id: GOOGLE_CLIENT_ID,
+            client_secret: GOOGLE_CLIENT_SECRET,
+            code,
+            grant_type: 'authorization_code',
+            redirect_uri: GOOGLE_REDIRECT_URI,
+        });
+
+        const { access_token, id_token } = tokenResponse.data;
+
+        // Get user info
+        const userInfoResponse = await axios.get('https://www.googleapis.com/oauth2/v2/userinfo', {
+            headers: { Authorization: `Bearer ${access_token}` }
+        });
+
+        const { id: googleId, email, name, picture } = userInfoResponse.data;
+
+        // Handle bind action
+        if (stateData.action === 'bind' && stateData.userId) {
+            const [existing] = await pool.execute<RowDataPacket[]>(
+                'SELECT id FROM users WHERE google_id = ?',
+                [googleId]
+            );
+
+            if (existing.length > 0) {
+                res.redirect(`${FRONTEND_URL}?error=google_already_bound`);
+                return;
+            }
+
+            await pool.execute(
+                'UPDATE users SET google_id = ?, avatar_url = COALESCE(avatar_url, ?) WHERE id = ?',
+                [googleId, picture, stateData.userId]
+            );
+
+            res.redirect(`${FRONTEND_URL}?google_bound=success`);
+            return;
+        }
+
+        // Check if user exists with this Google ID
+        const [existingUsers] = await pool.execute<RowDataPacket[]>(
+            'SELECT id, username, email, is_admin FROM users WHERE google_id = ?',
+            [googleId]
+        );
+
+        if (existingUsers.length > 0) {
+            // Existing user - login directly
+            const user = existingUsers[0];
+            await pool.execute(
+                'UPDATE users SET avatar_url = COALESCE(avatar_url, ?), last_login = NOW() WHERE id = ?',
+                [picture, user.id]
+            );
+
+            const token = generateToken({
+                id: user.id,
+                username: user.username,
+                isAdmin: user.is_admin || false
+            });
+
+            res.redirect(`${FRONTEND_URL}?token=${token}`);
+        } else {
+            // New Google user - create session and redirect to complete registration
+            const googleSession = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            googleSessionStore.set(googleSession, {
+                googleId,
+                email: email || '',
+                name: name || 'Google用户',
+                avatar: picture || '',
+                expires: Date.now() + 30 * 60 * 1000
+            });
+
+            res.redirect(`${FRONTEND_URL}/complete-oauth?google_session=${googleSession}`);
+        }
+    } catch (error: any) {
+        console.error('Google callback error:', error.response?.data || error);
+        res.redirect(`${FRONTEND_URL}?error=google_auth_failed`);
+    }
+});
+
+/**
+ * GET /api/auth/google/session
+ * Get Google session info for completing registration
+ */
+router.get('/google/session', async (req: Request, res: Response) => {
+    try {
+        const googleSession = req.query.session as string;
+
+        if (!googleSession) {
+            res.status(400).json({ error: '缺少 session 参数' });
+            return;
+        }
+
+        const sessionData = googleSessionStore.get(googleSession);
+        if (!sessionData || sessionData.expires < Date.now()) {
+            googleSessionStore.delete(googleSession);
+            res.status(400).json({ error: 'Session 已过期' });
+            return;
+        }
+
+        res.json({
+            email: sessionData.email,
+            name: sessionData.name,
+            avatar: sessionData.avatar
+        });
+    } catch (error) {
+        console.error('Google session error:', error);
+        res.status(500).json({ error: '获取 session 失败' });
+    }
+});
+
+/**
+ * POST /api/auth/google/complete
+ * Complete Google OAuth registration - bind to existing account or create new
+ */
+router.post('/google/complete', async (req: Request, res: Response) => {
+    try {
+        const { googleSession, action, username, password, invitationCode } = req.body;
+
+        if (!googleSession) {
+            res.status(400).json({ error: '缺少 Google session' });
+            return;
+        }
+
+        const sessionData = googleSessionStore.get(googleSession);
+        if (!sessionData || sessionData.expires < Date.now()) {
+            googleSessionStore.delete(googleSession);
+            res.status(400).json({ error: 'Session 已过期，请重新登录' });
+            return;
+        }
+
+        const { googleId, email, name, avatar } = sessionData;
+
+        if (!username || !password) {
+            res.status(400).json({ error: '请输入用户名和密码' });
+            return;
+        }
+
+        if (password.length < 6) {
+            res.status(400).json({ error: '密码长度至少 6 个字符' });
+            return;
+        }
+
+        if (action === 'bind') {
+            // Bind to existing account
+            const [users] = await pool.execute<RowDataPacket[]>(
+                'SELECT id, username, password_hash, is_admin, google_id FROM users WHERE username = ?',
+                [username]
+            );
+
+            if (users.length === 0) {
+                res.status(401).json({ error: '用户名或密码错误' });
+                return;
+            }
+
+            const user = users[0];
+
+            if (user.google_id) {
+                res.status(400).json({ error: '该账户已绑定其他Google账号' });
+                return;
+            }
+
+            const isValid = await verifyPassword(password, user.password_hash);
+            if (!isValid) {
+                res.status(401).json({ error: '用户名或密码错误' });
+                return;
+            }
+
+            // Bind Google to this account
+            await pool.execute(
+                'UPDATE users SET google_id = ?, email = COALESCE(email, ?), avatar_url = COALESCE(avatar_url, ?), last_login = NOW() WHERE id = ?',
+                [googleId, email, avatar, user.id]
+            );
+
+            googleSessionStore.delete(googleSession);
+
+            const token = generateToken({
+                id: user.id,
+                username: user.username,
+                isAdmin: user.is_admin || false
+            });
+
+            res.json({
+                message: 'Google绑定成功',
+                token,
+                user: { id: user.id, username: user.username, isAdmin: user.is_admin || false }
+            });
+
+        } else if (action === 'create') {
+            // Create new account (same logic as email/QQ)
+            if (!invitationCode) {
+                res.status(400).json({ error: '请输入邀请码' });
+                return;
+            }
+
+            if (username.length < 3 || username.length > 60) {
+                res.status(400).json({ error: '用户名长度应为 3-60 个字符' });
+                return;
+            }
+
+            const [existingUser] = await pool.execute<RowDataPacket[]>(
+                'SELECT id FROM users WHERE username = ?',
+                [username]
+            );
+
+            if (existingUser.length > 0) {
+                res.status(400).json({ error: '用户名已存在' });
+                return;
+            }
+
+            // Validate invitation code  
+            let codeType: 'normal' | 'split' | null = null;
+            let codeData: any = null;
+            let splitTreeId: string | null = null;
+
+            const [normalCodes] = await pool.execute<RowDataPacket[]>(
+                'SELECT id, is_used FROM invitation_codes WHERE code = ?',
+                [invitationCode]
+            );
+
+            if (normalCodes.length > 0) {
+                codeData = normalCodes[0];
+                codeType = 'normal';
+                if (codeData.is_used) {
+                    res.status(400).json({ error: '该邀请码已被使用' });
+                    return;
+                }
+            }
+
+            if (!codeData) {
+                const [splitCodes] = await pool.execute<RowDataPacket[]>(
+                    `SELECT c.*, t.is_banned as tree_banned 
+                     FROM split_invitation_codes c
+                     JOIN split_invitation_trees t ON c.tree_id = t.id
+                     WHERE c.code = ?`,
+                    [invitationCode]
+                );
+
+                if (splitCodes.length > 0) {
+                    codeData = splitCodes[0];
+                    codeType = 'split';
+                    splitTreeId = codeData.tree_id;
+
+                    if (codeData.is_used) {
+                        res.status(400).json({ error: '该邀请码已被使用' });
+                        return;
+                    }
+                    if (codeData.tree_banned) {
+                        res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
+                        return;
+                    }
+                }
+            }
+
+            if (!codeData) {
+                res.status(400).json({ error: '邀请码无效' });
+                return;
+            }
+
+            const passwordHash = await hashPassword(password);
+
+            let insertSql: string;
+            let insertParams: any[];
+
+            if (codeType === 'split') {
+                insertSql = `INSERT INTO users (username, email, password_hash, google_id, avatar_url, split_code_used, split_tree_id)
+                             VALUES (?, ?, ?, ?, ?, ?, ?)`;
+                insertParams = [username, email, passwordHash, googleId, avatar, invitationCode, splitTreeId];
+            } else {
+                insertSql = `INSERT INTO users (username, email, password_hash, google_id, avatar_url, invitation_code_used)
+                             VALUES (?, ?, ?, ?, ?, ?)`;
+                insertParams = [username, email, passwordHash, googleId, avatar, invitationCode];
+            }
+
+            const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
+            const userId = result.insertId;
+
+            if (codeType === 'normal') {
+                await pool.execute(
+                    `UPDATE invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
+                    [userId, codeData.id]
+                );
+            } else {
+                await pool.execute(
+                    `UPDATE split_invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
+                    [userId, codeData.id]
+                );
+            }
+
+            googleSessionStore.delete(googleSession);
+
+            const token = generateToken({ id: userId, username, isAdmin: false });
+
+            res.status(201).json({
+                message: '注册成功',
+                token,
+                user: { id: userId, username, isAdmin: false }
+            });
+
+        } else {
+            res.status(400).json({ error: '无效的 action' });
+        }
+    } catch (error: any) {
+        console.error('[Google] Complete error:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+/**
+ * GET /api/auth/google/status
+ * Get Google binding status for current user
+ */
+router.get('/google/status', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+
+        const [users] = await pool.execute<RowDataPacket[]>(
+            'SELECT google_id FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (users.length === 0) {
+            res.status(404).json({ error: '用户不存在' });
+            return;
+        }
+
+        res.json({ bound: !!users[0].google_id });
+    } catch (error) {
+        console.error('Google status error:', error);
+        res.status(500).json({ error: '获取状态失败' });
+    }
+});
+
+/**
+ * DELETE /api/auth/google/unbind
+ * Unbind Google from current user account
+ */
+router.delete('/google/unbind', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+
+        const [users] = await pool.execute<RowDataPacket[]>(
+            'SELECT password_hash, google_id, qq_openid FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (users.length === 0) {
+            res.status(404).json({ error: '用户不存在' });
+            return;
+        }
+
+        const user = users[0];
+        // Must have password or another OAuth bound
+        if (!user.password_hash && !user.qq_openid && user.google_id) {
+            res.status(400).json({ error: '请先设置密码或绑定其他登录方式后再解绑Google' });
+            return;
+        }
+
+        await pool.execute('UPDATE users SET google_id = NULL WHERE id = ?', [userId]);
+
+        res.json({ message: 'Google解绑成功' });
+    } catch (error) {
+        console.error('Google unbind error:', error);
+        res.status(500).json({ error: '解绑失败' });
+    }
+});
+
 export default router;
+
 
