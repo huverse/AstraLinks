@@ -12,7 +12,11 @@ export interface AuthenticatedRequest extends Request {
     };
 }
 
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-change-in-production';
+const JWT_SECRET_ENV = process.env.JWT_SECRET;
+if (!JWT_SECRET_ENV) {
+    throw new Error('CRITICAL: JWT_SECRET environment variable is required');
+}
+const JWT_SECRET: string = JWT_SECRET_ENV;
 
 /**
  * Generate JWT token for a user

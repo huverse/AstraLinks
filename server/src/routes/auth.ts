@@ -1461,9 +1461,9 @@ router.post('/email/complete', async (req: Request, res: Response) => {
 // Google OAuth
 // ============================================
 
-const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '1072683514568-9hfc68slh76pnjbgrmdoouag1o44vemj.apps.googleusercontent.com';
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
-const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || 'https://astralinks.xyz/api/auth/google/callback';
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
+const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI || '';
 
 // Google session store for new users
 const googleSessionStore = new Map<string, { googleId: string; email: string; name: string; avatar: string; expires: number }>();

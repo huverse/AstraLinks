@@ -14,9 +14,9 @@ interface SyncResult {
     errors: string[];
 }
 
-// Sync API configuration
-const SYNC_API_URL = process.env.SYNC_API_URL || 'https://galaxyous.com/sync-api.php';
-const SYNC_API_KEY = process.env.SYNC_API_KEY || 'astralinks_sync_2024_secret';
+// Sync API configuration - MUST be set via environment variables
+const SYNC_API_URL = process.env.SYNC_API_URL || '';
+const SYNC_API_KEY = process.env.SYNC_API_KEY || '';
 
 /**
  * Run the database sync from WordPress via HTTP API
