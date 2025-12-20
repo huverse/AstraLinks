@@ -122,4 +122,10 @@ export function notifyFeedbackDeleted(threadId: string, userId: number): void {
     emitToAdmins('feedback_deleted', { threadId });
 }
 
+// Get IO instance for external use
+export function getIO(): Server | null {
+    return io;
+}
+
 export { io };
+

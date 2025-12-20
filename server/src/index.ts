@@ -28,11 +28,12 @@ import promptRoutes from './routes/prompt';
 import knowledgeRoutes from './routes/knowledge';
 import mcpMarketplaceRoutes from './routes/mcp-marketplace';
 import workspaceProjectsRoutes from './routes/workspace-projects';
+import codeRoutes from './routes/code';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
 import { initGeminiLiveProxy } from './services/geminiLive';
-import { initWorkflowQueue } from './services/workflowQueue';
+import { initWorkflowQueue, setSocketIO } from './services/workflowQueue';
 
 dotenv.config();
 
@@ -74,6 +75,7 @@ app.use('/api/prompt', promptRoutes);
 app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/mcp-marketplace', mcpMarketplaceRoutes);
 app.use('/api/workspace-projects', workspaceProjectsRoutes);
+app.use('/api/code', codeRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
