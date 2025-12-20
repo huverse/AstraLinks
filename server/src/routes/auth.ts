@@ -1870,6 +1870,119 @@ router.delete('/google/unbind', authMiddleware, async (req: AuthenticatedRequest
     }
 });
 
+/**
+ * POST /api/auth/email/verify-code-only
+ * Verify email code without performing any action (for security verification)
+ */
+router.post('/email/verify-code-only', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const { email, code, codeId } = req.body;
+
+        if (!email || !code) {
+            res.status(400).json({ error: '请提供邮箱和验证码' });
+            return;
+        }
+
+        // Check if code exists and is valid
+        const [codes] = await pool.execute<RowDataPacket[]>(
+            `SELECT * FROM email_codes WHERE email = ? AND code = ? AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1`,
+            [email, code]
+        );
+
+        if (codes.length === 0) {
+            res.status(400).json({ error: '验证码错误或已过期' });
+            return;
+        }
+
+        // Delete the used code
+        await pool.execute('DELETE FROM email_codes WHERE id = ?', [codes[0].id]);
+
+        res.json({ success: true, message: '验证成功' });
+    } catch (error) {
+        console.error('Email code verification error:', error);
+        res.status(500).json({ error: '验证失败' });
+    }
+});
+
+/**
+ * POST /api/auth/change-password-with-email
+ * Change password using email verification (no old password required)
+ */
+router.post('/change-password-with-email', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        const { email, code, newPassword } = req.body;
+
+        if (!email || !code || !newPassword) {
+            res.status(400).json({ error: '请提供完整信息' });
+            return;
+        }
+
+        if (newPassword.length < 6) {
+            res.status(400).json({ error: '新密码长度至少6位' });
+            return;
+        }
+
+        // Verify the email belongs to this user
+        const [users] = await pool.execute<RowDataPacket[]>(
+            'SELECT email FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (users.length === 0 || users[0].email !== email) {
+            res.status(403).json({ error: '邮箱验证失败' });
+            return;
+        }
+
+        // Hash new password and update
+        const hashedPassword = await hashPassword(newPassword);
+        await pool.execute(
+            'UPDATE users SET password_hash = ?, needs_password_reset = FALSE WHERE id = ?',
+            [hashedPassword, userId]
+        );
+
+        res.json({ message: '密码修改成功' });
+    } catch (error) {
+        console.error('Change password with email error:', error);
+        res.status(500).json({ error: '密码修改失败' });
+    }
+});
+
+/**
+ * DELETE /api/auth/delete-account-with-email
+ * Delete account using email verification (no password required)
+ */
+router.delete('/delete-account-with-email', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        const { email, code } = req.body;
+
+        if (!email || !code) {
+            res.status(400).json({ error: '请提供邮箱和验证码' });
+            return;
+        }
+
+        // Verify the email belongs to this user
+        const [users] = await pool.execute<RowDataPacket[]>(
+            'SELECT email, username FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (users.length === 0 || users[0].email !== email) {
+            res.status(403).json({ error: '邮箱验证失败' });
+            return;
+        }
+
+        // Delete user and related data
+        await pool.execute('DELETE FROM users WHERE id = ?', [userId]);
+
+        res.json({ message: '账户已注销' });
+    } catch (error) {
+        console.error('Delete account with email error:', error);
+        res.status(500).json({ error: '账户注销失败' });
+    }
+});
+
 export default router;
 
 
