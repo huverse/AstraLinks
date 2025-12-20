@@ -532,17 +532,19 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     )}
 
                     {/* Password */}
-                    <div className="relative">
-                        <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                        <input
-                            type="password"
-                            placeholder={mode === 'resetPassword' ? '设置新密码' : '密码'}
-                            value={password}
-                            onChange={(e) => setPassword(e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                            required
-                        />
-                    </div>
+                    {mode !== 'emailLogin' && (
+                        <div className="relative">
+                            <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="password"
+                                placeholder={mode === 'resetPassword' ? '设置新密码' : '密码'}
+                                value={password}
+                                onChange={(e) => setPassword(e.target.value)}
+                                className="w-full pl-10 pr-4 py-3 bg-slate-100 dark:bg-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                required
+                            />
+                        </div>
+                    )}
 
                     {/* Confirm Password (Register/Reset) */}
                     {(mode === 'register' || mode === 'resetPassword') && (

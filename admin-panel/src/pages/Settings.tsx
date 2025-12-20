@@ -14,6 +14,8 @@ export default function Settings() {
     const [turnstileLoginEnabled, setTurnstileLoginEnabled] = useState(false);
     const [turnstileSiteKey, setTurnstileSiteKey] = useState('0x4AAAAAACHmC6NQQ8IJpFD8');
     const [turnstileExpiryHours, setTurnstileExpiryHours] = useState(24);
+    const [turnstileStorageMode, setTurnstileStorageMode] = useState<'session' | 'persistent'>('session');
+    const [turnstileSkipForLoggedIn, setTurnstileSkipForLoggedIn] = useState(false);
 
     const loadSettings = async () => {
         setLoading(true);
@@ -26,11 +28,13 @@ export default function Settings() {
             setPrivacyContent(privacyData.setting?.setting_value || '');
 
             // Load security settings
-            const [siteEnabled, loginEnabled, siteKey, expiryHours] = await Promise.all([
+            const [siteEnabled, loginEnabled, siteKey, expiryHours, storageMode, skipForLoggedIn] = await Promise.all([
                 adminAPI.getSetting('turnstile_site_enabled'),
                 adminAPI.getSetting('turnstile_login_enabled'),
                 adminAPI.getSetting('turnstile_site_key'),
-                adminAPI.getSetting('turnstile_expiry_hours')
+                adminAPI.getSetting('turnstile_expiry_hours'),
+                adminAPI.getSetting('turnstile_storage_mode'),
+                adminAPI.getSetting('turnstile_skip_for_logged_in')
             ]);
             setTurnstileSiteEnabled(siteEnabled.setting?.setting_value === 'true');
             setTurnstileLoginEnabled(loginEnabled.setting?.setting_value === 'true');
@@ -40,6 +44,10 @@ export default function Settings() {
             if (expiryHours.setting?.setting_value) {
                 setTurnstileExpiryHours(parseInt(expiryHours.setting.setting_value) || 24);
             }
+            if (storageMode.setting?.setting_value) {
+                setTurnstileStorageMode(storageMode.setting.setting_value as 'session' | 'persistent');
+            }
+            setTurnstileSkipForLoggedIn(skipForLoggedIn.setting?.setting_value === 'true');
         } catch (err) {
             console.error('Failed to load settings:', err);
         } finally {
@@ -61,7 +69,9 @@ export default function Settings() {
                     adminAPI.updateSetting('turnstile_site_enabled', String(turnstileSiteEnabled)),
                     adminAPI.updateSetting('turnstile_login_enabled', String(turnstileLoginEnabled)),
                     adminAPI.updateSetting('turnstile_site_key', turnstileSiteKey),
-                    adminAPI.updateSetting('turnstile_expiry_hours', String(turnstileExpiryHours))
+                    adminAPI.updateSetting('turnstile_expiry_hours', String(turnstileExpiryHours)),
+                    adminAPI.updateSetting('turnstile_storage_mode', turnstileStorageMode),
+                    adminAPI.updateSetting('turnstile_skip_for_logged_in', String(turnstileSkipForLoggedIn))
                 ]);
             }
             alert('保存成功');
@@ -319,6 +329,66 @@ export default function Settings() {
                                         : '建议值：24 小时（1天）至 168 小时（1周）'
                                     }
                                 </p>
+
+                                {/* Storage Mode Selection */}
+                                {turnstileExpiryHours > 0 && (
+                                    <div className="mt-4 pt-4 border-t border-gray-200 dark:border-slate-700">
+                                        <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+                                            💾 验证记录存储方式
+                                        </label>
+                                        <div className="space-y-2">
+                                            <label className="flex items-center gap-3 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="storageMode"
+                                                    checked={turnstileStorageMode === 'session'}
+                                                    onChange={() => setTurnstileStorageMode('session')}
+                                                    className="w-4 h-4 text-blue-600"
+                                                />
+                                                <div>
+                                                    <span className="font-medium">会话存储</span>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">关闭浏览器后需重新验证</p>
+                                                </div>
+                                            </label>
+                                            <label className="flex items-center gap-3 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="storageMode"
+                                                    checked={turnstileStorageMode === 'persistent'}
+                                                    onChange={() => setTurnstileStorageMode('persistent')}
+                                                    className="w-4 h-4 text-blue-600"
+                                                />
+                                                <div>
+                                                    <span className="font-medium">持久存储</span>
+                                                    <p className="text-xs text-gray-500 dark:text-gray-400">验证状态在设定时间内持久有效（推荐）</p>
+                                                </div>
+                                            </label>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Skip for Logged In Users */}
+                        {turnstileSiteEnabled && (
+                            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl">👤</span>
+                                    <div>
+                                        <h3 className="font-medium">已登录用户跳过验证</h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                                            已登录账号的用户无需进行入口验证
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setTurnstileSkipForLoggedIn(!turnstileSkipForLoggedIn)}
+                                    className={`relative w-14 h-8 rounded-full transition-colors ${turnstileSkipForLoggedIn ? 'bg-green-500' : 'bg-gray-300 dark:bg-slate-600'
+                                        }`}
+                                >
+                                    <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${turnstileSkipForLoggedIn ? 'translate-x-7' : 'translate-x-1'
+                                        }`} />
+                                </button>
                             </div>
                         )}
 

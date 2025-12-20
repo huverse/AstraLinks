@@ -102,6 +102,8 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
         const cachedLoginEnabled = getCached('turnstile_login_enabled');
         const cachedSiteKey = getCached('turnstile_site_key');
         const cachedExpiryHours = getCached('turnstile_expiry_hours');
+        const cachedStorageMode = getCached('turnstile_storage_mode');
+        const cachedSkipForLoggedIn = getCached('turnstile_skip_for_logged_in');
 
         if (cachedSiteEnabled !== null && cachedLoginEnabled !== null && cachedSiteKey !== null && cachedExpiryHours !== null) {
             res.json({
@@ -109,6 +111,8 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
                 loginEnabled: cachedLoginEnabled === 'true',
                 siteKey: cachedSiteKey,
                 expiryHours: cachedExpiryHours !== null ? parseInt(cachedExpiryHours) : 24,
+                storageMode: cachedStorageMode || 'session',
+                skipForLoggedIn: cachedSkipForLoggedIn === 'true',
                 cached: true
             });
             return;
@@ -116,7 +120,7 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
 
         const [settings] = await pool.execute<RowDataPacket[]>(
             `SELECT setting_key, setting_value FROM site_settings 
-             WHERE setting_key IN ('turnstile_site_enabled', 'turnstile_login_enabled', 'turnstile_site_key', 'turnstile_expiry_hours')`
+             WHERE setting_key IN ('turnstile_site_enabled', 'turnstile_login_enabled', 'turnstile_site_key', 'turnstile_expiry_hours', 'turnstile_storage_mode', 'turnstile_skip_for_logged_in')`
         );
 
         const settingsMap: Record<string, string> = {};
@@ -128,14 +132,18 @@ router.get('/public/turnstile', async (req: Request, res: Response) => {
         const expiryHours = settingsMap['turnstile_expiry_hours'] !== undefined
             ? parseInt(settingsMap['turnstile_expiry_hours'])
             : 24;
+        const storageMode = settingsMap['turnstile_storage_mode'] || 'session';
+        const skipForLoggedIn = settingsMap['turnstile_skip_for_logged_in'] === 'true';
 
         // Cache the values
         setCache('turnstile_site_enabled', String(siteEnabled));
         setCache('turnstile_login_enabled', String(loginEnabled));
         setCache('turnstile_site_key', siteKey);
         setCache('turnstile_expiry_hours', String(expiryHours));
+        setCache('turnstile_storage_mode', storageMode);
+        setCache('turnstile_skip_for_logged_in', String(skipForLoggedIn));
 
-        res.json({ siteEnabled, loginEnabled, siteKey, expiryHours });
+        res.json({ siteEnabled, loginEnabled, siteKey, expiryHours, storageMode, skipForLoggedIn });
     } catch (error: any) {
         console.error('Get Turnstile settings error:', error);
         res.status(500).json({ error: 'Failed to fetch Turnstile settings' });
