@@ -9,7 +9,7 @@ import React, { useState } from 'react';
 import {
     GitBranch, History, FolderOpen, Settings,
     ChevronLeft, Plus, Search, Cloud, Wand2, Key, X, CheckCircle, AlertCircle, RefreshCw,
-    BookOpen, Users, Plug, BarChart3, Folder, CheckSquare, Code
+    BookOpen, Users, Plug, BarChart3, Folder, CheckSquare, Code, Trash2
 } from 'lucide-react';
 import { useWorkflows, Workflow } from '../../hooks/useWorkspace';
 import { WorkflowEditor } from '../workflow';
@@ -300,12 +300,13 @@ interface SidebarProps {
     onOpenAgentPanel: () => void;
     onOpenMcpPanel: () => void;
     onOpenTokenStats: () => void;
+    onDeleteWorkflow: (id: string) => void;
 }
 
 function Sidebar({
     workspaceId, workspaceName, activeTab, onTabChange, onBack,
     workflows, selectedWorkflowId, onSelectWorkflow, onCreateWorkflow, onOpenConfigCenter, onOpenPromptOptimizer,
-    onOpenKnowledgeBase, onOpenAgentPanel, onOpenMcpPanel, onOpenTokenStats
+    onOpenKnowledgeBase, onOpenAgentPanel, onOpenMcpPanel, onOpenTokenStats, onDeleteWorkflow
 }: SidebarProps) {
     const tabs = [
         { id: 'workflows' as const, icon: GitBranch, label: '工作流' },
@@ -376,20 +377,34 @@ function Sidebar({
                                 <p className="text-center text-slate-500 text-sm py-4">暂无工作流</p>
                             ) : (
                                 workflows.map(wf => (
-                                    <button
+                                    <div
                                         key={wf.id}
-                                        onClick={() => onSelectWorkflow(wf.id)}
-                                        className={`w-full text-left px-3 py-2 rounded-lg transition-colors ${selectedWorkflowId === wf.id
+                                        className={`group w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-colors ${selectedWorkflowId === wf.id
                                             ? 'bg-purple-600/20 text-purple-400'
                                             : 'text-slate-300 hover:bg-white/5'
                                             }`}
                                     >
-                                        <div className="flex items-center gap-2">
-                                            <GitBranch size={14} />
-                                            <span className="text-sm truncate">{wf.name}</span>
-                                        </div>
-                                        <span className="text-xs text-slate-500 ml-5">v{wf.version}</span>
-                                    </button>
+                                        <button
+                                            onClick={() => onSelectWorkflow(wf.id)}
+                                            className="flex-1 text-left flex items-center gap-2 min-w-0"
+                                        >
+                                            <GitBranch size={14} className="shrink-0" />
+                                            <div className="min-w-0 flex-1">
+                                                <span className="text-sm truncate block">{wf.name}</span>
+                                                <span className="text-xs text-slate-500">v{wf.version}</span>
+                                            </div>
+                                        </button>
+                                        <button
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                onDeleteWorkflow(wf.id);
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-red-400 hover:bg-red-500/20 rounded transition-all"
+                                            title="删除工作流"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                    </div>
                                 ))
                             )}
                         </div>
@@ -488,13 +503,32 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
     const [showAgentPanel, setShowAgentPanel] = useState(false);
     const [showMcpPanel, setShowMcpPanel] = useState(false);
     const [showTokenStats, setShowTokenStats] = useState(false);
-    const { workflows, createWorkflow } = useWorkflows(workspaceId);
+    const { workflows, createWorkflow, deleteWorkflow } = useWorkflows(workspaceId);
 
     const handleCreateWorkflow = async () => {
         const name = prompt('工作流名称:');
         if (name) {
             const wf = await createWorkflow({ name });
             setSelectedWorkflowId(wf.id);
+        }
+    };
+
+    const handleDeleteWorkflow = async (id: string) => {
+        const workflow = workflows.find(wf => wf.id === id);
+        if (!workflow) return;
+
+        const confirmed = confirm(`确定要删除工作流 "${workflow.name}" 吗？此操作不可恢复。`);
+        if (!confirmed) return;
+
+        try {
+            await deleteWorkflow(id);
+            // 如果删除的是当前选中的工作流，清空选择
+            if (selectedWorkflowId === id) {
+                setSelectedWorkflowId(null);
+            }
+        } catch (error) {
+            console.error('Delete workflow error:', error);
+            alert('删除失败');
         }
     };
 
@@ -548,6 +582,7 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
                 onOpenAgentPanel={() => setShowAgentPanel(true)}
                 onOpenMcpPanel={() => setShowMcpPanel(true)}
                 onOpenTokenStats={() => setShowTokenStats(true)}
+                onDeleteWorkflow={handleDeleteWorkflow}
             />
 
             {/* 主内容区 */}
