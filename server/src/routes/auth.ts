@@ -577,11 +577,26 @@ router.get('/qq', optionalAuthMiddleware as any, async (req: Request, res: Respo
     try {
         const action = (req.query.action as string) === 'bind' ? 'bind' : 'login';
         const userId = action === 'bind' ? (req as AuthenticatedRequest).user?.id : undefined;
+        const turnstileToken = req.query.turnstileToken as string | undefined;
 
         // For bind action, require authentication
         if (action === 'bind' && !userId) {
             res.status(401).json({ error: '请先登录后再绑定QQ' });
             return;
+        }
+
+        // Verify Turnstile for login action (not required for bind since user is already authenticated)
+        if (action === 'login' && await isTurnstileLoginEnabled()) {
+            if (!turnstileToken) {
+                res.status(400).json({ error: '请先完成人机验证' });
+                return;
+            }
+            const clientIP = req.ip || req.socket.remoteAddress || '';
+            const turnstileResult = await verifyTurnstileToken(turnstileToken, clientIP);
+            if (!turnstileResult.success) {
+                res.status(400).json({ error: turnstileResult.error || '人机验证失败' });
+                return;
+            }
         }
 
         // Generate state for CSRF protection
@@ -1080,11 +1095,25 @@ const emailSessionStore = new Map<string, { email: string; expires: number }>();
  */
 router.post('/email/send-code', async (req: Request, res: Response) => {
     try {
-        const { email } = req.body;
+        const { email, turnstileToken } = req.body;
 
         if (!email || !email.includes('@')) {
             res.status(400).json({ error: '请输入有效的邮箱地址' });
             return;
+        }
+
+        // Verify Turnstile token if login verification is enabled
+        if (await isTurnstileLoginEnabled()) {
+            if (!turnstileToken) {
+                res.status(400).json({ error: '请先完成人机验证' });
+                return;
+            }
+            const clientIP = req.ip || req.socket.remoteAddress || '';
+            const turnstileResult = await verifyTurnstileToken(turnstileToken, clientIP);
+            if (!turnstileResult.success) {
+                res.status(400).json({ error: turnstileResult.error || '人机验证失败' });
+                return;
+            }
         }
 
         // Rate limiting - check if code was sent recently
@@ -1451,10 +1480,25 @@ router.get('/google', optionalAuthMiddleware as any, async (req: Request, res: R
     try {
         const action = (req.query.action as string) === 'bind' ? 'bind' : 'login';
         const userId = action === 'bind' ? (req as AuthenticatedRequest).user?.id : undefined;
+        const turnstileToken = req.query.turnstileToken as string | undefined;
 
         if (action === 'bind' && !userId) {
             res.status(401).json({ error: '请先登录后再绑定Google' });
             return;
+        }
+
+        // Verify Turnstile for login action (not required for bind since user is already authenticated)
+        if (action === 'login' && await isTurnstileLoginEnabled()) {
+            if (!turnstileToken) {
+                res.status(400).json({ error: '请先完成人机验证' });
+                return;
+            }
+            const clientIP = req.ip || req.socket.remoteAddress || '';
+            const turnstileResult = await verifyTurnstileToken(turnstileToken, clientIP);
+            if (!turnstileResult.success) {
+                res.status(400).json({ error: turnstileResult.error || '人机验证失败' });
+                return;
+            }
         }
 
         // Generate state for CSRF protection

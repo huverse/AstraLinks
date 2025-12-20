@@ -19,7 +19,14 @@ npm install --production=false
 echo "🔨 构建前端..."
 npm run build
 
-# 4. 构建后端
+# 4. 构建管理后台
+echo "🔨 构建管理后台..."
+cd admin-panel
+npm install --production=false
+npm run build
+cd ..
+
+# 5. 构建后端
 echo "🔨 构建后端..."
 cd server
 npm install --production=false

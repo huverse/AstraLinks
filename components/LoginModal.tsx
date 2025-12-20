@@ -314,6 +314,12 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             return;
         }
 
+        // Require Turnstile verification if enabled
+        if (turnstileLoginEnabled && !turnstileToken) {
+            setError('请先完成人机验证');
+            return;
+        }
+
         setError(null);
         setEmailCodeSending(true);
 
@@ -321,7 +327,10 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             const res = await fetch(`${API_BASE}/api/auth/email/send-code`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email: emailLoginEmail }),
+                body: JSON.stringify({
+                    email: emailLoginEmail,
+                    turnstileToken: turnstileToken
+                }),
             });
 
             const data = await res.json();
@@ -693,8 +702,15 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                 <button
                                     type="button"
                                     onClick={() => {
+                                        if (turnstileLoginEnabled && !turnstileToken) {
+                                            setError('请先完成人机验证');
+                                            return;
+                                        }
                                         const apiBase = (import.meta as any).env?.VITE_PROXY_API_BASE || 'http://localhost:3001';
-                                        window.location.href = `${apiBase}/api/auth/qq`;
+                                        const url = turnstileToken
+                                            ? `${apiBase}/api/auth/qq?turnstileToken=${encodeURIComponent(turnstileToken)}`
+                                            : `${apiBase}/api/auth/qq`;
+                                        window.location.href = url;
                                     }}
                                     className="flex-1 py-3 bg-[#12B7F5] hover:bg-[#0DA8E3] text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
                                 >
@@ -708,8 +724,15 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                                 <button
                                     type="button"
                                     onClick={() => {
+                                        if (turnstileLoginEnabled && !turnstileToken) {
+                                            setError('请先完成人机验证');
+                                            return;
+                                        }
                                         const apiBase = (import.meta as any).env?.VITE_PROXY_API_BASE || 'http://localhost:3001';
-                                        window.location.href = `${apiBase}/api/auth/google`;
+                                        const url = turnstileToken
+                                            ? `${apiBase}/api/auth/google?turnstileToken=${encodeURIComponent(turnstileToken)}`
+                                            : `${apiBase}/api/auth/google`;
+                                        window.location.href = url;
                                     }}
                                     className="flex-1 py-3 bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-700 dark:text-slate-200 font-semibold rounded-xl hover:bg-slate-50 dark:hover:bg-slate-600 transition-colors flex items-center justify-center gap-2"
                                 >
