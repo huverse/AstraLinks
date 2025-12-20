@@ -7,7 +7,7 @@ description: 服务器部署和更新流程
 ## 快速部署（推荐）
 // turbo-all
 ```bash
-cd /www/wwwroot/AstraLinks && ./deploy.sh
+cd /www/wwwroot/AstraLinks && bash deploy.sh
 ```
 
 ## 手动部署步骤
