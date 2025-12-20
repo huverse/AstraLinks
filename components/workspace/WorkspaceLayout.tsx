@@ -517,12 +517,24 @@ export function WorkspaceLayout({ workspaceId, workspaceName, onBack }: Workspac
         const workflow = workflows.find(wf => wf.id === id);
         if (!workflow) return;
 
-        const confirmed = confirm(`确定要删除工作流 "${workflow.name}" 吗？此操作不可恢复。`);
-        if (!confirmed) return;
+        // 显示选择对话框
+        const choice = window.prompt(
+            `删除工作流 "${workflow.name}"\n\n请选择删除方式：\n1 = 移到回收站（可恢复）\n2 = 永久删除（不可恢复）\n\n输入 1 或 2：`
+        );
+
+        if (!choice || (choice !== '1' && choice !== '2')) return;
+
+        const permanent = choice === '2';
+
+        if (permanent) {
+            const confirmPermanent = window.confirm(
+                `⚠️ 警告：永久删除将同时删除所有版本历史和执行记录！\n\n确定要永久删除 "${workflow.name}" 吗？`
+            );
+            if (!confirmPermanent) return;
+        }
 
         try {
-            await deleteWorkflow(id);
-            // 如果删除的是当前选中的工作流，清空选择
+            await deleteWorkflow(id, permanent);
             if (selectedWorkflowId === id) {
                 setSelectedWorkflowId(null);
             }

@@ -239,8 +239,8 @@ export function useWorkflows(workspaceId: string | null) {
         return data;
     };
 
-    const deleteWorkflow = async (id: string) => {
-        await fetchAPI(`/workflows/${id}`, { method: 'DELETE' });
+    const deleteWorkflow = async (id: string, permanent: boolean = false) => {
+        await fetchAPI(`/workflows/${id}?permanent=${permanent}`, { method: 'DELETE' });
         setWorkflows(prev => prev.filter(w => w.id !== id));
     };
 

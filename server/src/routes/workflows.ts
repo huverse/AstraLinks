@@ -270,13 +270,15 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * 删除工作流 (软删除)
+ * 删除工作流 (支持软删除和永久删除)
  * DELETE /api/workflows/:id
+ * Query: permanent=true 为永久删除，否则为软删除
  */
 router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
     try {
         const userId = (req as any).user.id;
         const { id } = req.params;
+        const permanent = req.query.permanent === 'true';
 
         // 验证权限
         const [rows] = await pool.execute<RowDataPacket[]>(
@@ -287,17 +289,25 @@ router.delete('/:id', async (req: Request, res: Response): Promise<void> => {
             [id]
         );
 
-        if (rows.length === 0 || rows[0].owner_id !== userId) {
+        if (rows.length === 0 || String(rows[0].owner_id) !== String(userId)) {
             res.status(404).json({ error: '工作流不存在或无权删除' });
             return;
         }
 
-        await pool.execute(
-            `UPDATE workflows SET is_deleted = TRUE WHERE id = ?`,
-            [id]
-        );
+        if (permanent) {
+            // 永久删除 - 先删除相关记录
+            await pool.execute(`DELETE FROM workflow_versions WHERE workflow_id = ?`, [id]);
+            await pool.execute(`DELETE FROM workflow_executions WHERE workflow_id = ?`, [id]);
+            await pool.execute(`DELETE FROM workflows WHERE id = ?`, [id]);
+        } else {
+            // 软删除
+            await pool.execute(
+                `UPDATE workflows SET is_deleted = TRUE WHERE id = ?`,
+                [id]
+            );
+        }
 
-        res.json({ success: true });
+        res.json({ success: true, permanent });
     } catch (error: any) {
         console.error('[Workflow] Delete error:', error);
         res.status(500).json({ error: error.message });
