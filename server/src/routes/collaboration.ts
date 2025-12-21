@@ -102,8 +102,11 @@ router.get('/:workflowId/collaborators', async (req: Request, res: Response) => 
         const userId = (req as any).user.id;
         const { workflowId } = req.params;
 
+        console.log('[Collaboration] GET collaborators for workflow:', workflowId, 'user:', userId);
+
         const access = await checkWorkflowAccess(workflowId, userId, 'viewer');
         if (!access.hasAccess) {
+            console.log('[Collaboration] Access denied for user:', userId);
             res.status(403).json({ error: '无权访问此工作流' });
             return;
         }
@@ -288,8 +291,11 @@ router.get('/:workflowId/comments', async (req: Request, res: Response) => {
         const { workflowId } = req.params;
         const { nodeId, resolved } = req.query;
 
+        console.log('[Collaboration] GET comments for workflow:', workflowId, 'user:', userId);
+
         const access = await checkWorkflowAccess(workflowId, userId, 'viewer');
         if (!access.hasAccess) {
+            console.log('[Collaboration] Comment access denied for user:', userId);
             res.status(403).json({ error: '无权访问此工作流' });
             return;
         }

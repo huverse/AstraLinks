@@ -83,13 +83,22 @@ export function CollaboratorPanel({ workflowId, isOpen, onClose, currentUserRole
                 headers: { 'Authorization': `Bearer ${getToken()}` },
             });
 
-            if (!response.ok) throw new Error('获取协作者列表失败');
+            if (response.status === 500) {
+                // 可能是数据库表不存在
+                setError('协作功能数据库表未创建，请运行 p5_collaboration.sql 迁移');
+                return;
+            }
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || '获取协作者列表失败');
+            }
 
             const data = await response.json();
             setOwner(data.owner);
             setCollaborators(data.collaborators || []);
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || '网络请求失败');
         } finally {
             setLoading(false);
         }

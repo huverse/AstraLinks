@@ -18,7 +18,7 @@ import {
     FileOutput, Zap, Code, Save, Trash2, StopCircle,
     Loader2, CheckCircle, XCircle, AlertCircle, X,
     Globe, Repeat, Plug, ArrowLeftRight, Timer, GitMerge, Workflow, Database,
-    Image, Video, Music, Merge, Webhook, TestTube, Coins, Sparkles, Users, MessageSquare
+    Image, Video, Music, Merge, Webhook, TestTube, Coins, Sparkles, Users, MessageSquare, BarChart3, Bell
 } from 'lucide-react';
 import { nodeTypes, NodeType } from './nodes';
 import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
@@ -36,6 +36,8 @@ import TokenUsagePanel, { NodeTokenUsage } from './TokenUsagePanel';
 import ModelComparePanel, { ModelConfig } from './ModelComparePanel';
 import CollaboratorPanel from './CollaboratorPanel';
 import CommentPanel from './CommentPanel';
+import MonitoringDashboard from './MonitoringDashboard';
+import AlertConfigPanel from './AlertConfigPanel';
 import '../../app/styles/execution-animation.css';
 import '../../app/styles/workflow-mobile.css';
 
@@ -150,6 +152,9 @@ export function WorkflowEditor({
     const [showComments, setShowComments] = useState(false);
     const [workflowRole, setWorkflowRole] = useState<string>('owner');
 
+    // P6: 监控与告警
+    const [showMonitoring, setShowMonitoring] = useState(false);
+    const [showAlertConfig, setShowAlertConfig] = useState(false);
 
     // 从 API 获取工作流数据（包括 nodes 和 edges）
     useEffect(() => {
@@ -559,6 +564,26 @@ export function WorkflowEditor({
                         >
                             <MessageSquare size={16} />
                             评论
+                        </button>
+
+                        {/* P6: 监控仪表盘按钮 */}
+                        <button
+                            onClick={() => setShowMonitoring(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-cyan-600/80 text-white rounded-xl hover:bg-cyan-500 transition-colors shadow-lg text-sm"
+                            title="执行监控"
+                        >
+                            <BarChart3 size={16} />
+                            监控
+                        </button>
+
+                        {/* P6: 告警配置按钮 */}
+                        <button
+                            onClick={() => setShowAlertConfig(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-orange-600/80 text-white rounded-xl hover:bg-orange-500 transition-colors shadow-lg text-sm"
+                            title="告警配置"
+                        >
+                            <Bell size={16} />
+                            告警
                         </button>
 
                         {/* P4: Token 使用统计按钮 */}
@@ -2491,6 +2516,20 @@ export function WorkflowEditor({
                 onClose={() => setShowComments(false)}
                 selectedNodeId={selectedNode?.id}
                 canEdit={workflowRole === 'owner' || workflowRole === 'editor'}
+            />
+
+            {/* P6: 监控仪表盘 */}
+            <MonitoringDashboard
+                workflowId={workflowId}
+                isOpen={showMonitoring}
+                onClose={() => setShowMonitoring(false)}
+            />
+
+            {/* P6: 告警配置面板 */}
+            <AlertConfigPanel
+                workflowId={workflowId}
+                isOpen={showAlertConfig}
+                onClose={() => setShowAlertConfig(false)}
             />
         </div >
     );

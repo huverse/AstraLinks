@@ -1467,4 +1467,240 @@ router.get('/:id/shares', async (req: Request, res: Response): Promise<void> => 
     }
 });
 
+// ============================================
+// P6: 监控分析 API
+// ============================================
+
+/**
+ * 获取执行统计
+ * GET /api/workflows/:id/analytics/stats?days=7
+ */
+router.get('/:id/analytics/stats', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const days = parseInt(req.query.days as string) || 7;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ? AND ws.owner_id = ?`,
+            [id, userId]
+        );
+
+        if (wRows.length === 0) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        // 获取统计
+        const [stats] = await pool.execute<RowDataPacket[]>(
+            `SELECT 
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
+                SUM(CASE WHEN status = 'running' THEN 1 ELSE 0 END) as running,
+                AVG(TIMESTAMPDIFF(SECOND, started_at, completed_at) * 1000) as avgDuration
+             FROM workflow_executions 
+             WHERE workflow_id = ? AND started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+            [id, days]
+        );
+
+        res.json(stats[0] || { total: 0, completed: 0, failed: 0, cancelled: 0, running: 0, avgDuration: 0 });
+    } catch (error: any) {
+        console.error('[Analytics] Stats error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 获取每日执行趋势
+ * GET /api/workflows/:id/analytics/daily?days=7
+ */
+router.get('/:id/analytics/daily', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const days = parseInt(req.query.days as string) || 7;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ? AND ws.owner_id = ?`,
+            [id, userId]
+        );
+
+        if (wRows.length === 0) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        // 获取每日统计
+        const [daily] = await pool.execute<RowDataPacket[]>(
+            `SELECT 
+                DATE(started_at) as date,
+                COUNT(*) as total,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed
+             FROM workflow_executions 
+             WHERE workflow_id = ? AND started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+             GROUP BY DATE(started_at)
+             ORDER BY date ASC`,
+            [id, days]
+        );
+
+        res.json({ daily });
+    } catch (error: any) {
+        console.error('[Analytics] Daily error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 获取节点性能
+ * GET /api/workflows/:id/analytics/performance
+ */
+router.get('/:id/analytics/performance', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id, w.nodes FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ? AND ws.owner_id = ?`,
+            [id, userId]
+        );
+
+        if (wRows.length === 0) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        // 从最近执行中提取节点性能
+        const [executions] = await pool.execute<RowDataPacket[]>(
+            `SELECT result FROM workflow_executions 
+             WHERE workflow_id = ? AND status = 'completed'
+             ORDER BY completed_at DESC LIMIT 50`,
+            [id]
+        );
+
+        const nodeStats: Record<string, { totalDuration: number; count: number; failCount: number; name: string; type: string }> = {};
+        const nodes = typeof wRows[0].nodes === 'string' ? JSON.parse(wRows[0].nodes) : (wRows[0].nodes || []);
+
+        for (const exec of executions) {
+            const result = typeof exec.result === 'string' ? JSON.parse(exec.result) : exec.result;
+            if (result?.nodeStates) {
+                for (const [nodeId, state] of Object.entries(result.nodeStates as Record<string, any>)) {
+                    if (!nodeStats[nodeId]) {
+                        const nodeInfo = nodes.find((n: any) => n.id === nodeId);
+                        nodeStats[nodeId] = {
+                            totalDuration: 0,
+                            count: 0,
+                            failCount: 0,
+                            name: nodeInfo?.data?.label || nodeId,
+                            type: nodeInfo?.type || 'unknown'
+                        };
+                    }
+                    if (state.duration) {
+                        nodeStats[nodeId].totalDuration += state.duration;
+                        nodeStats[nodeId].count++;
+                    }
+                    if (state.status === 'failed') {
+                        nodeStats[nodeId].failCount++;
+                    }
+                }
+            }
+        }
+
+        const performance = Object.entries(nodeStats)
+            .map(([nodeId, stats]) => ({
+                nodeId,
+                nodeName: stats.name,
+                nodeType: stats.type,
+                avgDuration: stats.count > 0 ? Math.round(stats.totalDuration / stats.count) : 0,
+                execCount: stats.count,
+                failCount: stats.failCount,
+            }))
+            .sort((a, b) => b.avgDuration - a.avgDuration);
+
+        res.json({ nodes: performance });
+    } catch (error: any) {
+        console.error('[Analytics] Performance error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 获取告警配置
+ * GET /api/workflows/:id/alerts/config
+ */
+router.get('/:id/alerts/config', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id, w.config FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ? AND ws.owner_id = ?`,
+            [id, userId]
+        );
+
+        if (wRows.length === 0) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        const config = typeof wRows[0].config === 'string' ? JSON.parse(wRows[0].config) : (wRows[0].config || {});
+        res.json({ config: config.alerts || null });
+    } catch (error: any) {
+        console.error('[Alerts] Get config error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 保存告警配置
+ * PUT /api/workflows/:id/alerts/config
+ */
+router.put('/:id/alerts/config', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const alertConfig = req.body;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id, w.config FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ? AND ws.owner_id = ?`,
+            [id, userId]
+        );
+
+        if (wRows.length === 0) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        const currentConfig = typeof wRows[0].config === 'string' ? JSON.parse(wRows[0].config) : (wRows[0].config || {});
+        currentConfig.alerts = alertConfig;
+
+        await pool.execute(
+            'UPDATE workflows SET config = ? WHERE id = ?',
+            [JSON.stringify(currentConfig), id]
+        );
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('[Alerts] Save config error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

@@ -81,12 +81,20 @@ export function CommentPanel({ workflowId, isOpen, onClose, selectedNodeId, canE
                 headers: { 'Authorization': `Bearer ${getToken()}` },
             });
 
-            if (!response.ok) throw new Error('获取评论失败');
+            if (response.status === 500) {
+                setError('评论功能数据库表未创建，请运行 p5_collaboration.sql 迁移');
+                return;
+            }
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error || '获取评论失败');
+            }
 
             const data = await response.json();
             setComments(data.comments || []);
         } catch (err: any) {
-            setError(err.message);
+            setError(err.message || '网络请求失败');
         } finally {
             setLoading(false);
         }
