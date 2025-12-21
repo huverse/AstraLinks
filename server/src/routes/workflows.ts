@@ -1046,4 +1046,425 @@ router.post('/import', async (req: Request, res: Response): Promise<void> => {
     }
 });
 
+// ============================================
+// 模板市场
+// ============================================
+
+/**
+ * 获取公开模板列表
+ * GET /api/workflows/templates/public
+ */
+router.get('/templates/public', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { category, search, sort = 'popular', page = 1, limit = 20 } = req.query;
+        const offset = (Number(page) - 1) * Number(limit);
+
+        let query = `
+            SELECT 
+                w.id, w.name, w.description, w.nodes, w.edges,
+                w.created_at, w.updated_at,
+                u.username as author,
+                COALESCE(AVG(tr.rating), 0) as avg_rating,
+                COUNT(DISTINCT tr.id) as rating_count,
+                COUNT(DISTINCT tc.id) as clone_count
+            FROM workflows w
+            JOIN users u ON w.created_by = u.id
+            LEFT JOIN template_ratings tr ON tr.workflow_id = w.id
+            LEFT JOIN template_clones tc ON tc.workflow_id = w.id
+            WHERE w.is_template = TRUE AND w.is_deleted = FALSE AND w.is_public = TRUE
+        `;
+        const params: any[] = [];
+
+        if (category) {
+            query += ` AND w.category = ?`;
+            params.push(category);
+        }
+
+        if (search) {
+            query += ` AND (w.name LIKE ? OR w.description LIKE ?)`;
+            params.push(`%${search}%`, `%${search}%`);
+        }
+
+        query += ` GROUP BY w.id`;
+
+        // 排序
+        switch (sort) {
+            case 'newest':
+                query += ` ORDER BY w.created_at DESC`;
+                break;
+            case 'rating':
+                query += ` ORDER BY avg_rating DESC`;
+                break;
+            case 'popular':
+            default:
+                query += ` ORDER BY clone_count DESC, avg_rating DESC`;
+        }
+
+        query += ` LIMIT ? OFFSET ?`;
+        params.push(Number(limit), offset);
+
+        const [templates] = await pool.execute<RowDataPacket[]>(query, params);
+
+        // 获取总数
+        const [countResult] = await pool.execute<RowDataPacket[]>(
+            `SELECT COUNT(*) as total FROM workflows 
+             WHERE is_template = TRUE AND is_deleted = FALSE AND is_public = TRUE`
+        );
+
+        res.json({
+            templates: templates.map(t => ({
+                ...t,
+                nodeCount: JSON.parse(t.nodes || '[]').length,
+                avg_rating: Number(t.avg_rating).toFixed(1),
+                nodes: undefined,
+                edges: undefined
+            })),
+            total: countResult[0]?.total || 0,
+            page: Number(page),
+            limit: Number(limit)
+        });
+    } catch (error: any) {
+        console.error('[Template] List error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 获取模板详情
+ * GET /api/workflows/templates/:id
+ */
+router.get('/templates/:id', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { id } = req.params;
+
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.*, u.username as author,
+                    COALESCE(AVG(tr.rating), 0) as avg_rating,
+                    COUNT(DISTINCT tr.id) as rating_count
+             FROM workflows w
+             JOIN users u ON w.created_by = u.id
+             LEFT JOIN template_ratings tr ON tr.workflow_id = w.id
+             WHERE w.id = ? AND w.is_template = TRUE AND w.is_deleted = FALSE`,
+            [id]
+        );
+
+        if (rows.length === 0) {
+            res.status(404).json({ error: '模板不存在' });
+            return;
+        }
+
+        res.json(rows[0]);
+    } catch (error: any) {
+        console.error('[Template] Get error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 发布为模板
+ * POST /api/workflows/:id/publish
+ */
+router.post('/:id/publish', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const { category, isPublic = true } = req.body;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id, ws.owner_id FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ?`,
+            [id]
+        );
+
+        if (wRows.length === 0 || String(wRows[0].owner_id) !== String(userId)) {
+            res.status(403).json({ error: '无权操作' });
+            return;
+        }
+
+        await pool.execute(
+            `UPDATE workflows SET is_template = TRUE, is_public = ?, category = ? WHERE id = ?`,
+            [isPublic, category || null, id]
+        );
+
+        res.json({ success: true, isTemplate: true, isPublic });
+    } catch (error: any) {
+        console.error('[Template] Publish error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 评分模板
+ * POST /api/workflows/templates/:id/rate
+ */
+router.post('/templates/:id/rate', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const { rating, comment } = req.body;
+
+        if (!rating || rating < 1 || rating > 5) {
+            res.status(400).json({ error: '评分必须在 1-5 之间' });
+            return;
+        }
+
+        // 插入或更新评分
+        await pool.execute(
+            `INSERT INTO template_ratings (id, workflow_id, user_id, rating, comment)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE rating = VALUES(rating), comment = VALUES(comment)`,
+            [uuidv4(), id, userId, rating, comment || null]
+        );
+
+        res.json({ success: true, rating });
+    } catch (error: any) {
+        console.error('[Template] Rate error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 克隆模板到 Workspace
+ * POST /api/workflows/templates/:id/clone
+ */
+router.post('/templates/:id/clone', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const { workspaceId, name: overrideName } = req.body;
+
+        if (!workspaceId) {
+            res.status(400).json({ error: '需要 workspaceId' });
+            return;
+        }
+
+        // 验证 workspace 权限
+        if (!await verifyWorkspaceOwnership(workspaceId, userId)) {
+            res.status(403).json({ error: '无权访问此 Workspace' });
+            return;
+        }
+
+        // 获取模板
+        const [tRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT * FROM workflows WHERE id = ? AND is_template = TRUE AND is_deleted = FALSE`,
+            [id]
+        );
+
+        if (tRows.length === 0) {
+            res.status(404).json({ error: '模板不存在' });
+            return;
+        }
+
+        const template = tRows[0];
+        const newId = uuidv4();
+        const newName = overrideName || `${template.name} (副本)`;
+
+        // 创建工作流
+        await pool.execute(
+            `INSERT INTO workflows (id, workspace_id, name, description, nodes, edges, variables, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                newId,
+                workspaceId,
+                newName,
+                template.description,
+                template.nodes,
+                template.edges,
+                template.variables,
+                userId
+            ]
+        );
+
+        // 记录克隆
+        await pool.execute(
+            `INSERT INTO template_clones (id, workflow_id, user_id) VALUES (?, ?, ?)`,
+            [uuidv4(), id, userId]
+        );
+
+        res.status(201).json({
+            success: true,
+            id: newId,
+            name: newName,
+            sourceTemplateId: id
+        });
+    } catch (error: any) {
+        console.error('[Template] Clone error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// 分享功能
+// ============================================
+
+/**
+ * 创建分享链接
+ * POST /api/workflows/:id/share
+ */
+router.post('/:id/share', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const { permission = 'read', expiresIn } = req.body;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id, ws.owner_id FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ? AND w.is_deleted = FALSE`,
+            [id]
+        );
+
+        if (wRows.length === 0 || String(wRows[0].owner_id) !== String(userId)) {
+            res.status(403).json({ error: '无权操作' });
+            return;
+        }
+
+        const shareId = uuidv4();
+        const token = uuidv4().replace(/-/g, '');
+        const expiresAt = expiresIn
+            ? new Date(Date.now() + expiresIn * 1000).toISOString()
+            : null;
+
+        await pool.execute(
+            `INSERT INTO workflow_shares (id, workflow_id, created_by, token, permission, expires_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [shareId, id, userId, token, permission, expiresAt]
+        );
+
+        const shareUrl = `${process.env.API_BASE_URL || 'https://astralinks.xyz'}/shared/${token}`;
+
+        res.json({
+            success: true,
+            shareId,
+            token,
+            shareUrl,
+            permission,
+            expiresAt
+        });
+    } catch (error: any) {
+        console.error('[Share] Create error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 访问分享的工作流
+ * GET /api/workflows/shared/:token
+ */
+router.get('/shared/:token', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { token } = req.params;
+
+        const [shares] = await pool.execute<RowDataPacket[]>(
+            `SELECT s.*, w.name, w.description, w.nodes, w.edges, w.variables
+             FROM workflow_shares s
+             JOIN workflows w ON s.workflow_id = w.id
+             WHERE s.token = ? AND s.is_revoked = FALSE AND w.is_deleted = FALSE`,
+            [token]
+        );
+
+        if (shares.length === 0) {
+            res.status(404).json({ error: '分享链接无效或已过期' });
+            return;
+        }
+
+        const share = shares[0];
+
+        // 检查是否过期
+        if (share.expires_at && new Date(share.expires_at) < new Date()) {
+            res.status(410).json({ error: '分享链接已过期' });
+            return;
+        }
+
+        res.json({
+            workflowId: share.workflow_id,
+            name: share.name,
+            description: share.description,
+            nodes: share.nodes,
+            edges: share.edges,
+            variables: share.variables,
+            permission: share.permission,
+            expiresAt: share.expires_at
+        });
+    } catch (error: any) {
+        console.error('[Share] Access error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 撤销分享
+ * DELETE /api/workflows/shares/:shareId
+ */
+router.delete('/shares/:shareId', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { shareId } = req.params;
+
+        const [shares] = await pool.execute<RowDataPacket[]>(
+            `SELECT s.id FROM workflow_shares s WHERE s.id = ? AND s.created_by = ?`,
+            [shareId, userId]
+        );
+
+        if (shares.length === 0) {
+            res.status(403).json({ error: '无权操作' });
+            return;
+        }
+
+        await pool.execute(
+            `UPDATE workflow_shares SET is_revoked = TRUE WHERE id = ?`,
+            [shareId]
+        );
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('[Share] Revoke error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 获取工作流的分享列表
+ * GET /api/workflows/:id/shares
+ */
+router.get('/:id/shares', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id, ws.owner_id FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ?`,
+            [id]
+        );
+
+        if (wRows.length === 0 || String(wRows[0].owner_id) !== String(userId)) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        const [shares] = await pool.execute<RowDataPacket[]>(
+            `SELECT id, token, permission, expires_at, is_revoked, created_at
+             FROM workflow_shares WHERE workflow_id = ? ORDER BY created_at DESC`,
+            [id]
+        );
+
+        res.json({
+            shares: shares.map(s => ({
+                ...s,
+                shareUrl: `${process.env.API_BASE_URL || 'https://astralinks.xyz'}/shared/${s.token}`,
+                isExpired: s.expires_at ? new Date(s.expires_at) < new Date() : false
+            }))
+        });
+    } catch (error: any) {
+        console.error('[Share] List error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

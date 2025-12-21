@@ -1,0 +1,298 @@
+/**
+ * 工作流编辑器移动端适配
+ * 
+ * @module styles/workflow-mobile.css
+ * @description 响应式布局和触摸操作优化
+ */
+
+/* ============================================
+   断点定义
+   - sm: 640px
+   - md: 768px
+   - lg: 1024px
+   ============================================ */
+
+/* ============================================
+   触摸操作优化
+   ============================================ */
+
+@media (max-width: 768px) {
+
+    /* 增大触摸目标 */
+    .react-flow__node {
+        min-width: 140px !important;
+        min-height: 50px !important;
+        touch-action: pan-x pan-y;
+    }
+
+    /* 节点手柄增大 */
+    .react-flow__handle {
+        width: 16px !important;
+        height: 16px !important;
+    }
+
+    /* 工具栏移动端布局 */
+    .workflow-toolbar {
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 8px !important;
+    }
+
+    .workflow-toolbar button {
+        padding: 10px 12px !important;
+        font-size: 13px !important;
+    }
+
+    .workflow-toolbar .btn-text {
+        display: none;
+    }
+
+    /* 侧边栏可折叠 */
+    .workflow-sidebar {
+        position: fixed !important;
+        left: 0;
+        top: 60px;
+        bottom: 0;
+        width: 280px;
+        transform: translateX(-100%);
+        transition: transform 0.3s ease;
+        z-index: 50;
+    }
+
+    .workflow-sidebar.open {
+        transform: translateX(0);
+    }
+
+    /* 侧边栏遮罩 */
+    .workflow-sidebar-overlay {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 40;
+        display: none;
+    }
+
+    .workflow-sidebar-overlay.visible {
+        display: block;
+    }
+
+    /* 节点配置面板底部弹出 */
+    .node-config-panel {
+        position: fixed !important;
+        bottom: 0 !important;
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        width: 100% !important;
+        max-height: 60vh;
+        border-radius: 16px 16px 0 0 !important;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+    }
+
+    .node-config-panel.open {
+        transform: translateY(0);
+    }
+
+    /* 拖动手柄 */
+    .node-config-panel::before {
+        content: '';
+        display: block;
+        width: 40px;
+        height: 4px;
+        background: #64748b;
+        border-radius: 2px;
+        margin: 8px auto;
+    }
+
+    /* 缩放控制放大 */
+    .react-flow__controls {
+        bottom: auto !important;
+        top: 10px !important;
+        left: 10px !important;
+    }
+
+    .react-flow__controls button {
+        width: 36px !important;
+        height: 36px !important;
+    }
+
+    /* 小地图隐藏 */
+    .react-flow__minimap {
+        display: none !important;
+    }
+}
+
+/* ============================================
+   平板布局 (768px - 1024px)
+   ============================================ */
+
+@media (min-width: 769px) and (max-width: 1024px) {
+    .workflow-sidebar {
+        width: 240px !important;
+    }
+
+    .node-config-panel {
+        width: 320px !important;
+    }
+}
+
+/* ============================================
+   触摸手势支持
+   ============================================ */
+
+/* 捏合缩放提示 */
+.touch-zoom-hint {
+    position: fixed;
+    bottom: 80px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 16px;
+    background: rgba(30, 41, 59, 0.9);
+    border-radius: 20px;
+    color: #94a3b8;
+    font-size: 12px;
+    display: none;
+    z-index: 100;
+}
+
+@media (pointer: coarse) {
+    .touch-zoom-hint {
+        display: block;
+    }
+}
+
+/* ============================================
+   移动端浮动操作按钮
+   ============================================ */
+
+@media (max-width: 768px) {
+    .workflow-fab-container {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        z-index: 60;
+    }
+
+    .workflow-fab {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #8b5cf6, #6366f1);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 20px rgba(139, 92, 246, 0.4);
+        border: none;
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .workflow-fab:active {
+        transform: scale(0.95);
+    }
+
+    .workflow-fab.secondary {
+        width: 48px;
+        height: 48px;
+        background: #1e293b;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    /* 节点添加菜单 */
+    .add-node-menu-mobile {
+        position: fixed;
+        bottom: 90px;
+        right: 20px;
+        background: #1e293b;
+        border-radius: 12px;
+        padding: 8px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        z-index: 70;
+        max-height: 60vh;
+        overflow-y: auto;
+        animation: fadeInUp 0.2s ease;
+    }
+
+    @keyframes fadeInUp {
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
+    }
+
+    .add-node-menu-mobile button {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        width: 100%;
+        padding: 12px 16px;
+        border: none;
+        background: transparent;
+        color: white;
+        text-align: left;
+        cursor: pointer;
+        border-radius: 8px;
+        transition: background 0.2s;
+    }
+
+    .add-node-menu-mobile button:active {
+        background: rgba(139, 92, 246, 0.2);
+    }
+}
+
+/* ============================================
+   隐藏桌面端 FAB
+   ============================================ */
+
+@media (min-width: 769px) {
+
+    .workflow-fab-container,
+    .add-node-menu-mobile,
+    .touch-zoom-hint,
+    .mobile-sidebar-toggle {
+        display: none !important;
+    }
+}
+
+/* ============================================
+   安全区域适配 (iOS notch)
+   ============================================ */
+
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+    .workflow-fab-container {
+        bottom: calc(20px + env(safe-area-inset-bottom));
+    }
+
+    .node-config-panel {
+        padding-bottom: env(safe-area-inset-bottom);
+    }
+}
+
+/* ============================================
+   横屏优化
+   ============================================ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+    .workflow-toolbar {
+        padding: 4px 8px !important;
+    }
+
+    .node-config-panel {
+        max-height: 50vh;
+    }
+
+    .workflow-fab {
+        width: 44px;
+        height: 44px;
+    }
+}
