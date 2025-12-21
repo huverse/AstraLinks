@@ -141,8 +141,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
         const id = uuidv4();
 
         await pool.execute(
-            `INSERT INTO workflows (id, workspace_id, name, description, nodes, edges, variables, is_template, created_by)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO workflows (id, workspace_id, name, description, nodes, edges, variables, is_template, created_by, owner_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 id,
                 workspaceId,
@@ -152,7 +152,8 @@ router.post('/', async (req: Request, res: Response): Promise<void> => {
                 JSON.stringify(edges || []),
                 JSON.stringify(variables || {}),
                 isTemplate || false,
-                userId
+                userId,
+                userId  // owner_id = created_by
             ]
         );
 
@@ -1005,8 +1006,8 @@ router.post('/import', async (req: Request, res: Response): Promise<void> => {
 
         // 创建工作流
         await pool.execute(
-            `INSERT INTO workflows (id, workspace_id, name, description, nodes, edges, variables, is_template, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO workflows (id, workspace_id, name, description, nodes, edges, variables, is_template, created_by, owner_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 id,
                 workspaceId,
@@ -1016,7 +1017,9 @@ router.post('/import', async (req: Request, res: Response): Promise<void> => {
                 JSON.stringify(workflow.edges || []),
                 JSON.stringify(workflow.variables || {}),
                 workflow.isTemplate || false,
-                userId
+                userId,
+                userId  // owner_id = created_by
+
             ]
         );
 
@@ -1263,8 +1266,8 @@ router.post('/templates/:id/clone', async (req: Request, res: Response): Promise
 
         // 创建工作流
         await pool.execute(
-            `INSERT INTO workflows (id, workspace_id, name, description, nodes, edges, variables, created_by)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            `INSERT INTO workflows (id, workspace_id, name, description, nodes, edges, variables, created_by, owner_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
                 newId,
                 workspaceId,
@@ -1273,7 +1276,8 @@ router.post('/templates/:id/clone', async (req: Request, res: Response): Promise
                 template.nodes,
                 template.edges,
                 template.variables,
-                userId
+                userId,
+                userId  // owner_id = created_by
             ]
         );
 
