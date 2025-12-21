@@ -2,24 +2,15 @@
  * 工作流编辑器快捷键
  * 
  * @module hooks/useWorkflowShortcuts
- * @description 键盘快捷键管理
+ * @description 键盘快捷键管理 (不依赖 ReactFlow Provider)
  */
 
 import { useCallback, useEffect, useRef } from 'react';
-import { Node, Edge, useReactFlow } from 'reactflow';
+import { Node, Edge } from 'reactflow';
 
 // ============================================
 // 类型定义
 // ============================================
-
-export interface ShortcutAction {
-    key: string;
-    ctrl?: boolean;
-    shift?: boolean;
-    alt?: boolean;
-    action: () => void;
-    description: string;
-}
 
 export interface UseWorkflowShortcutsOptions {
     nodes: Node[];
@@ -65,8 +56,6 @@ export function useWorkflowShortcuts({
     onSelectAll,
     onShowHelp
 }: UseWorkflowShortcutsOptions) {
-    const { getNodes, setNodes, getEdges, setEdges } = useReactFlow();
-
     // 剪贴板
     const clipboardRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null);
 
@@ -141,13 +130,13 @@ export function useWorkflowShortcuts({
         onRedo?.();
     }, [onNodesChange, onEdgesChange, onRedo]);
 
-    // 复制
+    // 复制 - 使用 props 传入的 nodes
     const handleCopy = useCallback(() => {
-        const selectedNodes = getNodes().filter(n => n.selected || n.id === selectedNode);
+        const selectedNodes = nodes.filter(n => n.selected || n.id === selectedNode);
         if (selectedNodes.length === 0) return;
 
         const nodeIds = new Set(selectedNodes.map(n => n.id));
-        const relatedEdges = getEdges().filter(
+        const relatedEdges = edges.filter(
             e => nodeIds.has(e.source) && nodeIds.has(e.target)
         );
 
@@ -157,7 +146,7 @@ export function useWorkflowShortcuts({
         };
 
         console.log(`[Shortcuts] Copied ${selectedNodes.length} nodes`);
-    }, [getNodes, getEdges, selectedNode]);
+    }, [nodes, edges, selectedNode]);
 
     // 粘贴
     const handlePaste = useCallback(() => {
@@ -191,18 +180,18 @@ export function useWorkflowShortcuts({
         }));
 
         // 取消其他节点选中
-        const updatedNodes = getNodes().map(n => ({ ...n, selected: false }));
+        const updatedNodes = nodes.map(n => ({ ...n, selected: false }));
 
         onNodesChange([...updatedNodes, ...newNodes]);
-        onEdgesChange([...getEdges(), ...newEdges]);
+        onEdgesChange([...edges, ...newEdges]);
         saveHistory();
 
         console.log(`[Shortcuts] Pasted ${newNodes.length} nodes`);
-    }, [getNodes, getEdges, onNodesChange, onEdgesChange, saveHistory]);
+    }, [nodes, edges, onNodesChange, onEdgesChange, saveHistory]);
 
     // 删除
     const handleDelete = useCallback(() => {
-        const selectedNodes = getNodes().filter(n => n.selected || n.id === selectedNode);
+        const selectedNodes = nodes.filter(n => n.selected || n.id === selectedNode);
         if (selectedNodes.length === 0) return;
 
         // 不允许删除 start 和 end 节点
@@ -214,8 +203,8 @@ export function useWorkflowShortcuts({
 
         const deleteIds = new Set(deletableNodes.map(n => n.id));
 
-        const newNodes = getNodes().filter(n => !deleteIds.has(n.id));
-        const newEdges = getEdges().filter(
+        const newNodes = nodes.filter(n => !deleteIds.has(n.id));
+        const newEdges = edges.filter(
             e => !deleteIds.has(e.source) && !deleteIds.has(e.target)
         );
 
@@ -225,19 +214,19 @@ export function useWorkflowShortcuts({
         onDelete?.(Array.from(deleteIds));
 
         console.log(`[Shortcuts] Deleted ${deletableNodes.length} nodes`);
-    }, [getNodes, getEdges, selectedNode, onNodesChange, onEdgesChange, saveHistory, onDelete]);
+    }, [nodes, edges, selectedNode, onNodesChange, onEdgesChange, saveHistory, onDelete]);
 
     // 全选
     const handleSelectAll = useCallback(() => {
-        const allSelected = getNodes().map(n => ({ ...n, selected: true }));
+        const allSelected = nodes.map(n => ({ ...n, selected: true }));
         onNodesChange(allSelected);
         onSelectAll?.();
-    }, [getNodes, onNodesChange, onSelectAll]);
+    }, [nodes, onNodesChange, onSelectAll]);
 
     // 复制节点 (Ctrl+D)
     const handleDuplicate = useCallback(() => {
         handleCopy();
-        handlePaste();
+        setTimeout(() => handlePaste(), 10);
         onDuplicate?.([selectedNode || ''].filter(Boolean));
     }, [handleCopy, handlePaste, onDuplicate, selectedNode]);
 
@@ -337,7 +326,7 @@ export function useWorkflowShortcuts({
 
             // Escape 取消选择
             if (key === 'escape') {
-                const deselected = getNodes().map(n => ({ ...n, selected: false }));
+                const deselected = nodes.map(n => ({ ...n, selected: false }));
                 onNodesChange(deselected);
                 return;
             }
@@ -348,7 +337,7 @@ export function useWorkflowShortcuts({
     }, [
         handleCopy, handlePaste, handleDelete, handleUndo, handleRedo,
         handleSelectAll, handleDuplicate, handleSave, handleShowHelp,
-        getNodes, onNodesChange
+        nodes, onNodesChange
     ]);
 
     // 监听节点变化保存历史
