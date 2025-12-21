@@ -31,6 +31,7 @@ import workspaceProjectsRoutes from './routes/workspace-projects';
 import codeRoutes from './routes/code';
 import webhookRoutes from './routes/webhooks';
 import collaborationRoutes from './routes/collaboration';
+import databaseRoutes from './routes/database';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
@@ -81,6 +82,7 @@ app.use('/api/workspace-projects', workspaceProjectsRoutes);
 app.use('/api/code', codeRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/workflows', collaborationRoutes); // P5 协作功能 (嵌套在 workflows 下)
+app.use('/api/database', databaseRoutes); // P7 数据库连接器
 
 // Health check
 app.get('/api/health', (req, res) => {
