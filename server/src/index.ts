@@ -29,11 +29,13 @@ import knowledgeRoutes from './routes/knowledge';
 import mcpMarketplaceRoutes from './routes/mcp-marketplace';
 import workspaceProjectsRoutes from './routes/workspace-projects';
 import codeRoutes from './routes/code';
+import webhookRoutes from './routes/webhooks';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
 import { initGeminiLiveProxy } from './services/geminiLive';
 import { initWorkflowQueue, setSocketIO } from './services/workflowQueue';
+import { initScheduler } from './services/scheduler';
 
 dotenv.config();
 
@@ -76,6 +78,7 @@ app.use('/api/knowledge', knowledgeRoutes);
 app.use('/api/mcp-marketplace', mcpMarketplaceRoutes);
 app.use('/api/workspace-projects', workspaceProjectsRoutes);
 app.use('/api/code', codeRoutes);
+app.use('/api/webhooks', webhookRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -115,6 +118,10 @@ async function startServer() {
             const queueReady = await initWorkflowQueue();
             if (queueReady) {
                 console.log('✅ Workflow queue ready (Redis)');
+
+                // Initialize scheduler for cron-based triggers
+                await initScheduler();
+                console.log('⏰ Workflow scheduler initialized');
             } else {
                 console.log('⚠️ Workflow queue disabled (Redis unavailable, using direct execution)');
             }

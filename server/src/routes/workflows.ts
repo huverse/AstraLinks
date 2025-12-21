@@ -417,4 +417,143 @@ router.post('/:id/versions/:versionId/restore', async (req: Request, res: Respon
     }
 });
 
+// ============================================
+// 节点调试 - 单节点测试执行
+// ============================================
+
+/**
+ * 测试执行单个节点
+ * POST /api/workflows/:id/nodes/:nodeId/test
+ * Body: { input: any, variables?: object }
+ */
+router.post('/:id/nodes/:nodeId/test', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id, nodeId } = req.params;
+        const { input, variables = {}, mockOutputs = {} } = req.body;
+
+        // 获取工作流并验证权限
+        const [rows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.*, ws.owner_id 
+       FROM workflows w 
+       JOIN workspaces ws ON w.workspace_id = ws.id
+       WHERE w.id = ? AND w.is_deleted = FALSE`,
+            [id]
+        );
+
+        if (rows.length === 0 || String(rows[0].owner_id) !== String(userId)) {
+            res.status(404).json({ error: '工作流不存在或无权访问' });
+            return;
+        }
+
+        const workflow = rows[0];
+        const nodes = typeof workflow.nodes === 'string' ? JSON.parse(workflow.nodes) : workflow.nodes;
+
+        // 找到目标节点
+        const targetNode = nodes.find((n: any) => n.id === nodeId);
+        if (!targetNode) {
+            res.status(404).json({ error: '节点不存在' });
+            return;
+        }
+
+        const startTime = Date.now();
+        const logs: Array<{ timestamp: number; level: string; message: string }> = [];
+
+        // 创建模拟执行上下文
+        const mockContext = {
+            workflowId: id,
+            executionId: `test-${Date.now()}`,
+            variables: { ...variables, workspaceId: workflow.workspace_id },
+            nodeStates: {} as Record<string, any>,
+            logs,
+            startTime,
+        };
+
+        // 填充 mock 节点输出 (用于变量引用)
+        for (const [mockNodeId, mockOutput] of Object.entries(mockOutputs)) {
+            mockContext.nodeStates[mockNodeId] = {
+                status: 'completed',
+                output: mockOutput
+            };
+        }
+
+        logs.push({
+            timestamp: Date.now(),
+            level: 'info',
+            message: `开始测试节点: ${targetNode.data?.label || nodeId} (${targetNode.type})`
+        });
+
+        try {
+            // 动态导入执行器 (兼容 ESM/CJS)
+            let nodeExecutors: Record<string, any>;
+            try {
+                // 尝试直接导入编译后的模块
+                nodeExecutors = require('../../core/workflow/executors').nodeExecutors;
+            } catch {
+                // 如果失败，返回模拟结果
+                logs.push({
+                    timestamp: Date.now(),
+                    level: 'warn',
+                    message: '执行器模块未编译，返回模拟结果'
+                });
+
+                res.json({
+                    success: true,
+                    nodeId,
+                    nodeType: targetNode.type,
+                    input,
+                    output: { _mock: true, message: '服务端执行器未就绪，请在前端测试' },
+                    logs,
+                    duration: Date.now() - startTime
+                });
+                return;
+            }
+
+            const executor = nodeExecutors[targetNode.type];
+            if (!executor) {
+                throw new Error(`不支持的节点类型: ${targetNode.type}`);
+            }
+
+            // 执行节点
+            const output = await executor(targetNode, input, mockContext);
+
+            logs.push({
+                timestamp: Date.now(),
+                level: 'info',
+                message: `节点执行完成`
+            });
+
+            res.json({
+                success: true,
+                nodeId,
+                nodeType: targetNode.type,
+                input,
+                output,
+                logs,
+                duration: Date.now() - startTime,
+                tokenUsage: mockContext.nodeStates[nodeId]?.tokenUsage
+            });
+        } catch (execError: any) {
+            logs.push({
+                timestamp: Date.now(),
+                level: 'error',
+                message: execError.message
+            });
+
+            res.json({
+                success: false,
+                nodeId,
+                nodeType: targetNode.type,
+                input,
+                error: execError.message,
+                logs,
+                duration: Date.now() - startTime
+            });
+        }
+    } catch (error: any) {
+        console.error('[Workflow] Node test error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 export default router;

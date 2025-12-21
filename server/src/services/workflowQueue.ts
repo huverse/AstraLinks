@@ -549,3 +549,35 @@ export async function closeWorkflowQueue(): Promise<void> {
     }
     console.log('[WorkflowQueue] Queue closed');
 }
+
+// ============================================
+// 添加工作流任务 (触发器专用包装)
+// ============================================
+
+export interface WorkflowJobParams {
+    workflowId: string;
+    userId: string | number;
+    input?: any;
+    triggerId?: string;
+    triggerHistoryId?: string;
+    priority?: number;
+}
+
+export async function addWorkflowJob(params: WorkflowJobParams): Promise<{ id: string }> {
+    const { workflowId, userId, input = {}, triggerId, triggerHistoryId, priority } = params;
+
+    // 将触发器信息添加到 input 中以便追踪
+    const enrichedInput = {
+        ...input,
+        _trigger: triggerId ? { triggerId, triggerHistoryId } : undefined
+    };
+
+    const result = await enqueueWorkflow(workflowId, enrichedInput, userId, { priority });
+
+    if (!result.jobId) {
+        throw new Error('Failed to add workflow job to queue');
+    }
+
+    return { id: result.jobId };
+}
+

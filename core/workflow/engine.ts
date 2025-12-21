@@ -12,6 +12,7 @@ import {
     ExecutionLog,
     nodeExecutors
 } from './executors';
+import { resolveDeep, VariableContext } from './variableResolver';
 
 // ============================================
 // 执行状态
@@ -162,6 +163,18 @@ export class WorkflowEngine {
             throw new Error(`未知的节点类型: ${nodeType}`);
         }
 
+        // 构建变量上下文用于解析 {{xxx}} 引用
+        const variableContext: VariableContext = {
+            input: this.context.variables.input,
+            variables: this.context.variables,
+            nodeOutputs: this.getNodeOutputs(),
+            env: typeof process !== 'undefined' ? process.env as Record<string, string> : {},
+        };
+
+        // 解析节点配置中的变量引用
+        const resolvedData = resolveDeep(node.data, variableContext);
+        const resolvedNode = { ...node, data: resolvedData };
+
         // 更新节点状态为运行中
         this.context.nodeStates[node.id] = {
             ...this.context.nodeStates[node.id],
@@ -177,8 +190,8 @@ export class WorkflowEngine {
                 throw new Error('执行已取消');
             }
 
-            // 执行节点
-            const output = await executor(node, input, this.context);
+            // 使用解析后的节点执行
+            const output = await executor(resolvedNode, input, this.context);
 
             // 更新节点状态为完成
             this.context.nodeStates[node.id] = {
@@ -201,6 +214,20 @@ export class WorkflowEngine {
             throw error;
         }
     }
+
+    /**
+     * 获取所有已完成节点的输出 (用于变量解析)
+     */
+    private getNodeOutputs(): Record<string, any> {
+        const outputs: Record<string, any> = {};
+        for (const [nodeId, state] of Object.entries(this.context.nodeStates)) {
+            if (state.status === 'completed' && state.output !== undefined) {
+                outputs[nodeId] = state.output;
+            }
+        }
+        return outputs;
+    }
+
 
     /**
      * 递归执行节点链
