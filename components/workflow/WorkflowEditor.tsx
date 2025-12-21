@@ -18,7 +18,7 @@ import {
     FileOutput, Zap, Code, Save, Trash2, StopCircle,
     Loader2, CheckCircle, XCircle, AlertCircle, X,
     Globe, Repeat, Plug, ArrowLeftRight, Timer, GitMerge, Workflow, Database,
-    Image, Video, Music, Merge
+    Image, Video, Music, Merge, Webhook, TestTube
 } from 'lucide-react';
 import { nodeTypes, NodeType } from './nodes';
 import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
@@ -26,6 +26,9 @@ import { mcpRegistry } from '../../core/mcp/registry';
 import { MCPRegistryEntry } from '../../core/mcp/types';
 import WorkflowGuide from './WorkflowGuide';
 import { workflowTemplates, WorkflowTemplate } from '../../core/workflow/templates';
+import TriggerPanel from './TriggerPanel';
+import NodeTestPanel from './NodeTestPanel';
+import { VariableSelector } from './VariableSelector';
 
 // ============================================
 // 节点工具栏配置
@@ -119,6 +122,8 @@ export function WorkflowEditor({
     const [showLogs, setShowLogs] = useState(false);
     const [mcpList, setMcpList] = useState<MCPRegistryEntry[]>([]);
     const [showTemplates, setShowTemplates] = useState(false);
+    const [showTriggers, setShowTriggers] = useState(false);
+    const [testingNode, setTestingNode] = useState<{ id: string; type: string; label: string } | null>(null);
 
     // 从 API 获取工作流数据（包括 nodes 和 edges）
     useEffect(() => {
@@ -450,6 +455,16 @@ export function WorkflowEditor({
                                 </div>
                             )}
                         </div>
+
+                        {/* 触发器管理按钮 */}
+                        <button
+                            onClick={() => setShowTriggers(true)}
+                            disabled={execution.status === 'running'}
+                            className="flex items-center gap-2 px-3 py-2 bg-green-600/80 text-white rounded-xl hover:bg-green-500 transition-colors shadow-lg disabled:opacity-50 text-sm"
+                        >
+                            <Webhook size={16} />
+                            触发器
+                        </button>
                         {execution.status === 'running' ? (
                             <button
                                 onClick={execution.cancel}
@@ -2181,6 +2196,22 @@ export function WorkflowEditor({
                                         </span>
                                     </div>
                                 )}
+
+                                {/* 节点测试按钮 */}
+                                {selectedNode.type !== 'start' && selectedNode.type !== 'end' && (
+                                    <button
+                                        onClick={() => setTestingNode({
+                                            id: selectedNode.id,
+                                            type: selectedNode.type || 'unknown',
+                                            label: selectedNode.data?.label || selectedNode.id
+                                        })}
+                                        disabled={execution.status === 'running'}
+                                        className="w-full mt-2 flex items-center justify-center gap-2 px-3 py-2 bg-purple-600/20 text-purple-400 rounded-lg hover:bg-purple-600/30 transition-colors text-sm disabled:opacity-50"
+                                    >
+                                        <TestTube size={14} />
+                                        测试此节点
+                                    </button>
+                                )}
                             </div>
                         </div>
                     </Panel>
@@ -2189,7 +2220,39 @@ export function WorkflowEditor({
 
             {/* 帮助指南 */}
             <WorkflowGuide />
-        </div>
+
+            {/* 触发器面板 */}
+            {
+                showTriggers && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                        <div className="w-[480px]">
+                            <div className="flex justify-end mb-2">
+                                <button
+                                    onClick={() => setShowTriggers(false)}
+                                    className="p-1.5 text-slate-400 hover:text-white transition-colors"
+                                >
+                                    <X size={18} />
+                                </button>
+                            </div>
+                            <TriggerPanel workflowId={workflowId} onClose={() => setShowTriggers(false)} />
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* 节点测试面板 */}
+            {
+                testingNode && (
+                    <NodeTestPanel
+                        workflowId={workflowId}
+                        nodeId={testingNode.id}
+                        nodeType={testingNode.type}
+                        nodeLabel={testingNode.label}
+                        onClose={() => setTestingNode(null)}
+                    />
+                )
+            }
+        </div >
     );
 }
 
