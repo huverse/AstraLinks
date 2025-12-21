@@ -203,6 +203,44 @@ export function WorkflowEditor({
         onShowHelp: () => setShowShortcutsHelp(true),
     });
 
+    // 执行状态动画 - 应用 CSS 类到节点
+    useEffect(() => {
+        if (execution.status === 'idle') return;
+
+        // 动态添加/移除执行状态类
+        Object.entries(execution.nodeStates).forEach(([nodeId, state]) => {
+            const nodeElement = document.querySelector(`[data-id="${nodeId}"]`);
+            if (!nodeElement) return;
+
+            // 移除所有执行状态类
+            nodeElement.classList.remove('execution-pending', 'execution-running', 'execution-completed', 'execution-failed');
+
+            // 根据状态添加对应类
+            switch (state.status) {
+                case 'pending':
+                    nodeElement.classList.add('execution-pending');
+                    break;
+                case 'running':
+                    nodeElement.classList.add('execution-running');
+                    break;
+                case 'completed':
+                    nodeElement.classList.add('execution-completed');
+                    break;
+                case 'failed':
+                    nodeElement.classList.add('execution-failed');
+                    break;
+            }
+        });
+
+        // 当前执行节点高亮
+        if (execution.currentNodeId) {
+            const currentNode = document.querySelector(`[data-id="${execution.currentNodeId}"]`);
+            if (currentNode) {
+                currentNode.classList.add('execution-running');
+            }
+        }
+    }, [execution.status, execution.nodeStates, execution.currentNodeId]);
+
     // 连接边回调
     const onConnect = useCallback(
         (connection: Connection) => {
