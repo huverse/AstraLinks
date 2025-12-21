@@ -69,6 +69,72 @@ export interface ExecutionLog {
 }
 
 // ============================================
+// 重试和错误处理配置
+// ============================================
+
+export interface RetryConfig {
+    /** 最大重试次数 (默认: 0 不重试) */
+    maxRetries: number;
+    /** 重试间隔 (毫秒, 默认: 1000) */
+    retryDelay: number;
+    /** 退避系数 (每次重试间隔乘以此系数, 默认: 2) */
+    backoffMultiplier: number;
+    /** 最大重试间隔 (毫秒, 默认: 30000) */
+    maxRetryDelay: number;
+    /** 执行超时 (毫秒, 0 表示无限, 默认: 60000) */
+    timeout: number;
+    /** 可重试的错误类型 */
+    retryableErrors?: string[];
+}
+
+/** 默认重试配置 */
+export const DEFAULT_RETRY_CONFIG: RetryConfig = {
+    maxRetries: 0,
+    retryDelay: 1000,
+    backoffMultiplier: 2,
+    maxRetryDelay: 30000,
+    timeout: 60000,
+    retryableErrors: ['ECONNRESET', 'ETIMEDOUT', 'ENOTFOUND', 'rate_limit', 'timeout'],
+};
+
+/** 从节点配置获取重试配置 */
+export function getRetryConfig(nodeData: any): RetryConfig {
+    return {
+        maxRetries: nodeData.retryCount ?? nodeData.maxRetries ?? DEFAULT_RETRY_CONFIG.maxRetries,
+        retryDelay: nodeData.retryDelay ?? DEFAULT_RETRY_CONFIG.retryDelay,
+        backoffMultiplier: nodeData.backoffMultiplier ?? DEFAULT_RETRY_CONFIG.backoffMultiplier,
+        maxRetryDelay: nodeData.maxRetryDelay ?? DEFAULT_RETRY_CONFIG.maxRetryDelay,
+        timeout: nodeData.timeout ?? DEFAULT_RETRY_CONFIG.timeout,
+        retryableErrors: nodeData.retryableErrors ?? DEFAULT_RETRY_CONFIG.retryableErrors,
+    };
+}
+
+/** 检查错误是否可重试 */
+export function isRetryableError(error: Error, config: RetryConfig): boolean {
+    const message = error.message?.toLowerCase() || '';
+    const retryable = config.retryableErrors || DEFAULT_RETRY_CONFIG.retryableErrors || [];
+
+    return retryable.some(pattern => message.includes(pattern.toLowerCase()));
+}
+
+/** 带超时的 Promise */
+export function withTimeout<T>(promise: Promise<T>, ms: number, message = '执行超时'): Promise<T> {
+    if (ms <= 0) return promise;
+
+    return Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error(message)), ms)
+        )
+    ]);
+}
+
+/** 延迟函数 */
+export function delay(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ============================================
 // 节点执行器基类
 // ============================================
 
@@ -1244,7 +1310,14 @@ const executeDelayNode: NodeExecutor = async (node, input, context) => {
 // ============================================
 
 const executeLoopNode: NodeExecutor = async (node, input, context) => {
-    const { loopType = 'count', loopCount = 3, loopCondition } = node.data;
+    const {
+        loopType = 'count',
+        loopCount = 3,
+        loopCondition,
+        maxIterations = 100,  // 可配置的最大迭代次数
+        arrayPath,            // forEach 时指定数组路径
+        accumulatorInit = '[]' // 累加器初始值
+    } = node.data;
 
     context.logs.push({
         timestamp: Date.now(),
@@ -1255,11 +1328,33 @@ const executeLoopNode: NodeExecutor = async (node, input, context) => {
 
     const results: any[] = [];
 
+    // 初始化累加器
+    let accumulator: any;
+    try {
+        accumulator = JSON.parse(accumulatorInit);
+    } catch {
+        accumulator = [];
+    }
+
+    // 将循环上下文存入变量 (供子节点使用)
+    const setLoopContext = (index: number, item: any, total: number) => {
+        context.variables.$loop = {
+            index,
+            item,
+            total,
+            isFirst: index === 0,
+            isLast: index === total - 1,
+            accumulator,
+        };
+        context.variables.$index = index;
+        context.variables.$item = item;
+    };
+
     try {
         switch (loopType) {
             case 'count': {
                 // 固定次数循环
-                const count = Math.min(Math.max(1, loopCount), 100); // 限制 1-100 次
+                const count = Math.min(Math.max(1, loopCount), maxIterations);
                 context.logs.push({
                     timestamp: Date.now(),
                     nodeId: node.id,
@@ -1268,27 +1363,40 @@ const executeLoopNode: NodeExecutor = async (node, input, context) => {
                 });
 
                 for (let i = 0; i < count; i++) {
-                    // 检查是否被取消
                     if (context.abortController?.signal.aborted) {
                         throw new Error('循环被取消');
                     }
 
-                    // 每次循环传递迭代信息
-                    const iterationInput = {
+                    setLoopContext(i, input, count);
+
+                    const iterationResult = {
+                        $index: i,
+                        $item: input,
+                        $isFirst: i === 0,
+                        $isLast: i === count - 1,
                         input,
-                        index: i,
-                        iteration: i + 1,
-                        isFirst: i === 0,
-                        isLast: i === count - 1,
                     };
-                    results.push(iterationInput);
+                    results.push(iterationResult);
                 }
                 break;
             }
 
             case 'foreach': {
                 // 遍历数组
-                const items = Array.isArray(input) ? input : [input];
+                let items: any[];
+
+                // 支持通过路径指定数组
+                if (arrayPath) {
+                    const pathParts = arrayPath.split('.');
+                    let value = input;
+                    for (const part of pathParts) {
+                        value = value?.[part];
+                    }
+                    items = Array.isArray(value) ? value : [value];
+                } else {
+                    items = Array.isArray(input) ? input : [input];
+                }
+
                 context.logs.push({
                     timestamp: Date.now(),
                     nodeId: node.id,
@@ -1296,35 +1404,42 @@ const executeLoopNode: NodeExecutor = async (node, input, context) => {
                     message: `开始遍历数组: ${items.length} 个元素`,
                 });
 
-                for (let i = 0; i < items.length; i++) {
+                // 限制最大迭代次数
+                const limitedItems = items.slice(0, maxIterations);
+
+                for (let i = 0; i < limitedItems.length; i++) {
                     if (context.abortController?.signal.aborted) {
                         throw new Error('循环被取消');
                     }
 
+                    setLoopContext(i, limitedItems[i], limitedItems.length);
+
                     results.push({
-                        item: items[i],
+                        $index: i,
+                        $item: limitedItems[i],
+                        $isFirst: i === 0,
+                        $isLast: i === limitedItems.length - 1,
+                        item: limitedItems[i],
                         index: i,
-                        isFirst: i === 0,
-                        isLast: i === items.length - 1,
                     });
                 }
                 break;
             }
 
             case 'while': {
-                // 条件循环 (最多 100 次防止无限循环)
+                // 条件循环
                 let iteration = 0;
-                const maxIterations = 100;
+                const limit = Math.min(maxIterations, 1000);
                 let current = input;
 
                 context.logs.push({
                     timestamp: Date.now(),
                     nodeId: node.id,
                     level: 'debug',
-                    message: `开始条件循环 (最多 ${maxIterations} 次)`,
+                    message: `开始条件循环 (最多 ${limit} 次)`,
                 });
 
-                while (iteration < maxIterations) {
+                while (iteration < limit) {
                     if (context.abortController?.signal.aborted) {
                         throw new Error('循环被取消');
                     }
@@ -1333,18 +1448,25 @@ const executeLoopNode: NodeExecutor = async (node, input, context) => {
                     let shouldContinue = true;
                     if (loopCondition) {
                         try {
-                            const conditionFn = new Function('input', 'index', 'context', `return ${loopCondition}`);
-                            shouldContinue = !!conditionFn(current, iteration, context.variables);
+                            const conditionFn = new Function(
+                                'input', 'index', 'context', 'accumulator',
+                                `return ${loopCondition}`
+                            );
+                            shouldContinue = !!conditionFn(current, iteration, context.variables, accumulator);
                         } catch (e) {
                             shouldContinue = false;
                         }
                     } else {
-                        shouldContinue = iteration < 3; // 默认 3 次
+                        shouldContinue = iteration < loopCount;
                     }
 
                     if (!shouldContinue) break;
 
+                    setLoopContext(iteration, current, limit);
+
                     results.push({
+                        $index: iteration,
+                        $item: current,
                         input: current,
                         index: iteration,
                         iteration: iteration + 1,
@@ -1363,9 +1485,15 @@ const executeLoopNode: NodeExecutor = async (node, input, context) => {
             message: `循环完成: ${results.length} 次迭代`,
         });
 
+        // 清理循环上下文
+        delete context.variables.$loop;
+        delete context.variables.$index;
+        delete context.variables.$item;
+
         return {
             iterations: results,
             count: results.length,
+            accumulator,
             originalInput: input,
         };
     } catch (error: any) {

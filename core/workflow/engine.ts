@@ -10,7 +10,12 @@ import {
     ExecutionContext,
     NodeExecutionState,
     ExecutionLog,
-    nodeExecutors
+    nodeExecutors,
+    getRetryConfig,
+    isRetryableError,
+    withTimeout,
+    delay,
+    RetryConfig
 } from './executors';
 import { resolveDeep, VariableContext } from './variableResolver';
 
@@ -153,7 +158,7 @@ export class WorkflowEngine {
     }
 
     /**
-     * 执行单个节点
+     * 执行单个节点 (带重试和超时)
      */
     private async executeNode(node: Node, input: any): Promise<any> {
         const nodeType = node.type || 'unknown';
@@ -162,6 +167,9 @@ export class WorkflowEngine {
         if (!executor) {
             throw new Error(`未知的节点类型: ${nodeType}`);
         }
+
+        // 获取重试配置
+        const retryConfig = getRetryConfig(node.data || {});
 
         // 构建变量上下文用于解析 {{xxx}} 引用
         const variableContext: VariableContext = {
@@ -184,35 +192,92 @@ export class WorkflowEngine {
         };
         this.setStatus('running', node.id);
 
-        try {
-            // 检查是否被取消
-            if (this.context.abortController?.signal.aborted) {
-                throw new Error('执行已取消');
+        let lastError: Error | null = null;
+        let attempt = 0;
+        const maxAttempts = retryConfig.maxRetries + 1;
+
+        while (attempt < maxAttempts) {
+            attempt++;
+
+            try {
+                // 检查是否被取消
+                if (this.context.abortController?.signal.aborted) {
+                    throw new Error('执行已取消');
+                }
+
+                // 如果是重试，记录日志
+                if (attempt > 1) {
+                    this.context.logs.push({
+                        timestamp: Date.now(),
+                        nodeId: node.id,
+                        level: 'info',
+                        message: `第 ${attempt}/${maxAttempts} 次尝试`,
+                    });
+                }
+
+                // 使用超时包装执行器
+                const output = await withTimeout(
+                    executor(resolvedNode, input, this.context),
+                    retryConfig.timeout,
+                    `节点执行超时 (${retryConfig.timeout}ms)`
+                );
+
+                // 更新节点状态为完成
+                this.context.nodeStates[node.id] = {
+                    ...this.context.nodeStates[node.id],
+                    status: 'completed',
+                    output,
+                    endTime: Date.now(),
+                };
+
+                return output;
+            } catch (error: any) {
+                lastError = error;
+
+                // 检查是否应该重试
+                const shouldRetry = attempt < maxAttempts && isRetryableError(error, retryConfig);
+
+                if (shouldRetry) {
+                    // 计算退避延迟
+                    const baseDelay = retryConfig.retryDelay;
+                    const backoffDelay = Math.min(
+                        baseDelay * Math.pow(retryConfig.backoffMultiplier, attempt - 1),
+                        retryConfig.maxRetryDelay
+                    );
+
+                    this.context.logs.push({
+                        timestamp: Date.now(),
+                        nodeId: node.id,
+                        level: 'warn',
+                        message: `执行失败: ${error.message}，${backoffDelay}ms 后重试...`,
+                    });
+
+                    await delay(backoffDelay);
+                } else {
+                    // 不可重试或已达最大次数
+                    break;
+                }
             }
-
-            // 使用解析后的节点执行
-            const output = await executor(resolvedNode, input, this.context);
-
-            // 更新节点状态为完成
-            this.context.nodeStates[node.id] = {
-                ...this.context.nodeStates[node.id],
-                status: 'completed',
-                output,
-                endTime: Date.now(),
-            };
-
-            return output;
-        } catch (error: any) {
-            // 更新节点状态为失败
-            this.context.nodeStates[node.id] = {
-                ...this.context.nodeStates[node.id],
-                status: 'failed',
-                error: error.message,
-                endTime: Date.now(),
-            };
-
-            throw error;
         }
+
+        // 所有尝试都失败了
+        this.context.nodeStates[node.id] = {
+            ...this.context.nodeStates[node.id],
+            status: 'failed',
+            error: lastError?.message || '未知错误',
+            endTime: Date.now(),
+        };
+
+        if (attempt > 1) {
+            this.context.logs.push({
+                timestamp: Date.now(),
+                nodeId: node.id,
+                level: 'error',
+                message: `${maxAttempts} 次尝试后仍然失败`,
+            });
+        }
+
+        throw lastError || new Error('节点执行失败');
     }
 
     /**
