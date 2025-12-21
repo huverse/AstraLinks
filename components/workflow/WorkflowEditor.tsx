@@ -29,6 +29,12 @@ import { workflowTemplates, WorkflowTemplate } from '../../core/workflow/templat
 import TriggerPanel from './TriggerPanel';
 import NodeTestPanel from './NodeTestPanel';
 import { VariableSelector } from './VariableSelector';
+import { ConditionEditor, evaluateCondition } from './ConditionEditor';
+import { NodeCustomizationPanel, NodeCustomization } from './NodeCustomization';
+import { useWorkflowShortcuts, SHORTCUT_LIST } from '../../hooks/useWorkflowShortcuts';
+import '../../app/styles/execution-animation.css';
+import '../../app/styles/workflow-mobile.css';
+
 
 // ============================================
 // 节点工具栏配置
@@ -124,6 +130,10 @@ export function WorkflowEditor({
     const [showTemplates, setShowTemplates] = useState(false);
     const [showTriggers, setShowTriggers] = useState(false);
     const [testingNode, setTestingNode] = useState<{ id: string; type: string; label: string } | null>(null);
+    const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+    const [customizingNode, setCustomizingNode] = useState<{ id: string; label: string } | null>(null);
+    const [nodeCustomizations, setNodeCustomizations] = useState<Record<string, NodeCustomization>>({});
+
 
     // 从 API 获取工作流数据（包括 nodes 和 edges）
     useEffect(() => {
@@ -180,6 +190,17 @@ export function WorkflowEditor({
     const execution = useWorkflowExecution(workflowId, nodes, edges, {
         workspaceId,
         authToken: typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') || '' : '',
+    });
+
+    // 快捷键 Hook
+    const shortcuts = useWorkflowShortcuts({
+        nodes,
+        edges,
+        selectedNode: selectedNode?.id || null,
+        onNodesChange: setNodes,
+        onEdgesChange: setEdges,
+        onSave: () => handleSave?.(),
+        onShowHelp: () => setShowShortcutsHelp(true),
     });
 
     // 连接边回调
@@ -2252,6 +2273,57 @@ export function WorkflowEditor({
                     />
                 )
             }
+
+            {/* 快捷键帮助面板 */}
+            {showShortcutsHelp && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+                    <div className="w-[360px] bg-slate-800 rounded-xl border border-slate-700 shadow-2xl overflow-hidden">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-slate-700 bg-slate-900">
+                            <span className="text-sm font-medium text-white">⌨️ 键盘快捷键</span>
+                            <button onClick={() => setShowShortcutsHelp(false)} className="p-1 text-slate-400 hover:text-white">
+                                <X size={18} />
+                            </button>
+                        </div>
+                        <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
+                            {SHORTCUT_LIST.map((s, i) => (
+                                <div key={i} className="flex items-center justify-between py-1.5">
+                                    <span className="text-sm text-slate-300">{s.description}</span>
+                                    <div className="flex gap-1">
+                                        {s.keys.map((key, j) => (
+                                            <kbd key={j} className="px-2 py-1 text-xs bg-slate-700 text-slate-300 rounded border border-slate-600">
+                                                {key}
+                                            </kbd>
+                                        ))}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 节点自定义面板 */}
+            {customizingNode && (
+                <NodeCustomizationPanel
+                    nodeId={customizingNode.id}
+                    nodeLabel={customizingNode.label}
+                    currentCustomization={nodeCustomizations[customizingNode.id]}
+                    onSave={(customization) => {
+                        setNodeCustomizations(prev => ({
+                            ...prev,
+                            [customizingNode.id]: customization
+                        }));
+                        // 更新节点样式
+                        setNodes(nds => nds.map(n =>
+                            n.id === customizingNode.id
+                                ? { ...n, data: { ...n.data, customization } }
+                                : n
+                        ));
+                        setCustomizingNode(null);
+                    }}
+                    onClose={() => setCustomizingNode(null)}
+                />
+            )}
         </div >
     );
 }
