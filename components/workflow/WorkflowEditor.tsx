@@ -18,7 +18,7 @@ import {
     FileOutput, Zap, Code, Save, Trash2, StopCircle,
     Loader2, CheckCircle, XCircle, AlertCircle, X,
     Globe, Repeat, Plug, ArrowLeftRight, Timer, GitMerge, Workflow, Database,
-    Image, Video, Music, Merge, Webhook, TestTube, Coins, Sparkles
+    Image, Video, Music, Merge, Webhook, TestTube, Coins, Sparkles, Users, MessageSquare
 } from 'lucide-react';
 import { nodeTypes, NodeType } from './nodes';
 import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
@@ -34,6 +34,8 @@ import { NodeCustomizationPanel, NodeCustomization } from './NodeCustomization';
 import { useWorkflowShortcuts, SHORTCUT_LIST } from '../../hooks/useWorkflowShortcuts';
 import TokenUsagePanel, { NodeTokenUsage } from './TokenUsagePanel';
 import ModelComparePanel, { ModelConfig } from './ModelComparePanel';
+import CollaboratorPanel from './CollaboratorPanel';
+import CommentPanel from './CommentPanel';
 import '../../app/styles/execution-animation.css';
 import '../../app/styles/workflow-mobile.css';
 
@@ -142,6 +144,11 @@ export function WorkflowEditor({
     const [tokenUsageData, setTokenUsageData] = useState<NodeTokenUsage[]>([]);
     const [showModelCompare, setShowModelCompare] = useState(false);
     const [compareModels, setCompareModels] = useState<ModelConfig[]>([]);
+
+    // P5: 协作功能
+    const [showCollaborators, setShowCollaborators] = useState(false);
+    const [showComments, setShowComments] = useState(false);
+    const [workflowRole, setWorkflowRole] = useState<string>('owner');
 
 
     // 从 API 获取工作流数据（包括 nodes 和 edges）
@@ -531,6 +538,27 @@ export function WorkflowEditor({
                         >
                             <Webhook size={16} />
                             触发器
+                        </button>
+
+                        {/* P5: 协作者按钮 */}
+                        <button
+                            onClick={() => setShowCollaborators(true)}
+                            disabled={execution.status === 'running'}
+                            className="flex items-center gap-2 px-3 py-2 bg-blue-600/80 text-white rounded-xl hover:bg-blue-500 transition-colors shadow-lg disabled:opacity-50 text-sm"
+                            title="协作者管理"
+                        >
+                            <Users size={16} />
+                            协作
+                        </button>
+
+                        {/* P5: 评论按钮 */}
+                        <button
+                            onClick={() => setShowComments(true)}
+                            className="flex items-center gap-2 px-3 py-2 bg-teal-600/80 text-white rounded-xl hover:bg-teal-500 transition-colors shadow-lg text-sm"
+                            title="评论"
+                        >
+                            <MessageSquare size={16} />
+                            评论
                         </button>
 
                         {/* P4: Token 使用统计按钮 */}
@@ -2446,6 +2474,23 @@ export function WorkflowEditor({
                     console.log('Selected model result:', result);
                     setShowModelCompare(false);
                 }}
+            />
+
+            {/* P5: 协作者管理面板 */}
+            <CollaboratorPanel
+                workflowId={workflowId}
+                isOpen={showCollaborators}
+                onClose={() => setShowCollaborators(false)}
+                currentUserRole={workflowRole}
+            />
+
+            {/* P5: 评论面板 */}
+            <CommentPanel
+                workflowId={workflowId}
+                isOpen={showComments}
+                onClose={() => setShowComments(false)}
+                selectedNodeId={selectedNode?.id}
+                canEdit={workflowRole === 'owner' || workflowRole === 'editor'}
             />
         </div >
     );
