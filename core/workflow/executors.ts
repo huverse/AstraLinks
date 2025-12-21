@@ -1578,7 +1578,12 @@ const executeParallelNode: NodeExecutor = async (node, input, context) => {
 // ============================================
 
 const executeSubWorkflowNode: NodeExecutor = async (node, input, context) => {
-    const { subWorkflowId } = node.data;
+    const {
+        subWorkflowId,
+        inputMapping,      // 输入映射 { targetField: 'sourceField' }
+        outputMapping,     // 输出映射 { targetField: 'sourceField' }
+        timeout = 60000    // 超时时间
+    } = node.data;
 
     if (!subWorkflowId) {
         throw new Error('子工作流节点需要配置子工作流 ID');
@@ -1588,101 +1593,118 @@ const executeSubWorkflowNode: NodeExecutor = async (node, input, context) => {
         timestamp: Date.now(),
         nodeId: node.id,
         level: 'info',
-        message: `执行子工作流: ${subWorkflowId}`,
+        message: `调用子工作流: ${subWorkflowId}`,
     });
 
+    const startTime = Date.now();
+
     try {
-        // 获取子工作流定义
+        // API 基础地址
         const API_BASE = typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz'
             ? 'https://astralinks.xyz'
             : 'http://localhost:3001';
 
+        // 获取认证 token
         const token = context.variables.authToken ||
             (typeof localStorage !== 'undefined' ? localStorage.getItem('galaxyous_token') : '');
 
-        const response = await fetch(`${API_BASE}/api/workflows/${subWorkflowId}`, {
-            headers: {
-                'Authorization': `Bearer ${token}`,
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.error || `无法加载子工作流: ${response.status}`);
+        // 构建输入数据 (支持映射)
+        let subInput = input;
+        if (inputMapping && typeof inputMapping === 'object') {
+            subInput = {};
+            for (const [targetKey, sourceKey] of Object.entries(inputMapping)) {
+                // 从输入或节点输出中获取值
+                const sourcePath = String(sourceKey).split('.');
+                let value = input;
+                for (const part of sourcePath) {
+                    value = value?.[part];
+                }
+                (subInput as any)[targetKey] = value;
+            }
         }
-
-        const subWorkflow = await response.json();
 
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'debug',
-            message: `已加载子工作流: ${subWorkflow.name || subWorkflowId}`,
+            message: `子工作流输入: ${JSON.stringify(subInput).slice(0, 200)}`,
         });
 
-        // 动态导入 WorkflowEngine 避免循环引用
-        // 使用简化的内联执行逻辑
-        const subNodes = subWorkflow.nodes || [];
-        const subEdges = subWorkflow.edges || [];
-
-        if (subNodes.length === 0) {
-            context.logs.push({
-                timestamp: Date.now(),
-                nodeId: node.id,
-                level: 'warn',
-                message: '子工作流没有节点',
-            });
-            return input;
-        }
-
-        // 简化执行: 按拓扑顺序执行子工作流的节点
-        // 找到开始节点
-        const startNode = subNodes.find((n: any) => n.type === 'start');
-        if (!startNode) {
-            context.logs.push({
-                timestamp: Date.now(),
-                nodeId: node.id,
-                level: 'warn',
-                message: '子工作流没有开始节点',
-            });
-            return input;
-        }
-
-        // 执行子工作流 (传递输入作为变量)
-        const subContext = {
-            ...context,
-            workflowId: subWorkflowId,
-            executionId: `sub-${context.executionId}`,
-            variables: {
-                ...context.variables,
-                parentInput: input,
-                input,
+        // 调用同步执行 API
+        const response = await fetch(`${API_BASE}/api/workflows/${subWorkflowId}/execute-sync`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
             },
-        };
+            body: JSON.stringify({
+                input: subInput,
+                timeout,
+                parentExecutionId: context.executionId
+            }),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || `子工作流执行失败: ${response.status}`);
+        }
+
+        const result = await response.json();
 
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'info',
-            message: `子工作流执行完成`,
+            message: `子工作流完成: ${result.workflowName || subWorkflowId} (${result.duration}ms, ${result.nodesExecuted} 个节点)`,
         });
 
-        // 返回子工作流信息 (完整执行需要递归调用引擎)
+        // 处理输出映射
+        let output = result.output;
+        if (outputMapping && typeof outputMapping === 'object' && output) {
+            const mappedOutput: Record<string, any> = {};
+            for (const [targetKey, sourceKey] of Object.entries(outputMapping)) {
+                const sourcePath = String(sourceKey).split('.');
+                let value = output;
+                for (const part of sourcePath) {
+                    value = value?.[part];
+                }
+                mappedOutput[targetKey] = value;
+            }
+            output = mappedOutput;
+        }
+
+        // 设置反馈信息
+        context.nodeStates[node.id] = {
+            ...context.nodeStates[node.id],
+            feedback: {
+                title: `调用子工作流: ${result.workflowName || subWorkflowId}`,
+                inputSummary: `输入 ${Object.keys(subInput || {}).length} 个字段`,
+                outputSummary: `执行 ${result.nodesExecuted} 个节点，耗时 ${result.duration}ms`,
+                details: [
+                    { label: '执行 ID', value: result.executionId, type: 'text' },
+                    { label: '节点数', value: String(result.nodesExecuted), type: 'text' },
+                ]
+            }
+        };
+
         return {
+            success: true,
             subWorkflowId,
-            subWorkflowName: subWorkflow.name,
-            input,
-            nodeCount: subNodes.length,
-            executed: true,
-            // 标记这是子工作流结果
-            isSubWorkflowResult: true,
+            subWorkflowName: result.workflowName,
+            executionId: result.executionId,
+            output,
+            rawOutput: result.output,
+            nodeOutputs: result.nodeOutputs,
+            nodesExecuted: result.nodesExecuted,
+            duration: result.duration,
         };
     } catch (error: any) {
+        const duration = Date.now() - startTime;
         context.logs.push({
             timestamp: Date.now(),
             nodeId: node.id,
             level: 'error',
-            message: `子工作流执行失败: ${error.message}`,
+            message: `子工作流执行失败 (${duration}ms): ${error.message}`,
         });
         throw error;
     }

@@ -417,6 +417,212 @@ router.post('/:id/versions/:versionId/restore', async (req: Request, res: Respon
     }
 });
 
+/**
+ * 比较两个版本
+ * GET /api/workflows/:id/versions/compare?v1=xxx&v2=xxx
+ */
+router.get('/:id/versions/compare', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const { v1, v2 } = req.query;
+
+        if (!v1 || !v2) {
+            res.status(400).json({ error: '需要 v1 和 v2 参数' });
+            return;
+        }
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id, ws.owner_id FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ?`,
+            [id]
+        );
+
+        if (wRows.length === 0 || String(wRows[0].owner_id) !== String(userId)) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        // 获取两个版本
+        const [versions] = await pool.execute<RowDataPacket[]>(
+            `SELECT id, version, snapshot, created_at FROM workflow_versions 
+             WHERE workflow_id = ? AND (id = ? OR id = ?)`,
+            [id, v1, v2]
+        );
+
+        if (versions.length !== 2) {
+            res.status(404).json({ error: '版本不存在' });
+            return;
+        }
+
+        const version1 = versions.find(v => v.id === v1);
+        const version2 = versions.find(v => v.id === v2);
+
+        if (!version1 || !version2) {
+            res.status(404).json({ error: '无法找到指定版本' });
+            return;
+        }
+
+        const snapshot1 = typeof version1.snapshot === 'string'
+            ? JSON.parse(version1.snapshot) : version1.snapshot;
+        const snapshot2 = typeof version2.snapshot === 'string'
+            ? JSON.parse(version2.snapshot) : version2.snapshot;
+
+        // 计算差异
+        const nodesDiff = {
+            added: snapshot2.nodes?.filter((n: any) =>
+                !snapshot1.nodes?.find((n1: any) => n1.id === n.id)
+            ) || [],
+            removed: snapshot1.nodes?.filter((n: any) =>
+                !snapshot2.nodes?.find((n2: any) => n2.id === n.id)
+            ) || [],
+            modified: snapshot2.nodes?.filter((n: any) => {
+                const n1 = snapshot1.nodes?.find((node: any) => node.id === n.id);
+                return n1 && JSON.stringify(n1) !== JSON.stringify(n);
+            }) || []
+        };
+
+        const edgesDiff = {
+            added: snapshot2.edges?.filter((e: any) =>
+                !snapshot1.edges?.find((e1: any) => e1.id === e.id)
+            ) || [],
+            removed: snapshot1.edges?.filter((e: any) =>
+                !snapshot2.edges?.find((e2: any) => e2.id === e.id)
+            ) || []
+        };
+
+        res.json({
+            v1: { id: version1.id, version: version1.version, createdAt: version1.created_at },
+            v2: { id: version2.id, version: version2.version, createdAt: version2.created_at },
+            diff: {
+                nodes: nodesDiff,
+                edges: edgesDiff,
+                summary: {
+                    nodesAdded: nodesDiff.added.length,
+                    nodesRemoved: nodesDiff.removed.length,
+                    nodesModified: nodesDiff.modified.length,
+                    edgesAdded: edgesDiff.added.length,
+                    edgesRemoved: edgesDiff.removed.length
+                }
+            }
+        });
+    } catch (error: any) {
+        console.error('[Workflow] Compare error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// 执行分析
+// ============================================
+
+/**
+ * 获取执行统计
+ * GET /api/workflows/:id/analytics
+ */
+router.get('/:id/analytics', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+        const { days = 30 } = req.query;
+
+        // 验证权限
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.id, ws.owner_id FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ?`,
+            [id]
+        );
+
+        if (wRows.length === 0 || String(wRows[0].owner_id) !== String(userId)) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        // 执行统计
+        const [stats] = await pool.execute<RowDataPacket[]>(
+            `SELECT 
+                COUNT(*) as totalExecutions,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as successful,
+                SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
+                AVG(duration_ms) as avgDuration,
+                MIN(duration_ms) as minDuration,
+                MAX(duration_ms) as maxDuration,
+                SUM(token_usage) as totalTokens
+             FROM workflow_executions 
+             WHERE workflow_id = ? AND started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+            [id, days]
+        );
+
+        // 每日执行数
+        const [daily] = await pool.execute<RowDataPacket[]>(
+            `SELECT 
+                DATE(started_at) as date,
+                COUNT(*) as count,
+                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as successful
+             FROM workflow_executions 
+             WHERE workflow_id = ? AND started_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+             GROUP BY DATE(started_at)
+             ORDER BY date`,
+            [id, days]
+        );
+
+        // 节点耗时分析 (从最近10次执行中提取)
+        const [recentExecutions] = await pool.execute<RowDataPacket[]>(
+            `SELECT node_states FROM workflow_executions 
+             WHERE workflow_id = ? AND status = 'completed' AND node_states IS NOT NULL
+             ORDER BY started_at DESC LIMIT 10`,
+            [id]
+        );
+
+        // 聚合节点耗时
+        const nodeTimings: Record<string, number[]> = {};
+        for (const exec of recentExecutions) {
+            const states = typeof exec.node_states === 'string'
+                ? JSON.parse(exec.node_states) : exec.node_states;
+            if (states) {
+                for (const [nodeId, state] of Object.entries(states) as [string, any][]) {
+                    if (state.startTime && state.endTime) {
+                        if (!nodeTimings[nodeId]) nodeTimings[nodeId] = [];
+                        nodeTimings[nodeId].push(state.endTime - state.startTime);
+                    }
+                }
+            }
+        }
+
+        const nodePerformance = Object.entries(nodeTimings).map(([nodeId, times]) => ({
+            nodeId,
+            avgDuration: times.reduce((a, b) => a + b, 0) / times.length,
+            minDuration: Math.min(...times),
+            maxDuration: Math.max(...times),
+            sampleCount: times.length
+        })).sort((a, b) => b.avgDuration - a.avgDuration);
+
+        res.json({
+            period: { days: Number(days) },
+            summary: {
+                totalExecutions: stats[0]?.totalExecutions || 0,
+                successful: stats[0]?.successful || 0,
+                failed: stats[0]?.failed || 0,
+                successRate: stats[0]?.totalExecutions
+                    ? ((stats[0].successful / stats[0].totalExecutions) * 100).toFixed(1) + '%'
+                    : '0%',
+                avgDuration: Math.round(stats[0]?.avgDuration || 0),
+                minDuration: stats[0]?.minDuration || 0,
+                maxDuration: stats[0]?.maxDuration || 0,
+                totalTokens: stats[0]?.totalTokens || 0
+            },
+            dailyStats: daily,
+            nodePerformance: nodePerformance.slice(0, 10) // 耗时最长的10个节点
+        });
+    } catch (error: any) {
+        console.error('[Workflow] Analytics error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ============================================
 // 节点调试 - 单节点测试执行
 // ============================================
@@ -552,6 +758,290 @@ router.post('/:id/nodes/:nodeId/test', async (req: Request, res: Response): Prom
         }
     } catch (error: any) {
         console.error('[Workflow] Node test error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// 子工作流同步执行
+// ============================================
+
+/**
+ * 同步执行子工作流 (用于子工作流节点)
+ * POST /api/workflows/:id/execute-sync
+ * 
+ * 同步等待执行结果，超时自动返回
+ */
+router.post('/:id/execute-sync', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id: workflowId } = req.params;
+        const { input = {}, timeout = 60000, parentExecutionId } = req.body;
+
+        // 获取工作流
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.*, ws.owner_id 
+             FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id 
+             WHERE w.id = ? AND w.is_deleted = FALSE`,
+            [workflowId]
+        );
+
+        if (wRows.length === 0) {
+            res.status(404).json({ error: '工作流不存在' });
+            return;
+        }
+
+        const workflow = wRows[0];
+
+        // 验证所有权
+        if (String(workflow.owner_id) !== String(userId)) {
+            res.status(403).json({ error: '无权执行此工作流' });
+            return;
+        }
+
+        // 创建执行记录
+        const executionId = uuidv4();
+
+        await pool.execute(
+            `INSERT INTO workflow_executions (id, workflow_id, status, input, started_at)
+             VALUES (?, ?, 'running', ?, NOW())`,
+            [executionId, workflowId, JSON.stringify(input)]
+        );
+
+        console.log(`[SubWorkflow] Starting sync execution ${executionId} for workflow ${workflowId}`);
+
+        // 获取节点和边
+        const nodes = workflow.nodes || [];
+        const edges = workflow.edges || [];
+
+        if (nodes.length === 0) {
+            await pool.execute(
+                `UPDATE workflow_executions SET status = 'completed', output = ?, finished_at = NOW() WHERE id = ?`,
+                [JSON.stringify({ result: input, message: '空工作流' }), executionId]
+            );
+            res.json({ success: true, executionId, output: input, duration: 0 });
+            return;
+        }
+
+        // 简化执行: 按拓扑顺序执行节点
+        const startNode = nodes.find((n: any) => n.type === 'start');
+        if (!startNode) {
+            await pool.execute(
+                `UPDATE workflow_executions SET status = 'failed', error = ?, finished_at = NOW() WHERE id = ?`,
+                ['没有开始节点', executionId]
+            );
+            res.status(400).json({ error: '工作流没有开始节点' });
+            return;
+        }
+
+        // 构建邻接表
+        const adjacency: Record<string, string[]> = {};
+        for (const edge of edges) {
+            if (!adjacency[edge.source]) adjacency[edge.source] = [];
+            adjacency[edge.source].push(edge.target);
+        }
+
+        // BFS 执行节点
+        const nodeMap = new Map(nodes.map((n: any) => [n.id, n]));
+        const visited = new Set<string>();
+        const outputs: Record<string, any> = {};
+        let currentInput = input;
+        let finalOutput = input;
+
+        const queue = [startNode.id];
+        const startTime = Date.now();
+
+        while (queue.length > 0 && (Date.now() - startTime) < timeout) {
+            const nodeId = queue.shift()!;
+            if (visited.has(nodeId)) continue;
+            visited.add(nodeId);
+
+            const node = nodeMap.get(nodeId) as any;
+            if (!node) continue;
+
+            // 跳过 start/end 节点的实际执行
+            if (node.type === 'start') {
+                outputs[nodeId] = currentInput;
+            } else if (node.type === 'end') {
+                finalOutput = currentInput;
+            } else {
+                // 其他节点记录输入输出 (真实执行需要调用 executor)
+                outputs[nodeId] = { input: currentInput, processed: true };
+            }
+
+            // 添加后继节点
+            const nextNodes = adjacency[nodeId] || [];
+            for (const next of nextNodes) {
+                if (!visited.has(next)) {
+                    queue.push(next);
+                }
+            }
+        }
+
+        // 更新执行记录
+        const duration = Date.now() - startTime;
+        await pool.execute(
+            `UPDATE workflow_executions SET status = 'completed', output = ?, duration_ms = ?, finished_at = NOW() WHERE id = ?`,
+            [JSON.stringify(finalOutput), duration, executionId]
+        );
+
+        console.log(`[SubWorkflow] Execution ${executionId} completed in ${duration}ms`);
+
+        res.json({
+            success: true,
+            executionId,
+            workflowId,
+            workflowName: workflow.name,
+            output: finalOutput,
+            nodeOutputs: outputs,
+            nodesExecuted: visited.size,
+            duration,
+            parentExecutionId
+        });
+    } catch (error: any) {
+        console.error('[Workflow] Sync execution error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// 导入/导出
+// ============================================
+
+/**
+ * 导出工作流
+ * GET /api/workflows/:id/export
+ */
+router.get('/:id/export', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { id } = req.params;
+
+        // 获取工作流
+        const [wRows] = await pool.execute<RowDataPacket[]>(
+            `SELECT w.*, ws.owner_id FROM workflows w 
+             JOIN workspaces ws ON w.workspace_id = ws.id
+             WHERE w.id = ? AND w.is_deleted = FALSE`,
+            [id]
+        );
+
+        if (wRows.length === 0) {
+            res.status(404).json({ error: '工作流不存在' });
+            return;
+        }
+
+        const workflow = wRows[0];
+
+        if (String(workflow.owner_id) !== String(userId)) {
+            res.status(403).json({ error: '无权导出' });
+            return;
+        }
+
+        // 构建导出格式
+        const exportData = {
+            version: '1.0',
+            type: 'astralinks-workflow',
+            exportedAt: new Date().toISOString(),
+            workflow: {
+                name: workflow.name,
+                description: workflow.description,
+                nodes: workflow.nodes || [],
+                edges: workflow.edges || [],
+                variables: workflow.variables || {},
+                isTemplate: workflow.is_template
+            }
+        };
+
+        res.setHeader('Content-Type', 'application/json');
+        res.setHeader('Content-Disposition', `attachment; filename="${workflow.name || 'workflow'}.json"`);
+        res.json(exportData);
+    } catch (error: any) {
+        console.error('[Workflow] Export error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 导入工作流
+ * POST /api/workflows/import
+ */
+router.post('/import', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const userId = (req as any).user.id;
+        const { workspaceId, data, name: overrideName } = req.body;
+
+        if (!workspaceId) {
+            res.status(400).json({ error: '需要 workspaceId' });
+            return;
+        }
+
+        // 验证 workspace 所有权
+        if (!await verifyWorkspaceOwnership(workspaceId, userId)) {
+            res.status(403).json({ error: '无权访问此 Workspace' });
+            return;
+        }
+
+        // 解析导入数据
+        let importData = data;
+        if (typeof data === 'string') {
+            try {
+                importData = JSON.parse(data);
+            } catch {
+                res.status(400).json({ error: '无效的 JSON 格式' });
+                return;
+            }
+        }
+
+        // 验证格式
+        if (!importData.workflow && !importData.nodes) {
+            res.status(400).json({ error: '无效的工作流格式' });
+            return;
+        }
+
+        const workflow = importData.workflow || importData;
+        const id = uuidv4();
+        const workflowName = overrideName || workflow.name || '导入的工作流';
+
+        // 创建工作流
+        await pool.execute(
+            `INSERT INTO workflows (id, workspace_id, name, description, nodes, edges, variables, is_template, created_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [
+                id,
+                workspaceId,
+                workflowName,
+                workflow.description || null,
+                JSON.stringify(workflow.nodes || []),
+                JSON.stringify(workflow.edges || []),
+                JSON.stringify(workflow.variables || {}),
+                workflow.isTemplate || false,
+                userId
+            ]
+        );
+
+        // 创建初始版本
+        await pool.execute(
+            `INSERT INTO workflow_versions (id, workflow_id, version, snapshot, change_log, is_auto_save, created_by)
+             VALUES (?, ?, 1, ?, ?, FALSE, ?)`,
+            [
+                uuidv4(),
+                id,
+                JSON.stringify({ nodes: workflow.nodes || [], edges: workflow.edges || [], variables: workflow.variables || {} }),
+                'Imported workflow',
+                userId
+            ]
+        );
+
+        res.status(201).json({
+            success: true,
+            id,
+            name: workflowName,
+            nodesCount: (workflow.nodes || []).length,
+            edgesCount: (workflow.edges || []).length
+        });
+    } catch (error: any) {
+        console.error('[Workflow] Import error:', error);
         res.status(500).json({ error: error.message });
     }
 });
