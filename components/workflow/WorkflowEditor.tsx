@@ -145,9 +145,10 @@ export function WorkflowEditor({
                             setResolvedWorkspaceId(data.workspaceId);
                         }
 
-                        // 更新 nodes 和 edges（如果存在）
-                        if (data.nodes && Array.isArray(data.nodes) && data.nodes.length > 0) {
-                            setNodes(data.nodes);
+                        // 更新 nodes 和 edges - 始终使用从 API 获取的数据
+                        if (data.nodes && Array.isArray(data.nodes)) {
+                            // 如果 API 返回空数组但有保存的数据，使用默认节点
+                            setNodes(data.nodes.length > 0 ? data.nodes : defaultNodes);
                         }
                         if (data.edges && Array.isArray(data.edges)) {
                             setEdges(data.edges);

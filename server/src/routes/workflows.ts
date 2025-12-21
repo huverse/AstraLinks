@@ -97,8 +97,8 @@ router.get('/:id', async (req: Request, res: Response): Promise<void> => {
 
         const workflow = rows[0];
 
-        // 验证所有权
-        if (workflow.owner_id !== userId) {
+        // 验证所有权 (类型安全比较)
+        if (String(workflow.owner_id) !== String(userId)) {
             res.status(403).json({ error: '无权访问此工作流' });
             return;
         }
@@ -256,10 +256,12 @@ router.put('/:id', async (req: Request, res: Response): Promise<void> => {
 
         if (updates.length > 0) {
             values.push(id);
+            console.log('[Workflow] Updating workflow:', id, 'fields:', updates, 'nodes count:', nodes?.length);
             await pool.execute(
                 `UPDATE workflows SET ${updates.join(', ')} WHERE id = ?`,
                 values
             );
+            console.log('[Workflow] Update successful for:', id);
         }
 
         res.json({ success: true, version: newVersion });
