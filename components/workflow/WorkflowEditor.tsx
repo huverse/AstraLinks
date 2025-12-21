@@ -18,7 +18,7 @@ import {
     FileOutput, Zap, Code, Save, Trash2, StopCircle,
     Loader2, CheckCircle, XCircle, AlertCircle, X,
     Globe, Repeat, Plug, ArrowLeftRight, Timer, GitMerge, Workflow, Database,
-    Image, Video, Music, Merge, Webhook, TestTube
+    Image, Video, Music, Merge, Webhook, TestTube, Coins, Sparkles
 } from 'lucide-react';
 import { nodeTypes, NodeType } from './nodes';
 import { useWorkflowExecution } from '../../hooks/useWorkflowExecution';
@@ -524,7 +524,6 @@ export function WorkflowEditor({
                             )}
                         </div>
 
-                        {/* 触发器管理按钮 */}
                         <button
                             onClick={() => setShowTriggers(true)}
                             disabled={execution.status === 'running'}
@@ -532,6 +531,65 @@ export function WorkflowEditor({
                         >
                             <Webhook size={16} />
                             触发器
+                        </button>
+
+                        {/* P4: Token 使用统计按钮 */}
+                        <button
+                            onClick={() => {
+                                // 收集所有 AI 节点的 Token 使用数据
+                                const usageData: NodeTokenUsage[] = [];
+                                nodes.forEach(node => {
+                                    if (node.type === 'ai' && execution.nodeStates?.[node.id]?.tokenUsage) {
+                                        const usage = execution.nodeStates[node.id].tokenUsage;
+                                        usageData.push({
+                                            nodeId: node.id,
+                                            nodeName: node.data.label || 'AI 节点',
+                                            nodeType: 'AI',
+                                            provider: node.data.provider,
+                                            model: node.data.model,
+                                            promptTokens: usage.promptTokens || 0,
+                                            completionTokens: usage.completionTokens || 0,
+                                            totalTokens: usage.totalTokens || 0,
+                                        });
+                                    }
+                                });
+                                setTokenUsageData(usageData);
+                                setShowTokenUsage(true);
+                            }}
+                            disabled={execution.status === 'running'}
+                            className="flex items-center gap-2 px-3 py-2 bg-yellow-600/80 text-white rounded-xl hover:bg-yellow-500 transition-colors shadow-lg disabled:opacity-50 text-sm"
+                            title="查看 Token 使用统计"
+                        >
+                            <Coins size={16} />
+                            Token
+                        </button>
+
+                        {/* P4: 多模型对比按钮 */}
+                        <button
+                            onClick={() => {
+                                // 收集所有 AI 节点的模型配置
+                                const models: ModelConfig[] = [];
+                                nodes.forEach(node => {
+                                    if (node.type === 'ai' && node.data.apiKey) {
+                                        models.push({
+                                            id: node.id,
+                                            name: node.data.label || `AI 节点 ${node.id}`,
+                                            provider: node.data.provider || 'openai',
+                                            model: node.data.model || 'gpt-4o-mini',
+                                            apiKey: node.data.apiKey,
+                                            baseUrl: node.data.baseUrl,
+                                        });
+                                    }
+                                });
+                                setCompareModels(models);
+                                setShowModelCompare(true);
+                            }}
+                            disabled={execution.status === 'running'}
+                            className="flex items-center gap-2 px-3 py-2 bg-purple-600/80 text-white rounded-xl hover:bg-purple-500 transition-colors shadow-lg disabled:opacity-50 text-sm"
+                            title="多模型对比"
+                        >
+                            <Sparkles size={16} />
+                            对比
                         </button>
                         {execution.status === 'running' ? (
                             <button
