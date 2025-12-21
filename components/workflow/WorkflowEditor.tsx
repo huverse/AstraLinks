@@ -32,8 +32,11 @@ import { VariableSelector } from './VariableSelector';
 import { ConditionEditor, evaluateCondition } from './ConditionEditor';
 import { NodeCustomizationPanel, NodeCustomization } from './NodeCustomization';
 import { useWorkflowShortcuts, SHORTCUT_LIST } from '../../hooks/useWorkflowShortcuts';
+import TokenUsagePanel, { NodeTokenUsage } from './TokenUsagePanel';
+import ModelComparePanel, { ModelConfig } from './ModelComparePanel';
 import '../../app/styles/execution-animation.css';
 import '../../app/styles/workflow-mobile.css';
+
 
 
 // ============================================
@@ -133,6 +136,12 @@ export function WorkflowEditor({
     const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
     const [customizingNode, setCustomizingNode] = useState<{ id: string; label: string } | null>(null);
     const [nodeCustomizations, setNodeCustomizations] = useState<Record<string, NodeCustomization>>({});
+
+    // P4: Token 使用统计和多模型对比
+    const [showTokenUsage, setShowTokenUsage] = useState(false);
+    const [tokenUsageData, setTokenUsageData] = useState<NodeTokenUsage[]>([]);
+    const [showModelCompare, setShowModelCompare] = useState(false);
+    const [compareModels, setCompareModels] = useState<ModelConfig[]>([]);
 
 
     // 从 API 获取工作流数据（包括 nodes 和 edges）
@@ -2362,6 +2371,24 @@ export function WorkflowEditor({
                     onClose={() => setCustomizingNode(null)}
                 />
             )}
+
+            {/* P4: Token 使用统计面板 */}
+            <TokenUsagePanel
+                nodeUsages={tokenUsageData}
+                isOpen={showTokenUsage}
+                onClose={() => setShowTokenUsage(false)}
+            />
+
+            {/* P4: 多模型对比面板 */}
+            <ModelComparePanel
+                isOpen={showModelCompare}
+                onClose={() => setShowModelCompare(false)}
+                models={compareModels}
+                onSelectResult={(result) => {
+                    console.log('Selected model result:', result);
+                    setShowModelCompare(false);
+                }}
+            />
         </div >
     );
 }
