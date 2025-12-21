@@ -61,6 +61,7 @@ router.get('/platforms', async (req: Request, res: Response) => {
  * GET /api/mcp/available
  * Get all available MCP tools for user panels
  * This provides a unified list for Workspace Settings, Profile Center, etc.
+ * Combines built-in MCPs with user-installed MCPs from marketplace
  */
 router.get('/available', async (req: Request, res: Response) => {
     // 内置 MCP 工具 - 与 core/mcp/types.ts BUILTIN_MCPS 保持同步
@@ -71,6 +72,7 @@ router.get('/available', async (req: Request, res: Response) => {
             description: '网页搜索工具 (Google/Bing/DuckDuckGo)',
             category: 'search',
             status: 'active',
+            isBuiltin: true,
         },
         {
             id: 'mcp-file-system',
@@ -78,6 +80,7 @@ router.get('/available', async (req: Request, res: Response) => {
             description: '文件系统操作 (沙箱内)',
             category: 'filesystem',
             status: 'active',
+            isBuiltin: true,
         },
         {
             id: 'mcp-code-exec',
@@ -85,6 +88,7 @@ router.get('/available', async (req: Request, res: Response) => {
             description: '安全代码执行 (JavaScript/Python)',
             category: 'execution',
             status: 'active',
+            isBuiltin: true,
         },
         {
             id: 'mcp-http',
@@ -92,6 +96,7 @@ router.get('/available', async (req: Request, res: Response) => {
             description: 'HTTP 请求工具',
             category: 'network',
             status: 'active',
+            isBuiltin: true,
         },
         {
             id: 'mcp-trends',
@@ -99,13 +104,56 @@ router.get('/available', async (req: Request, res: Response) => {
             description: '获取微博、知乎、B站等平台热搜',
             category: 'trends',
             status: 'active',
+            isBuiltin: true,
             platforms: Object.keys(PLATFORMS),
         },
     ];
 
+    // 获取用户 ID (如果已登录)
+    let userInstalledMCPs: any[] = [];
+    try {
+        const authHeader = req.headers.authorization;
+        if (authHeader?.startsWith('Bearer ')) {
+            const token = authHeader.slice(7);
+            // 解析 token 获取用户 ID (简单验证)
+            const jwt = require('jsonwebtoken');
+            const decoded = jwt.verify(token, process.env.JWT_SECRET || 'default-secret') as any;
+            const userId = decoded.userId || decoded.id;
+
+            if (userId) {
+                // 从数据库查询用户已安装的 MCP
+                const { pool } = require('../config/database');
+                const [rows] = await pool.execute(
+                    `SELECT mcp_id as id, mcp_name as name, mcp_description as description, source, enabled
+                     FROM user_mcp_installs
+                     WHERE user_id = ? AND enabled = 1`,
+                    [userId]
+                );
+
+                userInstalledMCPs = (rows as any[]).map(row => ({
+                    id: row.id,
+                    name: row.name,
+                    description: row.description,
+                    category: row.source || 'marketplace',
+                    status: 'active',
+                    isBuiltin: false,
+                    isInstalled: true,
+                }));
+            }
+        }
+    } catch (e) {
+        // 未登录或 token 无效，只返回内置 MCP
+        console.log('[MCP] Available: No valid auth, returning builtin only');
+    }
+
+    // 合并内置和用户安装的 MCP
+    const allMCPs = [...builtinMCPs, ...userInstalledMCPs];
+
     res.json({
         success: true,
-        mcps: builtinMCPs,
+        mcps: allMCPs,
+        builtinCount: builtinMCPs.length,
+        installedCount: userInstalledMCPs.length,
     });
 });
 
