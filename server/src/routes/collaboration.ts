@@ -67,7 +67,8 @@ async function checkWorkflowAccess(
         return { hasAccess: false, role: null, isOwner: false };
     }
 
-    const isOwner = workflows[0].owner_id === userId;
+    // 使用 String() 确保类型一致比较
+    const isOwner = String(workflows[0].owner_id) === String(userId);
     if (isOwner) {
         return { hasAccess: true, role: 'owner', isOwner: true };
     }
