@@ -1181,7 +1181,7 @@ const App: React.FC = () => {
         const errorMsg: Message = {
           id: Date.now().toString(),
           senderId: 'SYSTEM',
-          content: `**系统错误**: ${err.message || 'Unknown error occurred during processing.'}`,
+          content: `**系统错误**: ${err.message || 'Unknown error'}\n\n> 调试信息: ${err.stack?.split('\n')[1]?.trim() || '无堆栈'}`,
           timestamp: Date.now(),
           isError: true
         };
@@ -1247,9 +1247,13 @@ const App: React.FC = () => {
                 content: `📰 **${data.name || platform} 实时热搜 (${new Date().toLocaleTimeString()}):**\n\n${trendsText}\n\n> 数据来源: MCP Trends Hub`,
                 timestamp: Date.now()
               };
-              updateActiveSession({
-                messages: [...activeSession.messages, mcpMsg]
-              });
+              // 使用函数式更新获取最新 messages，修复闭包陈旧问题
+              setSessions(prev => prev.map(s =>
+                s.id === activeSessionId
+                  ? { ...s, messages: [...s.messages, mcpMsg], lastModified: Date.now() }
+                  : s
+              )
+              );
             }
           })
           .catch(err => console.error('[MCP] Trends fetch failed:', err));
@@ -1581,7 +1585,7 @@ const App: React.FC = () => {
 
   return (
     <div className="flex h-[100dvh] bg-[#f5f5f7] dark:bg-black font-sans text-slate-900 dark:text-slate-100 overflow-hidden relative selection:bg-blue-200 dark:selection:bg-blue-900">
-      <input type="file" ref={configFileInputRef} className="hidden" onChange={handleFileChange} />
+      <input type="file" ref={configFileInputRef} className="hidden" accept=".galaxy,.json,text/plain" onChange={handleFileChange} />
       {/* Hidden input for image uploads from chat bar */}
       <input type="file" ref={imageInputRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
 

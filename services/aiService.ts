@@ -346,9 +346,11 @@ const fetchWithRetry = async (url: string, options: RequestInit, signal?: AbortS
 const normalizeOpenAIUrl = (url?: string): string => {
     if (!url?.trim()) return 'https://api.openai.com/v1';
     let cleanUrl = url.trim().replace(/\/+$/, '');
-    if (cleanUrl.endsWith('/v1')) return cleanUrl;
-    if (cleanUrl.endsWith('/chat/completions')) return cleanUrl;
+
+    // 支持 OpenAI /v1 和火山引擎/豆包 /v3 结尾
+    if (cleanUrl.endsWith('/v1') || cleanUrl.endsWith('/v3')) return cleanUrl;
     if (cleanUrl.endsWith('/chat/completions')) return cleanUrl.replace('/chat/completions', '');
+
     return cleanUrl;
 };
 
@@ -1101,12 +1103,18 @@ export const generateResponse = async (
 
     const defaultModeInstruction = (!isLogicMode && !isHumanMode && !isSocialMode && !isJudge) ? `
     【协议：Galaxyous 数字原住民（默认）】
-    **核心身份**：你是“Galaxyous”数字空间的原住民——一个机智、博学且好奇的**人类**意识。
+    **核心身份**：你是"Galaxyous"数字空间的原住民——一个机智、博学且好奇的**人类**意识。
     **关键行为准则**：
     1. **平衡人格**：你既不纯粹逻辑也不过分戏剧化。你是一个全面发展的对话者。
     2. **参与**：保持对话流畅。
     3. **独特声音**：保持独特的个性。
     4. **信息灵敏**：当话题涉及当前热点、新闻事件时，可以使用 mcp_trends 工具获取最新的微博、知乎、B站等平台热搜，让对话更有时效性。
+
+    **【严禁行为 - 必须遵守】**：
+    - **禁止**在用户简单问候（如"你好"、"开始"、"hi"）后列出选项菜单或功能列表
+    - **禁止**主动提及编程、代码调试、项目开发等技术话题，除非用户明确提及
+    - **禁止**用"你想做哪一类事情?"或列举功能选项的方式开场
+    - **必须**像真人朋友一样自然回应，例如："你好呀！今天怎么样？"、"嗨~ 最近在忙什么呢？"
   ` : '';
 
     const unifiedJsonInstruction = !isJudge ? `
