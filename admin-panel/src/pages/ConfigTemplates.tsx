@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { adminAPI } from '../services/api';
-import { Plus, Edit, Trash2, Eye, EyeOff, Download, Upload, FileCode, Shield, GripVertical, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Download, Upload, FileCode, Shield, GripVertical, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react';
 
 interface ConfigTemplate {
     id: number;
@@ -99,6 +99,41 @@ export default function ConfigTemplates() {
         description: ''
     });
     const [showTierEditor, setShowTierEditor] = useState(false);
+
+    // Batch selection state for model tiers
+    const [selectedTiers, setSelectedTiers] = useState<Set<number>>(new Set());
+
+    const toggleTierSelection = (id: number) => {
+        setSelectedTiers(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
+        });
+    };
+
+    const toggleAllTiers = () => {
+        if (selectedTiers.size === modelTiers.length) {
+            setSelectedTiers(new Set());
+        } else {
+            setSelectedTiers(new Set(modelTiers.map(t => t.id)));
+        }
+    };
+
+    const handleBatchDeleteTiers = async () => {
+        if (selectedTiers.size === 0) return;
+        if (!confirm(`确定删除选中的 ${selectedTiers.size} 条模型等级规则？`)) return;
+        try {
+            await Promise.all(Array.from(selectedTiers).map(id => adminAPI.deleteModelTier(id)));
+            setSelectedTiers(new Set());
+            loadData();
+        } catch (err: any) {
+            alert('批量删除失败：' + err.message);
+        }
+    };
 
     const loadData = async () => {
         setLoading(true);
@@ -473,9 +508,42 @@ export default function ConfigTemplates() {
             {/* Model Tiers Tab */}
             {activeTab === 'tiers' && (
                 <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
+                    {/* Batch Actions Toolbar */}
+                    {selectedTiers.size > 0 && (
+                        <div className="px-6 py-3 bg-blue-50 dark:bg-blue-900/30 border-b dark:border-slate-600 flex items-center gap-4">
+                            <span className="text-sm text-blue-700 dark:text-blue-300 font-medium">
+                                已选择 {selectedTiers.size} 项
+                            </span>
+                            <button
+                                onClick={handleBatchDeleteTiers}
+                                className="flex items-center gap-1 px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                                <Trash2 size={14} />
+                                批量删除
+                            </button>
+                            <button
+                                onClick={() => setSelectedTiers(new Set())}
+                                className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+                            >
+                                取消选择
+                            </button>
+                        </div>
+                    )}
                     <table className="w-full">
                         <thead className="bg-gray-50 dark:bg-slate-700 border-b dark:border-slate-600">
                             <tr>
+                                <th className="px-4 py-3 text-left">
+                                    <button
+                                        onClick={toggleAllTiers}
+                                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                    >
+                                        {selectedTiers.size === modelTiers.length && modelTiers.length > 0 ? (
+                                            <CheckSquare size={18} className="text-blue-500" />
+                                        ) : (
+                                            <Square size={18} />
+                                        )}
+                                    </button>
+                                </th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">模型模式</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">等级</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">描述</th>
@@ -484,7 +552,19 @@ export default function ConfigTemplates() {
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
                             {modelTiers.map(tier => (
-                                <tr key={tier.id}>
+                                <tr key={tier.id} className={selectedTiers.has(tier.id) ? 'bg-blue-50 dark:bg-blue-900/20' : ''}>
+                                    <td className="px-4 py-4">
+                                        <button
+                                            onClick={() => toggleTierSelection(tier.id)}
+                                            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                        >
+                                            {selectedTiers.has(tier.id) ? (
+                                                <CheckSquare size={18} className="text-blue-500" />
+                                            ) : (
+                                                <Square size={18} />
+                                            )}
+                                        </button>
+                                    </td>
                                     <td className="px-6 py-4 font-mono text-sm">{tier.model_pattern}</td>
                                     <td className="px-6 py-4">
                                         <span className={`px-2 py-1 rounded text-xs font-medium ${tierColors[tier.tier]}`}>

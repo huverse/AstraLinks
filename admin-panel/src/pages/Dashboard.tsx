@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { adminAPI } from '../services/api';
 import { Users, Ticket, Flag, Ban, TrendingUp, Activity, MessageSquare, BarChart3, Download, Eye } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
@@ -192,22 +193,22 @@ export default function Dashboard() {
                     快捷操作
                 </h2>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <a href="/users" className="p-4 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-xl text-center transition-colors border-2 border-blue-200 dark:border-blue-800">
+                    <Link to="/users" className="p-4 bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-900/50 rounded-xl text-center transition-colors border-2 border-blue-200 dark:border-blue-800">
                         <Users className="mx-auto mb-2 text-blue-600 dark:text-blue-400" size={24} />
                         <p className="text-sm font-semibold text-blue-900 dark:text-blue-300">用户管理</p>
-                    </a>
-                    <a href="/invitations" className="p-4 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl text-center transition-colors border-2 border-purple-200 dark:border-purple-800">
+                    </Link>
+                    <Link to="/invitations" className="p-4 bg-purple-50 dark:bg-purple-900/30 hover:bg-purple-100 dark:hover:bg-purple-900/50 rounded-xl text-center transition-colors border-2 border-purple-200 dark:border-purple-800">
                         <Ticket className="mx-auto mb-2 text-purple-600 dark:text-purple-400" size={24} />
                         <p className="text-sm font-semibold text-purple-900 dark:text-purple-300">邀请码</p>
-                    </a>
-                    <a href="/feedback" className="p-4 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-xl text-center transition-colors border-2 border-green-200 dark:border-green-800">
+                    </Link>
+                    <Link to="/feedback" className="p-4 bg-green-50 dark:bg-green-900/30 hover:bg-green-100 dark:hover:bg-green-900/50 rounded-xl text-center transition-colors border-2 border-green-200 dark:border-green-800">
                         <MessageSquare className="mx-auto mb-2 text-green-600 dark:text-green-400" size={24} />
                         <p className="text-sm font-semibold text-green-900 dark:text-green-300">用户反馈</p>
-                    </a>
-                    <a href="/analytics" className="p-4 bg-orange-50 dark:bg-orange-900/30 hover:bg-orange-100 dark:hover:bg-orange-900/50 rounded-xl text-center transition-colors border-2 border-orange-200 dark:border-orange-800">
+                    </Link>
+                    <Link to="/analytics" className="p-4 bg-orange-50 dark:bg-orange-900/30 hover:bg-orange-100 dark:hover:bg-orange-900/50 rounded-xl text-center transition-colors border-2 border-orange-200 dark:border-orange-800">
                         <BarChart3 className="mx-auto mb-2 text-orange-600 dark:text-orange-400" size={24} />
                         <p className="text-sm font-semibold text-orange-900 dark:text-orange-300">数据分析</p>
-                    </a>
+                    </Link>
                 </div>
             </div>
         </div>
