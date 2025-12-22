@@ -97,9 +97,10 @@ export async function searchServers(
         };
     } catch (error: any) {
         console.error('[Smithery] Search error:', error.message);
+        console.error('[Smithery] API may be unreachable. Check SMITHERY_API_KEY in .env');
 
-        // 降级: 返回内置 MCP 工具作为后备
-        const builtinMcps: SmitheryServer[] = [
+        // 降级: 返回内置 MCP 工具作为后备 (标记为 builtin)
+        const builtinMcps: (SmitheryServer & { isBuiltin: boolean })[] = [
             {
                 qualifiedName: 'builtin/web-search',
                 displayName: 'Web Search',
@@ -107,6 +108,7 @@ export async function searchServers(
                 useCount: 1000,
                 isDeployed: true,
                 isVerified: true,
+                isBuiltin: true,
                 tools: [
                     { name: 'search', description: '搜索网页' },
                 ],
@@ -118,6 +120,7 @@ export async function searchServers(
                 useCount: 800,
                 isDeployed: true,
                 isVerified: true,
+                isBuiltin: true,
                 tools: [
                     { name: 'read', description: '读取文件' },
                     { name: 'write', description: '写入文件' },
@@ -131,6 +134,7 @@ export async function searchServers(
                 useCount: 600,
                 isDeployed: true,
                 isVerified: true,
+                isBuiltin: true,
                 tools: [
                     { name: 'execute', description: '执行代码' },
                 ],
@@ -142,6 +146,7 @@ export async function searchServers(
                 useCount: 500,
                 isDeployed: true,
                 isVerified: true,
+                isBuiltin: true,
                 tools: [
                     { name: 'request', description: '发送 HTTP 请求' },
                 ],

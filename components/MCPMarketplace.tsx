@@ -25,6 +25,7 @@ interface MCPServer {
     useCount?: number;
     isDeployed?: boolean;
     isVerified?: boolean;
+    isBuiltin?: boolean;  // 标识是否为内置 MCP
     tools?: Array<{ name: string; description?: string }>;
 }
 
@@ -101,7 +102,12 @@ function MCPCard({
                 </div>
 
                 <div className="shrink-0">
-                    {isInstalled ? (
+                    {server.isBuiltin || server.qualifiedName.startsWith('builtin/') ? (
+                        <span className="px-3 py-1.5 bg-emerald-500/20 text-emerald-400 text-sm rounded-lg flex items-center gap-1">
+                            <Check size={14} />
+                            内置
+                        </span>
+                    ) : isInstalled ? (
                         <button
                             onClick={onUninstall}
                             disabled={installing}
