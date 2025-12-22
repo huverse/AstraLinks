@@ -179,11 +179,14 @@ router.post('/openai', async (req: Request, res: Response) => {
             return;
         }
 
-        // Normalize base URL
+        // Normalize base URL - 支持 OpenAI (/v1) 和火山引擎/豆包 (/v3)
         let targetBaseUrl = baseUrl?.trim().replace(/\/+$/, '') || 'https://api.openai.com/v1';
-        if (!targetBaseUrl.endsWith('/v1')) {
+
+        // 保留 /v1 和 /v3 结尾
+        if (!targetBaseUrl.endsWith('/v1') && !targetBaseUrl.endsWith('/v3')) {
             targetBaseUrl = targetBaseUrl.replace(/\/chat\/completions$/, '');
-            if (!targetBaseUrl.endsWith('/v1')) {
+            // 只有既不是 /v1 也不是 /v3 才添加默认 /v1
+            if (!targetBaseUrl.endsWith('/v1') && !targetBaseUrl.endsWith('/v3')) {
                 targetBaseUrl += '/v1';
             }
         }
