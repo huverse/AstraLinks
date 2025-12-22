@@ -217,7 +217,10 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               加密导出配置
             </button>
             <button
-              onClick={() => configInputRef.current?.click()}
+              onClick={() => {
+                console.log('[CONFIG IMPORT] Button clicked, configInputRef:', configInputRef.current);
+                configInputRef.current?.click();
+              }}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-4 sm:py-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-purple-400 dark:hover:border-purple-500 transition-all text-sm font-bold text-slate-700 dark:text-slate-300 shadow-sm active:scale-95 touch-manipulation"
             >
               <Upload size={18} className="text-purple-500" />

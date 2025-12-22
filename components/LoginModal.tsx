@@ -74,6 +74,14 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     // Fetch Turnstile settings from API
     useEffect(() => {
         const fetchTurnstileSettings = async () => {
+            // Bypass Turnstile on localhost for development
+            if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+                console.log('[Turnstile] Bypassed on localhost');
+                setTurnstileLoginEnabled(false);
+                setTurnstileToken('localhost-bypass');
+                return;
+            }
+
             try {
                 const response = await fetch('/api/settings/public/turnstile');
                 if (response.ok) {
