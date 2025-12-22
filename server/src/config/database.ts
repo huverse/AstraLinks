@@ -338,6 +338,7 @@ export async function initDatabase(): Promise<void> {
     }
 
     // Model tiers table (defines which models belong to which tier)
+    // NOTE: 不自动填充默认值，管理员完全控制规则
     await connection.execute(`
       CREATE TABLE IF NOT EXISTS model_tiers (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -349,26 +350,8 @@ export async function initDatabase(): Promise<void> {
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     `);
 
-    // Seed default model tiers if empty
-    const [existingTiers] = await connection.execute('SELECT COUNT(*) as count FROM model_tiers');
-    if ((existingTiers as any)[0].count === 0) {
-      await connection.execute(`
-        INSERT INTO model_tiers (model_pattern, tier, description) VALUES
-        ('gemini-2.0-flash', 'free', 'Google Gemini 2.0 Flash'),
-        ('gemini-2.5-flash', 'free', 'Google Gemini 2.5 Flash'),
-        ('gpt-4o-mini', 'free', 'OpenAI GPT-4o Mini'),
-        ('deepseek-chat', 'free', 'DeepSeek Chat'),
-        ('qwen-*', 'free', '通义千问系列'),
-        ('gpt-4o', 'pro', 'OpenAI GPT-4o'),
-        ('gemini-2.5-pro', 'pro', 'Google Gemini 2.5 Pro'),
-        ('claude-3-5-sonnet', 'pro', 'Anthropic Claude 3.5 Sonnet'),
-        ('deepseek-reasoner', 'pro', 'DeepSeek Reasoner'),
-        ('o1-*', 'ultra', 'OpenAI o1系列'),
-        ('o3-*', 'ultra', 'OpenAI o3系列'),
-        ('claude-3-5-opus', 'ultra', 'Anthropic Claude 3.5 Opus'),
-        ('gemini-2.0-flash-thinking', 'ultra', 'Gemini Thinking')
-      `);
-    }
+    // 不再自动填充默认模型等级规则
+    // 管理员可以通过管理面板手动添加规则
 
     // User tier change logs table (for admin tier modifications)
     await connection.execute(`
