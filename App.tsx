@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Settings, Users, Trash2, Menu, ImagePlus, BrainCircuit, X, Gavel, BookOpen, AlertTriangle, Share2, Download, Copy, Check, Plus, MessageSquare, MoreHorizontal, FileJson, Square, Handshake, Lock, Upload, User, Zap, Cpu, Sparkles, Coffee, Vote, Edit2, BarChart2, Wand2, RefreshCw, Hammer, Loader2, FileText, Book, ChevronDown, ChevronUp, UserX, LogIn, UserCheck, Layers } from 'lucide-react';
+import { Send, Settings, Users, Trash2, Menu, ImagePlus, BrainCircuit, X, Gavel, BookOpen, AlertTriangle, Share2, Download, Copy, Check, Plus, MessageSquare, MoreHorizontal, FileJson, Square, Handshake, Lock, Upload, User, Zap, Cpu, Sparkles, Coffee, Vote, Edit2, BarChart2, Wand2, RefreshCw, Hammer, Loader2, FileText, Book, ChevronDown, ChevronUp, UserX, LogIn, UserCheck, Layers, Key } from 'lucide-react';
 import { DEFAULT_PARTICIPANTS, USER_ID } from './constants';
 import { Message, Participant, ParticipantConfig, GameMode, Session, ProviderType, TokenUsage, RefereeContext, VoteState } from './types';
 import ChatMessage from './components/ChatMessage';
@@ -2181,6 +2181,44 @@ const App: React.FC = () => {
               <button onClick={() => setShowInterventionModal(null)} className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-white/10 font-bold text-sm text-slate-600 dark:text-slate-300">忽略</button>
               <button onClick={handleInterventionConfirm} className="flex-1 py-3 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-sm shadow-lg shadow-amber-500/30">
                 执行介入
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CONFIG IMPORT PASSWORD MODAL */}
+      {pendingImportFile && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#1e1e1e] w-full max-w-sm p-6 rounded-3xl shadow-2xl border-t-4 border-purple-500 animate-slide-up">
+            <div className="flex flex-col items-center text-center mb-6">
+              <div className="w-16 h-16 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center text-purple-600 mb-4">
+                <Key size={32} />
+              </div>
+              <h3 className="text-xl font-bold">输入解密密码</h3>
+              <p className="text-sm text-slate-500 mt-2">文件: {pendingImportFile.name}</p>
+            </div>
+            <input
+              type="password"
+              placeholder="请输入配置文件密码"
+              value={importPassword}
+              onChange={(e) => setImportPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && executeImport()}
+              className="w-full px-4 py-3 mb-4 bg-slate-100 dark:bg-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-purple-500 text-center"
+              autoFocus
+            />
+            <div className="flex gap-3">
+              <button
+                onClick={() => { setPendingImportFile(null); setImportPassword(''); }}
+                className="flex-1 py-3 rounded-xl bg-slate-100 dark:bg-white/10 font-bold text-sm text-slate-600 dark:text-slate-300"
+              >
+                取消
+              </button>
+              <button
+                onClick={executeImport}
+                className="flex-1 py-3 rounded-xl bg-purple-500 hover:bg-purple-600 text-white font-bold text-sm shadow-lg shadow-purple-500/30"
+              >
+                确认导入
               </button>
             </div>
           </div>
