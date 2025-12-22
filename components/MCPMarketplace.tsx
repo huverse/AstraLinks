@@ -398,7 +398,7 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
     const installedIds = new Set(installedMcps.map(m => m.mcp_id));
 
     return (
-        <div className="h-full flex flex-col bg-slate-900/95 backdrop-blur-xl min-w-[800px]">
+        <div className="w-[1000px] h-[600px] flex flex-col bg-slate-900/95 backdrop-blur-xl rounded-xl overflow-hidden">
             {/* 头部 */}
             <div className="px-6 py-4 border-b border-white/10">
                 <div className="flex items-center justify-between">
@@ -475,7 +475,7 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
             )}
 
             {/* 内容区 */}
-            <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex-1 overflow-y-auto p-6 min-h-[300px]">
                 {activeTab === 'market' ? (
                     loading ? (
                         <div className="flex justify-center py-12">
