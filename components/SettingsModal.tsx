@@ -21,7 +21,7 @@ interface SettingsModalProps {
   onAddCustomParticipant: () => void;
   onRemoveCustomParticipant: (id: string) => void;
   onExportConfig: () => void;
-  onImportConfig: () => void;
+  onImportConfigFile: (file: File) => void;
   onLoadCloudConfig?: (configData: any) => void;
   onResetTokenUsage: (id: string) => void;
   onResetAllTokenUsage: () => void;
@@ -35,7 +35,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen, onClose, participants, onUpdateParticipant,
   gameMode, onUpdateGameMode, specialRoleId, onUpdateSpecialRole,
   onAddCustomParticipant, onRemoveCustomParticipant,
-  onExportConfig, onImportConfig, onLoadCloudConfig,
+  onExportConfig, onImportConfigFile, onLoadCloudConfig,
   onResetTokenUsage, onResetAllTokenUsage,
   contextConfig, onUpdateContextConfig
 }) => {
@@ -45,6 +45,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
   const [showCompressionConfirm, setShowCompressionConfirm] = useState(false);
   const [showCloudSelector, setShowCloudSelector] = useState(false);
   const [showCloudSync, setShowCloudSync] = useState(false);
+
+  // Internal file input for config import
+  const configInputRef = useRef<HTMLInputElement>(null);
+  const handleConfigFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      onImportConfigFile(e.target.files[0]);
+      e.target.value = '';
+    }
+  };
 
   // Ref for hidden file input to handle avatar uploads
   const avatarInputRef = useRef<HTMLInputElement>(null);
@@ -208,12 +217,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({
               加密导出配置
             </button>
             <button
-              onClick={onImportConfig}
+              onClick={() => configInputRef.current?.click()}
               className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-4 sm:py-3 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-purple-400 dark:hover:border-purple-500 transition-all text-sm font-bold text-slate-700 dark:text-slate-300 shadow-sm active:scale-95 touch-manipulation"
             >
               <Upload size={18} className="text-purple-500" />
               导入配置
             </button>
+            {/* Internal hidden file input for config import */}
+            <input
+              type="file"
+              ref={configInputRef}
+              className="hidden"
+              accept=".galaxy,.json,text/plain"
+              onChange={handleConfigFileChange}
+            />
             {onLoadCloudConfig && (
               <>
                 <button

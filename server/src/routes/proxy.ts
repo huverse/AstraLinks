@@ -179,19 +179,23 @@ router.post('/openai', async (req: Request, res: Response) => {
             return;
         }
 
-        // Normalize base URL - 支持 OpenAI (/v1) 和火山引擎/豆包 (/v3)
+        // 智能 Base URL 规范化 - 支持多种 API 格式
+        // 支持: OpenAI (/v1), 火山引擎/豆包 (/v3), 第三方转发, 自定义端点
         let targetBaseUrl = baseUrl?.trim().replace(/\/+$/, '') || 'https://api.openai.com/v1';
 
-        // 保留 /v1 和 /v3 结尾
-        if (!targetBaseUrl.endsWith('/v1') && !targetBaseUrl.endsWith('/v3')) {
-            targetBaseUrl = targetBaseUrl.replace(/\/chat\/completions$/, '');
-            // 只有既不是 /v1 也不是 /v3 才添加默认 /v1
-            if (!targetBaseUrl.endsWith('/v1') && !targetBaseUrl.endsWith('/v3')) {
+        // 如果 URL 已经包含 /chat/completions，直接使用
+        let targetUrl: string;
+        if (targetBaseUrl.endsWith('/chat/completions')) {
+            targetUrl = targetBaseUrl;
+        } else {
+            // 保留任何版本后缀 (/v1, /v2, /v3 等)
+            const versionMatch = targetBaseUrl.match(/\/v(\d+)$/);
+            if (!versionMatch) {
+                // 如果没有版本后缀，默认添加 /v1
                 targetBaseUrl += '/v1';
             }
+            targetUrl = `${targetBaseUrl}/chat/completions`;
         }
-
-        const targetUrl = `${targetBaseUrl}/chat/completions`;
 
         const requestBody: any = {
             model: model || 'gpt-4o',

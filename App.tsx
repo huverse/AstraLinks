@@ -2125,7 +2125,10 @@ const App: React.FC = () => {
         onAddCustomParticipant={handleAddCustomParticipant}
         onRemoveCustomParticipant={handleRemoveCustomParticipant}
         onExportConfig={handleExportConfig}
-        onImportConfig={() => configFileInputRef.current?.click()}
+        onImportConfigFile={(file) => {
+          setPendingImportFile(file);
+          setImportPassword('');
+        }}
         onLoadCloudConfig={(configData) => {
           if (Array.isArray(configData) && configData.length > 0) {
             setParticipants(configData);
