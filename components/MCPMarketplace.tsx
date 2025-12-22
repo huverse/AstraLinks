@@ -5,17 +5,94 @@
  * @description 用户端 MCP 市场浏览和安装界面
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     Search, Download, Check, Plug, ExternalLink,
-    ChevronRight, Star, RefreshCw, AlertCircle, X, Upload
+    ChevronRight, Star, RefreshCw, AlertCircle, X, Upload, Globe
 } from 'lucide-react';
 import { authFetch } from '../utils/api';
 import MCPUpload from './MCPUpload';
 
 // ============================================
-// 类型定义
+// 语言检测和翻译工具
 // ============================================
+
+// 检测用户是否使用中文环境
+const isChineseLocale = (): boolean => {
+    const lang = navigator.language || (navigator as any).userLanguage || 'en';
+    return lang.toLowerCase().startsWith('zh');
+};
+
+// 常用 MCP 工具名称翻译映射
+const mcpNameTranslations: Record<string, string> = {
+    'Gmail': 'Gmail 邮箱',
+    'Google Calendar': 'Google 日历',
+    'Google Drive': 'Google 云端硬盘',
+    'Google Maps': 'Google 地图',
+    'Google Tasks': 'Google 任务',
+    'YouTube': 'YouTube 视频',
+    'GitHub': 'GitHub 代码托管',
+    'Slack': 'Slack 协作',
+    'Notion': 'Notion 笔记',
+    'Trello': 'Trello 看板',
+    'Asana': 'Asana 项目管理',
+    'Todoist': 'Todoist 待办事项',
+    'Clickup': 'ClickUp 任务管理',
+    'Twitter': 'Twitter 社交',
+    'Linkup': 'Linkup 网页搜索',
+    'Web Search': '网页搜索',
+    'File System': '文件系统',
+    'Code Executor': '代码执行器',
+    'HTTP Client': 'HTTP 客户端',
+};
+
+// 常用描述关键词翻译
+const descriptionTranslations: Record<string, string> = {
+    'Manage Gmail end-to-end': '全方位管理 Gmail',
+    'send, draft, reply': '发送、起草、回复',
+    'forward, and bulk-modify': '转发和批量编辑',
+    'delete messages': '删除消息',
+    'Search the web in real time': '实时搜索网页',
+    'trustworthy, source-backed answers': '可靠的、有来源的答案',
+    'time management tool': '时间管理工具',
+    'scheduling features': '日程安排功能',
+    'event reminders': '活动提醒',
+    'task management': '任务管理',
+    'to-do lists': '待办事项列表',
+    'cloud storage solution': '云存储解决方案',
+    'uploading, sharing': '上传、分享',
+    'collaborating on files': '文件协作',
+    'video-sharing platform': '视频分享平台',
+    'live streaming': '直播',
+    'monetization': '变现',
+    'social media company': '社交媒体公司',
+    'code hosting platform': '代码托管平台',
+    'version control': '版本控制',
+    'collaboration': '协作',
+    'location data': '位置数据',
+    'geocoding, directions': '地理编码、导航',
+    'mapping services': '地图服务',
+    'organize, track, and manage': '组织、跟踪和管理',
+    'unifies tasks, docs, goals': '统一任务、文档、目标',
+    'teams to plan, organize': '团队计划和组织',
+};
+
+// 简单的描述翻译函数
+const translateDescription = (text: string): string => {
+    if (!isChineseLocale()) return text;
+
+    let translated = text;
+    for (const [en, zh] of Object.entries(descriptionTranslations)) {
+        translated = translated.replace(new RegExp(en, 'gi'), zh);
+    }
+    return translated;
+};
+
+// 翻译 MCP 名称
+const translateName = (name: string): string => {
+    if (!isChineseLocale()) return name;
+    return mcpNameTranslations[name] || name;
+};
 
 interface MCPServer {
     qualifiedName: string;
@@ -76,7 +153,7 @@ function MCPCard({
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                         <h3 className="font-semibold text-white truncate">
-                            {server.displayName}
+                            {translateName(server.displayName)}
                         </h3>
                         {server.isVerified && (
                             <span className="shrink-0 px-1.5 py-0.5 bg-green-500/20 text-green-400 text-xs rounded-full flex items-center gap-1">
@@ -86,7 +163,7 @@ function MCPCard({
                     </div>
 
                     <p className="text-sm text-slate-400 mt-1 line-clamp-2">
-                        {server.description || '暂无描述'}
+                        {translateDescription(server.description || '暂无描述')}
                     </p>
 
                     <div className="flex items-center gap-3 mt-2 text-xs text-slate-500">
