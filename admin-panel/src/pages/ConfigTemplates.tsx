@@ -1,6 +1,30 @@
 import { useEffect, useState } from 'react';
 import { adminAPI } from '../services/api';
-import { Plus, Edit, Trash2, Eye, EyeOff, Download, Upload, FileCode, Shield, GripVertical, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Download, Upload, FileCode, Shield, GripVertical, ChevronDown, ChevronUp, CheckSquare, Square, Key, X } from 'lucide-react';
+
+// Web Crypto 解密函数 (与主前端 App.tsx 保持一致)
+async function decryptData(base64: string, password: string): Promise<string> {
+    const binary = atob(base64);
+    const buffer = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) buffer[i] = binary.charCodeAt(i);
+
+    const salt = buffer.slice(0, 16);
+    const iv = buffer.slice(16, 28);
+    const data = buffer.slice(28);
+
+    const enc = new TextEncoder();
+    const keyMaterial = await window.crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveKey"]);
+    const key = await window.crypto.subtle.deriveKey(
+        { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+        keyMaterial,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["decrypt"]
+    );
+
+    const decrypted = await window.crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, data);
+    return new TextDecoder().decode(decrypted);
+}
 
 interface ConfigTemplate {
     id: number;
@@ -99,6 +123,10 @@ export default function ConfigTemplates() {
         description: ''
     });
     const [showTierEditor, setShowTierEditor] = useState(false);
+
+    // 加密文件导入状态
+    const [pendingImportFile, setPendingImportFile] = useState<File | null>(null);
+    const [importPassword, setImportPassword] = useState('');
 
     // Batch selection state for model tiers
     const [selectedTiers, setSelectedTiers] = useState<Set<number>>(new Set());
@@ -335,6 +363,50 @@ export default function ConfigTemplates() {
         }
     };
 
+    // 处理导入的配置数据
+    const processImportedData = (parsed: any, fileName: string) => {
+        const configs = Array.isArray(parsed) ? parsed : [parsed];
+
+        if (configs.length === 0) {
+            alert('配置文件中没有有效的参与者数据');
+            return;
+        }
+
+        setFormParticipants(configs.map((p: any, idx: number) => ({
+            id: p.id || `import-${idx}`,
+            name: p.name || '',
+            provider: p.provider || 'GEMINI',
+            modelName: p.config?.modelName || p.modelName || '',
+            apiKey: p.config?.apiKey || '',
+            baseUrl: p.config?.baseUrl || '',
+            temperature: p.config?.temperature ?? 1.0,
+            enabled: p.config?.enabled ?? true,
+            systemInstruction: p.config?.systemInstruction || ''
+        })));
+        setFormName(fileName.replace(/\.(json|galaxy)$/, ''));
+        setShowEditor(true);
+    };
+
+    // 执行加密文件解密和导入
+    const executeImport = async () => {
+        if (!pendingImportFile) return;
+        if (!importPassword) {
+            alert('请输入密码');
+            return;
+        }
+        try {
+            const text = await pendingImportFile.text();
+            const decrypted = await decryptData(text, importPassword);
+            const parsed = JSON.parse(decrypted);
+            processImportedData(parsed, pendingImportFile.name);
+            setPendingImportFile(null);
+            setImportPassword('');
+        } catch (err: any) {
+            console.error('Decrypt error:', err);
+            alert('解密失败：密码错误或文件已损坏');
+        }
+    };
+
     const handleImportConfig = () => {
         const input = document.createElement('input');
         input.type = 'file';
@@ -349,44 +421,23 @@ export default function ConfigTemplates() {
                     return;
                 }
 
-                let parsed: any;
-
                 // 检查是否为加密的 .galaxy 文件 (非 JSON 格式)
                 const isEncrypted = !text.trim().startsWith('[') && !text.trim().startsWith('{');
 
                 if (isEncrypted) {
-                    // 加密文件需要在主前端解密，管理后台不支持
-                    alert('此文件似乎是加密的 .galaxy 文件。\n\n请在主前端的「设置」中导入加密配置文件，或使用未加密的 .json 文件。');
+                    // 显示密码输入弹窗
+                    setPendingImportFile(file);
+                    setImportPassword('');
                     return;
                 }
 
+                // 未加密的 JSON 文件直接解析
                 try {
-                    parsed = JSON.parse(text);
+                    const parsed = JSON.parse(text);
+                    processImportedData(parsed, file.name);
                 } catch (jsonErr) {
                     alert('JSON 格式解析失败，请检查文件格式是否正确');
-                    return;
                 }
-
-                const configs = Array.isArray(parsed) ? parsed : [parsed];
-
-                if (configs.length === 0) {
-                    alert('配置文件中没有有效的参与者数据');
-                    return;
-                }
-
-                setFormParticipants(configs.map((p: any, idx: number) => ({
-                    id: p.id || `import-${idx}`,
-                    name: p.name || '',
-                    provider: p.provider || 'GEMINI',
-                    modelName: p.config?.modelName || p.modelName || '',
-                    apiKey: p.config?.apiKey || '',
-                    baseUrl: p.config?.baseUrl || '',
-                    temperature: p.config?.temperature ?? 1.0,
-                    enabled: p.config?.enabled ?? true,
-                    systemInstruction: p.config?.systemInstruction || ''
-                })));
-                setFormName(file.name.replace(/\.(json|galaxy)$/, ''));
-                setShowEditor(true);
             } catch (err: any) {
                 console.error('Import error:', err);
                 alert(`读取文件失败: ${err.message || '未知错误'}`);
@@ -903,6 +954,54 @@ export default function ConfigTemplates() {
                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
                             >
                                 保存
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* 加密文件密码输入弹窗 */}
+            {pendingImportFile && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md overflow-hidden">
+                        <div className="p-6 border-b dark:border-slate-700 flex items-center justify-between">
+                            <h3 className="text-lg font-semibold text-gray-900 dark:text-white flex items-center gap-2">
+                                <Key size={20} className="text-purple-500" />
+                                解密配置文件
+                            </h3>
+                            <button
+                                onClick={() => { setPendingImportFile(null); setImportPassword(''); }}
+                                className="p-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                            >
+                                <X size={18} className="text-gray-500" />
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                文件 <strong className="text-gray-900 dark:text-white">{pendingImportFile.name}</strong> 是加密的，请输入密码解密：
+                            </p>
+                            <input
+                                type="password"
+                                value={importPassword}
+                                onChange={e => setImportPassword(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && executeImport()}
+                                className="w-full px-4 py-3 border dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                                placeholder="输入解密密码"
+                                autoFocus
+                            />
+                        </div>
+                        <div className="p-6 border-t dark:border-slate-700 flex justify-end gap-3">
+                            <button
+                                onClick={() => { setPendingImportFile(null); setImportPassword(''); }}
+                                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={executeImport}
+                                className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
+                            >
+                                解密导入
                             </button>
                         </div>
                     </div>
