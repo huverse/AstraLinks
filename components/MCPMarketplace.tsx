@@ -292,6 +292,7 @@ function InstalledMCPList({
 export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
     const [activeTab, setActiveTab] = useState<'market' | 'installed'>('market');
     const [searchQuery, setSearchQuery] = useState('');
+    const [debouncedQuery, setDebouncedQuery] = useState('');
     const [servers, setServers] = useState<MCPServer[]>([]);
     const [installedMcps, setInstalledMcps] = useState<InstalledMCP[]>([]);
     const [loading, setLoading] = useState(true);
@@ -299,13 +300,21 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
     const [error, setError] = useState<string | null>(null);
     const [showUpload, setShowUpload] = useState(false);
 
-    // 加载市场数据
+    // 防抖搜索：延迟 500ms 后更新搜索查询
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            setDebouncedQuery(searchQuery);
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [searchQuery]);
+
+    // 加载市场数据 (使用防抖后的查询)
     const loadMarket = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
             const response = await fetchAPI<{ success: boolean; data: MCPServer[] }>(
-                `/api/mcp-marketplace/search?q=${encodeURIComponent(searchQuery)}&pageSize=30`
+                `/api/mcp-marketplace/search?q=${encodeURIComponent(debouncedQuery)}&pageSize=30`
             );
             if (response.success) {
                 setServers(response.data || []);
@@ -315,7 +324,7 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
         } finally {
             setLoading(false);
         }
-    }, [searchQuery]);
+    }, [debouncedQuery]);
 
     // 加载已安装 MCP
     const loadInstalled = useCallback(async () => {
