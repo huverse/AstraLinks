@@ -389,7 +389,7 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
     const installedIds = new Set(installedMcps.map(m => m.mcp_id));
 
     return (
-        <div className="h-full flex flex-col bg-slate-900/95 backdrop-blur-xl">
+        <div className="h-full flex flex-col bg-slate-900/95 backdrop-blur-xl min-w-[800px]">
             {/* 头部 */}
             <div className="px-6 py-4 border-b border-white/10">
                 <div className="flex items-center justify-between">
@@ -477,7 +477,7 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
                             没有找到 MCP 工具
                         </div>
                     ) : (
-                        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                        <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))' }}>
                             {servers.map(server => (
                                 <MCPCard
                                     key={server.qualifiedName}

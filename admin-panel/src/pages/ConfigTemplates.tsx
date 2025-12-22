@@ -344,8 +344,35 @@ export default function ConfigTemplates() {
             if (!file) return;
             try {
                 const text = await file.text();
-                const parsed = JSON.parse(text);
+                if (!text || text.trim().length === 0) {
+                    alert('文件为空');
+                    return;
+                }
+
+                let parsed: any;
+
+                // 检查是否为加密的 .galaxy 文件 (非 JSON 格式)
+                const isEncrypted = !text.trim().startsWith('[') && !text.trim().startsWith('{');
+
+                if (isEncrypted) {
+                    // 加密文件需要在主前端解密，管理后台不支持
+                    alert('此文件似乎是加密的 .galaxy 文件。\n\n请在主前端的「设置」中导入加密配置文件，或使用未加密的 .json 文件。');
+                    return;
+                }
+
+                try {
+                    parsed = JSON.parse(text);
+                } catch (jsonErr) {
+                    alert('JSON 格式解析失败，请检查文件格式是否正确');
+                    return;
+                }
+
                 const configs = Array.isArray(parsed) ? parsed : [parsed];
+
+                if (configs.length === 0) {
+                    alert('配置文件中没有有效的参与者数据');
+                    return;
+                }
 
                 setFormParticipants(configs.map((p: any, idx: number) => ({
                     id: p.id || `import-${idx}`,
@@ -360,8 +387,9 @@ export default function ConfigTemplates() {
                 })));
                 setFormName(file.name.replace(/\.(json|galaxy)$/, ''));
                 setShowEditor(true);
-            } catch (err) {
-                alert('读取文件失败或格式错误');
+            } catch (err: any) {
+                console.error('Import error:', err);
+                alert(`读取文件失败: ${err.message || '未知错误'}`);
             }
         };
         input.click();
