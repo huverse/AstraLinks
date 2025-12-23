@@ -10,6 +10,11 @@ export { EventLogService, eventLogService } from './EventLogService';
 // 事件总线（发布/订阅）
 export { EventBus, eventBus } from './EventBus';
 
+// 存储接口与实现 (P0: 支持多进程部署)
+export { IEventLogStore, AppendEventParams, buildEvent } from './IEventLogStore';
+export { MemoryEventLogStore } from './MemoryEventLogStore';
+export { RedisEventLogStore, getEventLogStore, resetEventLogStore } from './RedisEventLogStore';
+
 // 重导出类型
 export {
     Event,
@@ -21,3 +26,4 @@ export {
     AgentVisibleEvent,
     toAgentVisibleEvent,
 } from '../core/types/event.types';
+

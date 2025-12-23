@@ -127,11 +127,37 @@ export function logApiRequest(
 // 启动日志
 // ============================================
 
+/**
+ * 记录启动信息和依赖状态
+ * P1: 包含 Redis、LLM、EventStore 状态
+ */
 export function logStartup(): void {
+    const redisUrl = process.env.REDIS_URL;
+    const eventStore = process.env.WE_EVENT_STORE || 'memory';
+
     weLogger.info({
         env: worldEngineConfig.env,
         logLevel,
+        // LLM 状态
         llmEnabled: worldEngineConfig.llm.enabled,
-        sessionTimeout: worldEngineConfig.session.timeoutMs
+        llmProvider: worldEngineConfig.llm.provider || 'gemini',
+        llmKeySet: !!worldEngineConfig.llm.key,
+        // Session 配置
+        sessionTimeout: worldEngineConfig.session.timeoutMs,
+        // 存储后端
+        eventStore,
+        redisConfigured: !!redisUrl,
+        // 安全
+        internalTokenSet: !!worldEngineConfig.security.internalToken
     }, 'world_engine_startup');
+
+    // 依赖状态警告
+    if (worldEngineConfig.llm.enabled && !worldEngineConfig.llm.key) {
+        weLogger.warn('LLM enabled but WE_LLM_KEY not set');
+    }
+
+    if (eventStore === 'redis' && !redisUrl) {
+        weLogger.warn('WE_EVENT_STORE=redis but REDIS_URL not set, falling back to memory');
+    }
 }
+
