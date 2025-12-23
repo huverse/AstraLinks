@@ -25,3 +25,6 @@ export {
 
 // 辩论世界引擎（新版）
 export * from './debate';
+
+// 游戏世界引擎
+export * from './game';
