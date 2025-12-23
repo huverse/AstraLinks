@@ -13,12 +13,15 @@ export {
     DefaultRuleEngine
 } from './BaseWorldEngine';
 
-// 辩论适配器（向后兼容）
+// 辩论适配器（向后兼容 - 旧版）
 export {
-    DebateWorldEngine,
-    DebateRuleEngine,
+    DebateWorldEngine as LegacyDebateWorldEngine,
+    DebateRuleEngine as LegacyDebateRuleEngine,
     intentToAction,
     actionToIntent,
     scenarioToWorldConfig,
-    createDebateWorldEngine
+    createDebateWorldEngine as createLegacyDebateWorldEngine
 } from './DebateWorldAdapter';
+
+// 辩论世界引擎（新版）
+export * from './debate';
