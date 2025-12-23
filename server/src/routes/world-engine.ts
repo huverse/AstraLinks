@@ -1,13 +1,17 @@
 /**
- * World Engine REST API Routes
+ * World Engine REST API Routes (v1)
  * 
- * REST API endpoints for World Engine:
+ * 生产化 API - 版本化、鉴权、速率限制
+ * 
+ * 端点:
  * - POST /sessions - 创建 Session
  * - GET /sessions - 列出所有 Sessions
  * - GET /sessions/:id - 获取 Session 状态
  * - POST /sessions/:id/step - 执行一步
  * - GET /sessions/:id/events - 获取事件历史
  * - DELETE /sessions/:id - 删除 Session
+ * - GET /health - 健康检查 (公开)
+ * - GET /metrics - 运行指标 (需鉴权)
  */
 
 import { Router, Request, Response } from 'express';
@@ -17,12 +21,72 @@ import {
     WorldEngineSessionConfig
 } from '../isolation-mode/session/WorldEngineSessionManager';
 import { Action } from '../isolation-mode/world-engine/interfaces';
+import {
+    requireWorldEngineAuth,
+    worldEngineRateLimit,
+    validateActionsInput
+} from '../services/world-engine-auth';
+import {
+    apiLogger,
+    logSessionCreated,
+    logSessionDeleted,
+    logApiError
+} from '../services/world-engine-logger';
+import {
+    getWorldEngineMetrics,
+    recordTick,
+    recordError,
+    recordEvents
+} from '../services/world-engine-metrics';
+import { worldEngineConfig } from '../config/world-engine.config';
 
 const router = Router();
 
 // ============================================
+// 中间件
+// ============================================
+
+// 速率限制 (所有端点)
+router.use(worldEngineRateLimit());
+
+// ============================================
+// 健康检查 (公开)
+// ============================================
+
+router.get('/health', (req: Request, res: Response) => {
+    res.json({
+        status: 'healthy',
+        version: '1.0.0',
+        env: worldEngineConfig.env,
+        timestamp: new Date().toISOString()
+    });
+});
+
+// ============================================
+// 以下端点需要鉴权
+// ============================================
+
+router.use(requireWorldEngineAuth);
+
+// ============================================
+// GET /metrics - 运行指标
+// ============================================
+
+router.get('/metrics', (req: Request, res: Response) => {
+    try {
+        const metrics = getWorldEngineMetrics();
+        res.json(metrics);
+    } catch (error: any) {
+        recordError();
+        logApiError('/metrics', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
 // POST /sessions - 创建 Session
 // ============================================
+
 router.post('/sessions', async (req: Request, res: Response) => {
     try {
         const { worldType, maxTicks, agents, problemStatement, hypotheses, goals } = req.body;
@@ -32,12 +96,18 @@ router.post('/sessions', async (req: Request, res: Response) => {
         }
 
         if (!['game', 'logic', 'society'].includes(worldType)) {
-            return res.status(400).json({ error: 'Invalid worldType. Must be game, logic, or society' });
+            return res.status(400).json({
+                error: 'Invalid worldType',
+                allowed: ['game', 'logic', 'society']
+            });
         }
+
+        // 限制 maxTicks
+        const safeMaxTicks = Math.min(maxTicks || 1000, 10000);
 
         const config: WorldEngineSessionConfig = {
             worldType,
-            maxTicks,
+            maxTicks: safeMaxTicks,
             agents,
             problemStatement,
             hypotheses,
@@ -46,6 +116,8 @@ router.post('/sessions', async (req: Request, res: Response) => {
 
         const session = await worldEngineSessionManager.createSession(config);
         const worldState = worldEngineSessionManager.getWorldState(session.id);
+
+        logSessionCreated(session.id, worldType);
 
         res.status(201).json({
             sessionId: session.id,
@@ -57,7 +129,8 @@ router.post('/sessions', async (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
-        console.error('Error creating session:', error);
+        recordError();
+        logApiError('/sessions', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -65,11 +138,14 @@ router.post('/sessions', async (req: Request, res: Response) => {
 // ============================================
 // GET /sessions - 列出所有 Sessions
 // ============================================
+
 router.get('/sessions', (req: Request, res: Response) => {
     try {
         const sessions = worldEngineSessionManager.listSessions();
-        res.json({ sessions });
+        res.json({ sessions, count: sessions.length });
     } catch (error: any) {
+        recordError();
+        logApiError('/sessions', error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -77,6 +153,7 @@ router.get('/sessions', (req: Request, res: Response) => {
 // ============================================
 // GET /sessions/:id - 获取 Session 状态
 // ============================================
+
 router.get('/sessions/:id', (req: Request, res: Response) => {
     try {
         const session = worldEngineSessionManager.getSession(req.params.id);
@@ -97,6 +174,8 @@ router.get('/sessions/:id', (req: Request, res: Response) => {
         });
 
     } catch (error: any) {
+        recordError();
+        logApiError(`/sessions/${req.params.id}`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -104,16 +183,35 @@ router.get('/sessions/:id', (req: Request, res: Response) => {
 // ============================================
 // POST /sessions/:id/step - 执行一步
 // ============================================
+
 router.post('/sessions/:id/step', async (req: Request, res: Response) => {
+    const startTime = Date.now();
+
     try {
         const session = worldEngineSessionManager.getSession(req.params.id);
         if (!session) {
             return res.status(404).json({ error: 'Session not found' });
         }
 
+        if (session.status === 'ended') {
+            return res.status(400).json({
+                error: 'Session ended',
+                reason: session.engine.getTerminationReason()
+            });
+        }
+
         const { actions = [] } = req.body;
 
-        // 补全 Action 字段
+        // 验证 Actions
+        const validation = validateActionsInput(actions);
+        if (!validation.valid) {
+            return res.status(400).json({
+                error: 'Invalid actions',
+                details: validation.errors
+            });
+        }
+
+        // 构建完整 Action
         const fullActions: Action[] = actions.map((a: any) => ({
             actionId: a.actionId || uuidv4(),
             agentId: a.agentId || 'unknown',
@@ -125,17 +223,22 @@ router.post('/sessions/:id/step', async (req: Request, res: Response) => {
 
         const result = await worldEngineSessionManager.step(req.params.id, fullActions);
 
+        recordTick();
+        recordEvents(result.events.length);
+
         res.json({
             tickCount: session.tickCount,
             isTerminated: result.isTerminated,
             terminationReason: result.terminationReason,
             eventsCount: result.events.length,
             events: result.events,
-            worldState: result.worldState
+            worldState: result.worldState,
+            durationMs: Date.now() - startTime
         });
 
     } catch (error: any) {
-        console.error('Error executing step:', error);
+        recordError();
+        logApiError(`/sessions/${req.params.id}/step`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -143,14 +246,25 @@ router.post('/sessions/:id/step', async (req: Request, res: Response) => {
 // ============================================
 // GET /sessions/:id/events - 获取事件历史
 // ============================================
+
 router.get('/sessions/:id/events', (req: Request, res: Response) => {
     try {
-        const limit = parseInt(req.query.limit as string) || 100;
+        const session = worldEngineSessionManager.getSession(req.params.id);
+        if (!session) {
+            return res.status(404).json({ error: 'Session not found' });
+        }
+
+        const limit = Math.min(
+            parseInt(req.query.limit as string) || 100,
+            worldEngineConfig.session.eventLogMaxSize
+        );
         const events = worldEngineSessionManager.getEvents(req.params.id, limit);
 
         res.json({ events, count: events.length });
 
     } catch (error: any) {
+        recordError();
+        logApiError(`/sessions/${req.params.id}/events`, error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -158,6 +272,7 @@ router.get('/sessions/:id/events', (req: Request, res: Response) => {
 // ============================================
 // DELETE /sessions/:id - 删除 Session
 // ============================================
+
 router.delete('/sessions/:id', (req: Request, res: Response) => {
     try {
         const deleted = worldEngineSessionManager.deleteSession(req.params.id);
@@ -165,114 +280,15 @@ router.delete('/sessions/:id', (req: Request, res: Response) => {
             return res.status(404).json({ error: 'Session not found' });
         }
 
+        logSessionDeleted(req.params.id);
+
         res.json({ success: true, message: 'Session deleted' });
 
     } catch (error: any) {
+        recordError();
+        logApiError(`/sessions/${req.params.id}`, error);
         res.status(500).json({ error: error.message });
     }
 });
-
-// ============================================
-// POST /sessions/:id/auto-run - 自动运行 N ticks
-// ============================================
-router.post('/sessions/:id/auto-run', async (req: Request, res: Response) => {
-    try {
-        const session = worldEngineSessionManager.getSession(req.params.id);
-        if (!session) {
-            return res.status(404).json({ error: 'Session not found' });
-        }
-
-        const { ticks = 10 } = req.body;
-        const allEvents: any[] = [];
-
-        for (let i = 0; i < ticks && !session.engine.isTerminated(); i++) {
-            // 生成随机 Actions
-            const actions = generateRandomActions(session);
-            const result = await worldEngineSessionManager.step(session.id, actions);
-            allEvents.push(...result.events);
-        }
-
-        const worldState = worldEngineSessionManager.getWorldState(session.id);
-
-        res.json({
-            ticksExecuted: allEvents.length > 0 ? session.tickCount : 0,
-            isTerminated: session.engine.isTerminated(),
-            terminationReason: session.engine.getTerminationReason(),
-            eventsCount: allEvents.length,
-            worldState
-        });
-
-    } catch (error: any) {
-        console.error('Error in auto-run:', error);
-        res.status(500).json({ error: error.message });
-    }
-});
-
-// ============================================
-// 辅助函数
-// ============================================
-
-function generateRandomActions(session: any): Action[] {
-    const engine = session.engine;
-
-    if (session.worldType === 'society') {
-        const activeAgents = engine.getActiveAgents?.() || [];
-        return activeAgents.map((agent: any) => generateRandomSocietyAction(agent.agentId));
-    }
-
-    if (session.worldType === 'game') {
-        const currentAgent = engine.getCurrentTurnAgent?.() || 'A';
-        const aliveAgents = engine.getAliveAgents?.() || [];
-        const targetAgent = aliveAgents.find((a: string) => a !== currentAgent);
-
-        return [{
-            actionId: uuidv4(),
-            agentId: currentAgent,
-            actionType: 'play_card',
-            params: { card: 'attack', targetAgentId: targetAgent },
-            confidence: 1.0,
-            timestamp: Date.now()
-        }];
-    }
-
-    return [];
-}
-
-function generateRandomSocietyAction(agentId: string): Action {
-    const actionTypes = ['work', 'consume', 'talk', 'help', 'idle'] as const;
-    const actionType = actionTypes[Math.floor(Math.random() * actionTypes.length)];
-
-    let params: Record<string, unknown> = {};
-
-    switch (actionType) {
-        case 'work':
-            params = { intensity: Math.floor(Math.random() * 3) + 1 };
-            break;
-        case 'consume':
-            params = { amount: Math.floor(Math.random() * 10) + 5 };
-            break;
-        case 'talk':
-            params = {
-                targetAgentId: `agent-${Math.floor(Math.random() * 5) + 1}`,
-                talkType: ['friendly', 'neutral', 'hostile'][Math.floor(Math.random() * 3)]
-            };
-            break;
-        case 'help':
-            params = {
-                targetAgentId: `agent-${Math.floor(Math.random() * 5) + 1}`,
-                amount: Math.floor(Math.random() * 10) + 1
-            };
-            break;
-    }
-
-    return {
-        actionId: uuidv4(),
-        agentId,
-        actionType,
-        params,
-        confidence: 1.0,
-        timestamp: Date.now()
-    };
-}
 
 export default router;

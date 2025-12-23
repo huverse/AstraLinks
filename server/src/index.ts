@@ -85,7 +85,7 @@ app.use('/api/code', codeRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/workflows', collaborationRoutes); // P5 协作功能 (嵌套在 workflows 下)
 app.use('/api/database', databaseRoutes); // P7 数据库连接器
-app.use('/api/world-engine', worldEngineRoutes); // World Engine API
+app.use('/api/v1/world-engine', worldEngineRoutes); // World Engine API v1
 
 // Health check
 app.get('/api/health', (req, res) => {
