@@ -65,11 +65,19 @@ class IsolationSocketService {
         // @ts-ignore
         const apiBase = import.meta.env.VITE_API_BASE;
         if (apiBase) {
-            return apiBase.replace(/^http/, 'ws');
+            // VITE_API_BASE 已经是完整的 URL (http://xxx 或 https://xxx)
+            // Socket.IO 会自动处理 WebSocket upgrade
+            return apiBase;
         }
-        if (typeof window !== 'undefined' && window.location.hostname === 'astralinks.xyz') {
-            return 'https://astralinks.xyz';
+
+        // 生产环境检测
+        if (typeof window !== 'undefined') {
+            const { hostname, protocol } = window.location;
+            if (hostname === 'astralinks.xyz' || hostname === 'www.astralinks.xyz') {
+                return `${protocol}//astralinks.xyz`;
+            }
         }
+
         return 'http://localhost:3001';
     }
 

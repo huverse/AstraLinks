@@ -16,6 +16,7 @@ import {
 } from '../session/WorldEngineSessionManager';
 import { Action } from '../world-engine/interfaces';
 import { wsLogger } from '../../services/world-engine-logger';
+import { verifyToken } from '../../middleware/auth';
 
 // ============================================
 // WebSocket 事件类型
@@ -46,8 +47,28 @@ export interface SubmitActionRequest {
 export function initWorldEngineSocket(io: Server): void {
     const worldEngine = io.of('/world-engine');
 
+    // 认证中间件
+    worldEngine.use((socket, next) => {
+        const token = socket.handshake.auth.token;
+        if (!token) {
+            wsLogger.warn({ socketId: socket.id }, 'world_engine_auth_required');
+            return next(new Error('Authentication required'));
+        }
+
+        const decoded = verifyToken(token);
+        if (!decoded) {
+            wsLogger.warn({ socketId: socket.id }, 'world_engine_invalid_token');
+            return next(new Error('Invalid token'));
+        }
+
+        // 存储用户信息到 socket
+        socket.data.user = decoded;
+        next();
+    });
+
     worldEngine.on('connection', (socket: Socket) => {
-        wsLogger.info({ socketId: socket.id }, 'world_engine_client_connected');
+        const user = socket.data.user;
+        wsLogger.info({ socketId: socket.id, userId: user?.id, username: user?.username }, 'world_engine_client_connected');
 
         // 当前加入的 session
         let currentSessionId: string | null = null;
