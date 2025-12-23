@@ -12,6 +12,21 @@ export type SessionStatus =
     | 'completed'  // 已完成
     | 'aborted';   // 已中止
 
+/**
+ * 加密的 LLM 配置 (从 Galaxyous 配置中心同步)
+ */
+export interface EncryptedLlmConfig {
+    provider: 'GEMINI' | 'OPENAI_COMPATIBLE';
+    encryptedApiKey: {
+        ciphertext: string;
+        iv: string;
+        authTag: string;
+    };
+    baseUrl?: string;
+    modelName: string;
+    temperature?: number;
+}
+
 export interface SessionConfig {
     /** 会话 ID */
     id: string;
@@ -31,6 +46,8 @@ export interface SessionConfig {
     roundTimeLimit?: number;
     /** 创建时间 */
     createdAt: number;
+    /** 用户 LLM 配置 (加密) - 从 Galaxyous 配置中心同步 */
+    llmConfig?: EncryptedLlmConfig;
 }
 
 export interface SessionState {

@@ -7,10 +7,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     FlaskConical, Users, MessageSquare, Play, Pause, Square,
-    Settings, History, ChevronLeft, Plus, RefreshCw
+    Settings, History, ChevronLeft, Plus, RefreshCw, Cpu
 } from 'lucide-react';
 import { API_BASE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
+import { encryptLlmConfig, LlmConfigData } from '../../utils/isolationCrypto';
+import { Participant, ProviderType } from '../../types';
 
 // ============================================
 // 类型定义
@@ -55,6 +57,7 @@ interface Scenario {
 
 interface IsolationModeContainerProps {
     onExit: () => void;
+    participants?: Participant[]; // 从 Galaxyous 配置中心传递的 AI 配置
 }
 
 // ============================================
@@ -161,7 +164,7 @@ const ScenarioSelector: React.FC<{
 // 主组件
 // ============================================
 
-const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit }) => {
+const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit, participants = [] }) => {
     const { token } = useAuth();
     const [view, setView] = useState<'setup' | 'discussion' | 'history'>('setup');
     const [loading, setLoading] = useState(false);
@@ -213,6 +216,21 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit 
         setError(null);
 
         try {
+            // 从 participants 获取启用的 AI 配置 (Galaxyous 配置中心)
+            let encryptedLlmConfig = undefined;
+            const enabledParticipant = participants.find(p => p.config.enabled);
+
+            if (enabledParticipant) {
+                const llmConfigData: LlmConfigData = {
+                    provider: enabledParticipant.provider,
+                    apiKey: enabledParticipant.config.apiKey,
+                    baseUrl: enabledParticipant.config.baseUrl,
+                    modelName: enabledParticipant.config.modelName,
+                    temperature: enabledParticipant.config.temperature
+                };
+                encryptedLlmConfig = await encryptLlmConfig(llmConfigData);
+            }
+
             const response = await fetch(`${API_BASE}/api/isolation/sessions`, {
                 method: 'POST',
                 headers: {
@@ -224,9 +242,10 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit 
                     topic,
                     scenario: { id: selectedScenario, name: selectedScenario, type: selectedScenario },
                     agents: [
-                        { id: 'agent-1', name: '正方', role: 'debater', llmProviderId: 'galaxyous', systemPrompt: '你是正方辩手' },
-                        { id: 'agent-2', name: '反方', role: 'debater', llmProviderId: 'galaxyous', systemPrompt: '你是反方辩手' },
+                        { id: 'agent-1', name: '正方', role: 'debater', systemPrompt: '你是正方辩手' },
+                        { id: 'agent-2', name: '反方', role: 'debater', systemPrompt: '你是反方辩手' },
                     ],
+                    llmConfig: encryptedLlmConfig, // 加密的用户 AI 配置
                 }),
             });
 

@@ -28,7 +28,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user?.id || 'anonymous';
-        const { title, topic, scenario, agents, maxRounds, roundTimeLimit } = req.body;
+        const { title, topic, scenario, agents, maxRounds, roundTimeLimit, llmConfig } = req.body;
 
         const session = await sessionManager.create({
             title,
@@ -38,6 +38,7 @@ router.post('/', async (req: Request, res: Response) => {
             createdBy: userId,
             maxRounds,
             roundTimeLimit,
+            llmConfig, // 加密的用户 AI 配置 (从 Galaxyous 配置中心同步)
         });
 
         res.json({ success: true, data: session });
