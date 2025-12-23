@@ -36,3 +36,14 @@ export {
     ScenarioConfig,      // 向后兼容别名
     DiscussionRules,     // 向后兼容
 } from './scenario.types';
+
+// 主持人控制器类型
+export {
+    Phase,
+    ModeratorAction,
+    ModeratorState,
+    ModeratorDecision,
+    Intent,
+    DiscussionHealth,
+    PhaseTransition,
+} from './moderator.types';
