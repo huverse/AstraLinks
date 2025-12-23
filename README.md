@@ -89,4 +89,4 @@ chmod +x deploy.sh
 
 ## 📄 License
 
-MIT License
+Aphace 2.0
