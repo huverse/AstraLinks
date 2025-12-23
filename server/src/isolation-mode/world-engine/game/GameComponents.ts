@@ -127,13 +127,17 @@ export class GameRuleEngine implements IRuleEngine {
                 agentState.hand.splice(cardIndex, 1);
             }
 
-            // 记录出牌事件
+            // 记录 ACTION_ACCEPTED 事件
             events.push({
                 eventId: uuidv4(),
-                eventType: 'card_played',
+                eventType: 'ACTION_ACCEPTED',
                 timestamp: Date.now(),
                 source: action.agentId,
-                content: { card: params.card, target: params.targetAgentId },
+                content: {
+                    actionType: action.actionType,
+                    card: params.card,
+                    target: params.targetAgentId
+                },
                 meta: { actionId: action.actionId }
             });
 
@@ -145,16 +149,19 @@ export class GameRuleEngine implements IRuleEngine {
                         const oldHp = targetState.hp;
                         targetState.hp = Math.max(0, targetState.hp - ATTACK_DAMAGE);
 
+                        // STATE_CHANGED: hp 变化
                         events.push({
                             eventId: uuidv4(),
-                            eventType: 'damage_dealt',
+                            eventType: 'STATE_CHANGED',
                             timestamp: Date.now(),
-                            source: action.agentId,
+                            source: 'system',
                             content: {
-                                target: params.targetAgentId,
-                                damage: ATTACK_DAMAGE,
-                                oldHp,
-                                newHp: targetState.hp
+                                changeType: 'hp_decrease',
+                                entityId: params.targetAgentId,
+                                field: 'hp',
+                                oldValue: oldHp,
+                                newValue: targetState.hp,
+                                cause: { agentId: action.agentId, action: 'attack' }
                             }
                         });
 
@@ -170,12 +177,19 @@ export class GameRuleEngine implements IRuleEngine {
                         // 检查死亡
                         if (targetState.hp <= 0) {
                             targetState.isAlive = false;
+                            // STATE_CHANGED: 死亡
                             events.push({
                                 eventId: uuidv4(),
-                                eventType: 'agent_died',
+                                eventType: 'STATE_CHANGED',
                                 timestamp: Date.now(),
                                 source: 'system',
-                                content: { agentId: params.targetAgentId }
+                                content: {
+                                    changeType: 'agent_died',
+                                    entityId: params.targetAgentId,
+                                    field: 'isAlive',
+                                    oldValue: true,
+                                    newValue: false
+                                }
                             });
                         }
                     }
@@ -185,15 +199,19 @@ export class GameRuleEngine implements IRuleEngine {
                     const oldHp = agentState.hp;
                     agentState.hp = Math.min(agentState.maxHp, agentState.hp + HEAL_AMOUNT);
 
+                    // STATE_CHANGED: 治疗效果
                     events.push({
                         eventId: uuidv4(),
-                        eventType: 'heal_applied',
+                        eventType: 'STATE_CHANGED',
                         timestamp: Date.now(),
-                        source: action.agentId,
+                        source: 'system',
                         content: {
-                            heal: HEAL_AMOUNT,
-                            oldHp,
-                            newHp: agentState.hp
+                            changeType: 'hp_increase',
+                            entityId: action.agentId,
+                            field: 'hp',
+                            oldValue: oldHp,
+                            newValue: agentState.hp,
+                            cause: { agentId: action.agentId, action: 'heal' }
                         }
                     });
 

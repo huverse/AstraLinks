@@ -81,17 +81,20 @@ export interface PlayCardParams {
 
 /**
  * 游戏事件类型
+ * 
+ * 结构化事件，用于完整复原世界变化
  */
 export type GameEventType =
+    // 核心事件（用户要求）
+    | 'ACTION_ACCEPTED'     // Action 被接受
+    | 'ACTION_REJECTED'     // Action 被拒绝
+    | 'STATE_CHANGED'       // 状态变化
+    | 'GAME_OVER'           // 游戏结束
+
+    // 详细事件（可选）
     | 'game_start'
     | 'turn_start'
-    | 'card_played'
-    | 'damage_dealt'
-    | 'heal_applied'
-    | 'agent_died'
-    | 'turn_end'
-    | 'game_end'
-    | 'action_rejected';
+    | 'turn_end';
 
 // ============================================
 // 常量
