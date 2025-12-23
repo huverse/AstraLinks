@@ -23,6 +23,7 @@
     "reactflow": "^11.11.4",
     "rehype-katex": "7",
     "remark-math": "6",
+    "socket.io-client": "^4.8.2",
     "uuid": "^13.0.0",
     "vm2": "^3.10.0"
   },

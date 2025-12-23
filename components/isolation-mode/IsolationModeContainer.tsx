@@ -4,15 +4,16 @@
  * 多 Agent 结构化讨论的主界面
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     FlaskConical, Users, MessageSquare, Play, Pause, Square,
-    Settings, History, ChevronLeft, Plus, RefreshCw, Cpu
+    Settings, History, ChevronLeft, Plus, RefreshCw, Cpu, Wifi, WifiOff
 } from 'lucide-react';
 import { API_BASE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { encryptLlmConfig, LlmConfigData } from '../../utils/isolationCrypto';
 import { Participant, ProviderType } from '../../types';
+import { isolationSocket, WorldEvent, StateUpdate } from '../../services/isolationSocket';
 
 // ============================================
 // 类型定义
@@ -183,6 +184,10 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [currentSession, setCurrentSession] = useState<Session | null>(null);
     const [topic, setTopic] = useState('');
 
+    // Socket 连接状态
+    const [socketConnected, setSocketConnected] = useState(false);
+    const socketInitialized = useRef(false);
+
     // 加载会话历史
     const [sessions, setSessions] = useState<Session[]>([]);
 
@@ -204,6 +209,69 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     useEffect(() => {
         loadSessions();
     }, [loadSessions]);
+
+    // Socket 连接管理
+    useEffect(() => {
+        if (!token || socketInitialized.current) return;
+
+        socketInitialized.current = true;
+
+        // 设置 token getter
+        isolationSocket.setTokenGetter(() => token);
+
+        // 连接 Socket
+        isolationSocket.connect({
+            onConnect: () => {
+                setSocketConnected(true);
+                console.log('[Isolation] Socket connected');
+            },
+            onDisconnect: (reason) => {
+                setSocketConnected(false);
+                console.log('[Isolation] Socket disconnected:', reason);
+            },
+            onWorldEvent: (event) => {
+                // 收到实时事件，更新当前会话的事件列表
+                if (currentSession && event.sessionId === currentSession.id) {
+                    setCurrentSession(prev => {
+                        if (!prev) return prev;
+                        const newEvent = {
+                            id: event.eventId,
+                            type: event.type,
+                            sourceId: event.payload?.speaker || 'system',
+                            timestamp: Date.now(),
+                            sequence: event.tick,
+                            payload: event.payload
+                        };
+                        return {
+                            ...prev,
+                            events: [...prev.events, newEvent]
+                        };
+                    });
+                }
+            },
+            onStateUpdate: (state) => {
+                // 收到状态更新
+                if (currentSession && state.sessionId === currentSession.id) {
+                    if (state.isTerminated) {
+                        setCurrentSession(prev => prev ? { ...prev, status: 'completed' } : prev);
+                    }
+                }
+            },
+            onSimulationEnded: ({ sessionId, reason }) => {
+                if (currentSession && sessionId === currentSession.id) {
+                    setCurrentSession(prev => prev ? { ...prev, status: 'completed' } : prev);
+                }
+            },
+            onError: (error) => {
+                console.error('[Isolation] Socket error:', error);
+            }
+        });
+
+        return () => {
+            isolationSocket.disconnect();
+            socketInitialized.current = false;
+        };
+    }, [token, currentSession]);
 
     // 创建新讨论
     const handleCreateSession = async () => {
@@ -314,8 +382,16 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                         <ChevronLeft size={20} className="text-slate-400" />
                     </button>
                     <div className="flex items-center gap-2">
-                        <FlaskConical className="text-purple-400" size={24} />
-                        <h1 className="text-xl font-bold text-white">隔离模式</h1>
+                        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+                            <FlaskConical className="text-purple-400" size={24} />
+                            隔离模式
+                            {/* Socket 连接状态 */}
+                            {socketConnected ? (
+                                <Wifi size={16} className="text-green-400" />
+                            ) : (
+                                <WifiOff size={16} className="text-red-400" />
+                            )}
+                        </h1>
                         <span className="px-2 py-0.5 text-xs bg-yellow-500/20 text-yellow-400 rounded-full">
                             实验性
                         </span>
