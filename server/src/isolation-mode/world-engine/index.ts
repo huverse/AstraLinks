@@ -31,3 +31,6 @@ export * from './game';
 
 // 逻辑推理世界引擎
 export * from './logic';
+
+// 社会仿真世界引擎
+export * from './society';

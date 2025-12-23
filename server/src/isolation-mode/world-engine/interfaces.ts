@@ -44,6 +44,11 @@ export type ActionType =
     | 'work'            // 工作
     | 'rest'            // 休息
     | 'learn'           // 学习
+    | 'consume'         // 消耗资源
+    | 'talk'            // 对话/互动
+    | 'help'            // 帮助
+    | 'conflict'        // 冲突
+    | 'idle'            // 空闲
 
     // === 创作类 ===
     | 'generate_image'  // 生成图片
