@@ -6,6 +6,11 @@ description: 深入探讨学术问题，进行严谨的学术交流
 
 type: academic
 
+# 必需字段
+alignment: collaborative
+flow: turn-based
+moderatorPolicy: passive
+
 suggestedRoles:
   - role: analyst
     name: 研究者

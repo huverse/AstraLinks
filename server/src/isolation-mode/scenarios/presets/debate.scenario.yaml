@@ -6,6 +6,11 @@ description: 正反双方围绕主题进行辩论
 
 type: debate
 
+# 必需字段
+alignment: competitive
+flow: turn-based
+moderatorPolicy: active
+
 suggestedRoles:
   - role: debater
     name: 正方辩手

@@ -6,6 +6,11 @@ description: 自由发散思维，产生创意想法
 
 type: brainstorm
 
+# 必需字段
+alignment: collaborative
+flow: free
+moderatorPolicy: passive
+
 suggestedRoles:
   - role: supporter
     name: 创意发起者

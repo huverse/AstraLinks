@@ -6,6 +6,11 @@ description: 从多个角度评估和审核项目方案
 
 type: review
 
+# 必需字段
+alignment: collaborative
+flow: moderated
+moderatorPolicy: active
+
 suggestedRoles:
   - role: analyst
     name: 技术评审员
