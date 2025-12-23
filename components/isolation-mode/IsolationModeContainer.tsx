@@ -210,7 +210,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         loadSessions();
     }, [loadSessions]);
 
-    // Socket 连接管理
+    // Socket 连接管理 - 只在 token 变化时重新连接
     useEffect(() => {
         if (!token || socketInitialized.current) return;
 
@@ -231,36 +231,37 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             },
             onWorldEvent: (event) => {
                 // 收到实时事件，更新当前会话的事件列表
-                if (currentSession && event.sessionId === currentSession.id) {
-                    setCurrentSession(prev => {
-                        if (!prev) return prev;
-                        const newEvent = {
-                            id: event.eventId,
-                            type: event.type,
-                            sourceId: event.payload?.speaker || 'system',
-                            timestamp: Date.now(),
-                            sequence: event.tick,
-                            payload: event.payload
-                        };
-                        return {
-                            ...prev,
-                            events: [...prev.events, newEvent]
-                        };
-                    });
-                }
+                setCurrentSession(prev => {
+                    if (!prev || event.sessionId !== prev.id) return prev;
+                    const newEvent = {
+                        id: event.eventId,
+                        type: event.type,
+                        sourceId: event.payload?.speaker || 'system',
+                        timestamp: Date.now(),
+                        sequence: event.tick,
+                        payload: event.payload
+                    };
+                    return {
+                        ...prev,
+                        events: [...prev.events, newEvent]
+                    };
+                });
             },
             onStateUpdate: (state) => {
                 // 收到状态更新
-                if (currentSession && state.sessionId === currentSession.id) {
+                setCurrentSession(prev => {
+                    if (!prev || state.sessionId !== prev.id) return prev;
                     if (state.isTerminated) {
-                        setCurrentSession(prev => prev ? { ...prev, status: 'completed' } : prev);
+                        return { ...prev, status: 'completed' };
                     }
-                }
+                    return prev;
+                });
             },
-            onSimulationEnded: ({ sessionId, reason }) => {
-                if (currentSession && sessionId === currentSession.id) {
-                    setCurrentSession(prev => prev ? { ...prev, status: 'completed' } : prev);
-                }
+            onSimulationEnded: ({ sessionId }) => {
+                setCurrentSession(prev => {
+                    if (!prev || sessionId !== prev.id) return prev;
+                    return { ...prev, status: 'completed' };
+                });
             },
             onError: (error) => {
                 console.error('[Isolation] Socket error:', error);
@@ -271,7 +272,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             isolationSocket.disconnect();
             socketInitialized.current = false;
         };
-    }, [token, currentSession]);
+    }, [token]); // 只依赖 token，避免 currentSession 变化触发重连
 
     // 创建新讨论
     const handleCreateSession = async () => {
