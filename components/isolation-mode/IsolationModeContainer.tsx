@@ -7,13 +7,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     FlaskConical, Users, MessageSquare, Play, Pause, Square,
-    Settings, History, ChevronLeft, Plus, RefreshCw, Cpu, Wifi, WifiOff
+    Settings, History, ChevronLeft, Plus, RefreshCw, Cpu, Wifi, WifiOff, AlertCircle, Loader2
 } from 'lucide-react';
 import { API_BASE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { encryptLlmConfig, LlmConfigData } from '../../utils/isolationCrypto';
 import { Participant, ProviderType } from '../../types';
 import { isolationSocket, WorldEvent, StateUpdate } from '../../services/isolationSocket';
+import { isolationLogger } from '../../utils/logger';
 
 // ============================================
 // 类型定义
@@ -211,6 +212,8 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     }, [loadSessions]);
 
     // Socket 连接管理 - 只在 token 变化时重新连接
+    const [reconnectInfo, setReconnectInfo] = useState({ attempts: 0, isReconnecting: false });
+
     useEffect(() => {
         if (!token || socketInitialized.current) return;
 
@@ -223,11 +226,16 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         isolationSocket.connect({
             onConnect: () => {
                 setSocketConnected(true);
-                console.log('[Isolation] Socket connected');
+                setReconnectInfo({ attempts: 0, isReconnecting: false });
+                isolationLogger.info('WebSocket connected');
             },
             onDisconnect: (reason) => {
                 setSocketConnected(false);
-                console.log('[Isolation] Socket disconnected:', reason);
+                isolationLogger.warn('WebSocket disconnected', { reason });
+            },
+            onReconnecting: (attempt, delay) => {
+                setReconnectInfo({ attempts: attempt, isReconnecting: true });
+                isolationLogger.info('Reconnecting', { attempt, delay });
             },
             onWorldEvent: (event) => {
                 // 收到实时事件，更新当前会话的事件列表
@@ -236,10 +244,10 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                     const newEvent = {
                         id: event.eventId,
                         type: event.type,
-                        sourceId: event.payload?.speaker || 'system',
+                        sourceId: (event.payload as Record<string, unknown>)?.speaker as string || 'system',
                         timestamp: Date.now(),
                         sequence: event.tick,
-                        payload: event.payload
+                        payload: event.payload as { content?: string; message?: string }
                     };
                     return {
                         ...prev,
@@ -263,8 +271,9 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                     return { ...prev, status: 'completed' };
                 });
             },
-            onError: (error) => {
-                console.error('[Isolation] Socket error:', error);
+            onError: (err) => {
+                isolationLogger.error('Socket error', { error: err.message });
+                setError(`连接错误: ${err.message}`);
             }
         });
 
@@ -367,7 +376,8 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             });
             setCurrentSession(prev => prev ? { ...prev, status: 'completed' } : null);
         } catch (e) {
-            console.error('Failed to end', e);
+            isolationLogger.error('Failed to end discussion', { error: (e as Error).message });
+            setError('结束讨论失败');
         }
     };
 
@@ -387,7 +397,12 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                             <FlaskConical className="text-purple-400" size={24} />
                             隔离模式
                             {/* Socket 连接状态 */}
-                            {socketConnected ? (
+                            {reconnectInfo.isReconnecting ? (
+                                <span className="flex items-center gap-1 text-yellow-400">
+                                    <Loader2 size={16} className="animate-spin" />
+                                    <span className="text-xs">重连中 ({reconnectInfo.attempts})</span>
+                                </span>
+                            ) : socketConnected ? (
                                 <Wifi size={16} className="text-green-400" />
                             ) : (
                                 <WifiOff size={16} className="text-red-400" />
