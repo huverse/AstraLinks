@@ -1,6 +1,8 @@
 import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { verifyToken } from '../middleware/auth';
+import { wsLogger } from './world-engine-logger';
+import { isProductionLike } from '../config/world-engine.config';
 
 let io: Server | null = null;
 
@@ -8,10 +10,18 @@ let io: Server | null = null;
 const userSockets = new Map<number, Set<string>>();
 const adminSockets = new Set<string>();
 
+// CORS 配置
+const getCorsOrigins = (): string[] => {
+    if (isProductionLike) {
+        return ['https://astralinks.xyz', 'https://www.astralinks.xyz'];
+    }
+    return ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:3000'];
+};
+
 export function initWebSocket(httpServer: HttpServer): Server {
     io = new Server(httpServer, {
         cors: {
-            origin: ['http://localhost:5173', 'http://localhost:5174'],
+            origin: getCorsOrigins(),
             methods: ['GET', 'POST'],
             credentials: true
         }
@@ -34,7 +44,7 @@ export function initWebSocket(httpServer: HttpServer): Server {
 
     io.on('connection', (socket: Socket) => {
         const user = socket.data.user;
-        console.log(`🔌 WebSocket connected: ${user.username} (${socket.id})`);
+        wsLogger.info({ userId: user.id, username: user.username, socketId: socket.id }, 'websocket_connected');
 
         // Track user sockets
         if (!userSockets.has(user.id)) {
@@ -54,7 +64,7 @@ export function initWebSocket(httpServer: HttpServer): Server {
         }
 
         socket.on('disconnect', () => {
-            console.log(`🔌 WebSocket disconnected: ${user.username}`);
+            wsLogger.info({ userId: user.id, username: user.username, socketId: socket.id }, 'websocket_disconnected');
             userSockets.get(user.id)?.delete(socket.id);
             if (userSockets.get(user.id)?.size === 0) {
                 userSockets.delete(user.id);
@@ -81,7 +91,7 @@ export function initWebSocket(httpServer: HttpServer): Server {
         });
     });
 
-    console.log('🔌 WebSocket server initialized');
+    wsLogger.info({ corsOrigins: getCorsOrigins() }, 'websocket_server_initialized');
     return io;
 }
 

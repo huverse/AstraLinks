@@ -2,10 +2,14 @@
  * 主持人控制器
  * 
  * 负责流程调度，不涉及 LLM 调用
+ * P0 修复: 结构化日志、事件发布、错误处理
  */
 
-import { SessionState } from '../core/types';
+import { v4 as uuidv4 } from 'uuid';
+import { SessionState, SessionStatus, EventType } from '../core/types';
 import { IModeratorController, IAgent, IRuleEngine } from '../core/interfaces';
+import { eventLogService, eventBus } from '../event-log';
+import { weLogger } from '../../services/world-engine-logger';
 
 /**
  * 主持人控制器实现
@@ -45,13 +49,33 @@ export class ModeratorController implements IModeratorController {
         state.startedAt = Date.now();
         state.currentRound = 1;
 
-        // 异步启动讨论循环 (不阻塞)
-        // DiscussionLoop 会处理发言者选择和事件发布
-        import('../orchestrator/DiscussionLoop').then(({ discussionLoop }) => {
-            discussionLoop.start(sessionId).catch((err) => {
-                console.error(`[ModeratorController] DiscussionLoop error:`, err);
-            });
+        // 发布 session:start 事件
+        this.publishSystemEvent(sessionId, 'SESSION_START', {
+            message: '讨论开始',
+            round: 1
         });
+
+        // 异步启动讨论循环 (不阻塞)
+        try {
+            const { discussionLoop } = await import('../orchestrator/DiscussionLoop');
+            discussionLoop.start(sessionId).catch((err) => {
+                weLogger.error({
+                    sessionId,
+                    error: err.message,
+                    stack: err.stack
+                }, 'discussion_loop_error');
+
+                // 标记 session 为异常中止
+                this.abortSession(sessionId, `DiscussionLoop error: ${err.message}`);
+            });
+        } catch (importError: any) {
+            weLogger.error({
+                sessionId,
+                error: importError.message
+            }, 'failed_to_import_discussion_loop');
+
+            this.abortSession(sessionId, `Failed to start: ${importError.message}`);
+        }
     }
 
     /**
@@ -59,9 +83,16 @@ export class ModeratorController implements IModeratorController {
      */
     async pauseSession(sessionId: string): Promise<void> {
         const state = this.sessions.get(sessionId);
-        if (state) {
+        if (state && state.status === 'active') {
             state.status = 'paused';
-            // TODO: 发布 session:pause 事件
+
+            // 发布 session:pause 事件
+            this.publishSystemEvent(sessionId, 'SESSION_PAUSE', {
+                message: '讨论已暂停',
+                round: state.currentRound
+            });
+
+            weLogger.info({ sessionId, round: state.currentRound }, 'session_paused');
         }
     }
 
@@ -72,7 +103,14 @@ export class ModeratorController implements IModeratorController {
         const state = this.sessions.get(sessionId);
         if (state && state.status === 'paused') {
             state.status = 'active';
-            // TODO: 发布 session:resume 事件
+
+            // 发布 session:resume 事件
+            this.publishSystemEvent(sessionId, 'SESSION_RESUME', {
+                message: '讨论已恢复',
+                round: state.currentRound
+            });
+
+            weLogger.info({ sessionId, round: state.currentRound }, 'session_resumed');
         }
     }
 
@@ -84,7 +122,39 @@ export class ModeratorController implements IModeratorController {
         if (state) {
             state.status = 'completed';
             state.endedAt = Date.now();
-            // TODO: 发布 session:end 事件
+
+            // 发布 session:end 事件
+            this.publishSystemEvent(sessionId, 'SESSION_END', {
+                message: reason || '讨论正常结束',
+                round: state.currentRound,
+                reason
+            });
+
+            weLogger.info({
+                sessionId,
+                reason,
+                rounds: state.currentRound,
+                duration: state.startedAt ? Date.now() - state.startedAt : 0
+            }, 'session_ended');
+        }
+    }
+
+    /**
+     * 异常中止会话
+     */
+    private abortSession(sessionId: string, reason: string): void {
+        const state = this.sessions.get(sessionId);
+        if (state) {
+            state.status = 'aborted';
+            state.endedAt = Date.now();
+
+            this.publishSystemEvent(sessionId, 'SESSION_ABORTED', {
+                message: reason,
+                round: state.currentRound,
+                reason
+            });
+
+            weLogger.warn({ sessionId, reason }, 'session_aborted');
         }
     }
 
@@ -116,7 +186,12 @@ export class ModeratorController implements IModeratorController {
         const state = this.sessions.get(sessionId);
         if (state) {
             state.currentSpeakerId = agentId;
-            // TODO: 发布 moderator:direct 事件
+
+            // 发布 moderator:direct 事件
+            this.publishSystemEvent(sessionId, 'MODERATOR_DIRECT', {
+                message: `主持人指定 ${agentId} 发言`,
+                targetAgentId: agentId
+            });
         }
     }
 
@@ -124,8 +199,13 @@ export class ModeratorController implements IModeratorController {
      * 检查是否应该结束
      */
     shouldEndSession(state: SessionState): boolean {
-        // TODO: 根据结束条件判断
-        return state.status === 'completed' || state.status === 'aborted';
+        // 已经处于结束状态
+        if (state.status === 'completed' || state.status === 'aborted') {
+            return true;
+        }
+
+        // 可扩展更多结束条件
+        return false;
     }
 
     /**
@@ -135,6 +215,14 @@ export class ModeratorController implements IModeratorController {
         const state = this.sessions.get(sessionId);
         if (state) {
             state.currentRound += 1;
+
+            // 发布 round:advance 事件
+            this.publishSystemEvent(sessionId, 'ROUND_ADVANCE', {
+                message: `进入第 ${state.currentRound} 轮`,
+                round: state.currentRound
+            });
+
+            weLogger.debug({ sessionId, round: state.currentRound }, 'round_advanced');
         }
     }
 
@@ -159,6 +247,24 @@ export class ModeratorController implements IModeratorController {
      */
     getSessionState(sessionId: string): SessionState | undefined {
         return this.sessions.get(sessionId);
+    }
+
+    /**
+     * 发布系统事件
+     */
+    private publishSystemEvent(
+        sessionId: string,
+        action: string,
+        details: Record<string, unknown>
+    ): void {
+        const event = eventLogService.appendEvent({
+            sessionId,
+            type: EventType.SYSTEM,
+            speaker: 'moderator',
+            content: { action, ...details }
+        });
+
+        eventBus.publish(event as any);
     }
 }
 

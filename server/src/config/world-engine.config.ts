@@ -229,5 +229,15 @@ export function validateConfig(): { valid: boolean; errors: string[] } {
         errors.push('WE_SESSION_TIMEOUT_MS must be at least 60000 (1 minute)');
     }
 
+    // P1: LLM 配置验证
+    if (worldEngineConfig.llm.enabled) {
+        if (!worldEngineConfig.llm.key) {
+            errors.push('WE_LLM_KEY required when WE_LLM_ENABLED=true');
+        }
+        if (!worldEngineConfig.llm.provider) {
+            errors.push('WE_LLM_PROVIDER recommended when WE_LLM_ENABLED=true');
+        }
+    }
+
     return { valid: errors.length === 0, errors };
 }

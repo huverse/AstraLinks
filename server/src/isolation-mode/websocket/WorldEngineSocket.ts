@@ -177,10 +177,20 @@ export function initWorldEngineSocket(io: Server): void {
         });
 
         // ========================================
-        // 自动运行模拟 (Society)
+        // 自动运行模拟 (Society) - P0 权限控制
         // ========================================
-        socket.on('start_auto_simulation', async (request: { sessionId: string; tickInterval?: number }, callback) => {
+        socket.on('start_auto_simulation', async (request: { sessionId: string; tickInterval?: number; force?: boolean }, callback) => {
             try {
+                // P0: 权限检查 - 需要 admin 或有效 token
+                const user = socket.data?.user;
+                const hasPermission = user?.isAdmin || socket.handshake.auth?.internalToken;
+
+                if (!hasPermission) {
+                    wsLogger.warn({ socketId: socket.id, sessionId: request.sessionId }, 'auto_simulation_permission_denied');
+                    callback({ success: false, error: 'Permission denied: admin or internal token required' });
+                    return;
+                }
+
                 const session = worldEngineSessionManager.getSession(request.sessionId);
                 if (!session) {
                     callback({ success: false, error: 'Session not found' });
@@ -192,9 +202,31 @@ export function initWorldEngineSocket(io: Server): void {
                     return;
                 }
 
-                const tickInterval = request.tickInterval || 500; // 默认 500ms
+                // P0: 最小 tick 间隔 (防止 DoS)
+                const MIN_TICK_INTERVAL = 1000;
+                let tickInterval = request.tickInterval || 1000;
 
-                callback({ success: true, message: 'Auto simulation started' });
+                if (tickInterval < MIN_TICK_INTERVAL && !request.force) {
+                    wsLogger.warn({
+                        requestedInterval: tickInterval,
+                        minInterval: MIN_TICK_INTERVAL
+                    }, 'tick_interval_adjusted');
+                    tickInterval = MIN_TICK_INTERVAL;
+                }
+
+                // 只有 admin + force=true 才能使用更快的间隔
+                if (tickInterval < MIN_TICK_INTERVAL && request.force && !user?.isAdmin) {
+                    callback({ success: false, error: 'Only admin can use fast tick interval with force=true' });
+                    return;
+                }
+
+                wsLogger.info({
+                    sessionId: request.sessionId,
+                    tickInterval,
+                    userId: user?.id
+                }, 'auto_simulation_started');
+
+                callback({ success: true, message: 'Auto simulation started', tickInterval });
 
                 // 自动运行
                 const runTick = async () => {
