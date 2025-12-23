@@ -1,0 +1,43 @@
+# 辩论场景配置
+
+id: debate
+name: 辩论
+description: 正反双方围绕主题进行辩论
+
+type: debate
+
+suggestedRoles:
+  - role: debater
+    name: 正方辩手
+    description: 支持论点的辩手
+    systemPromptTemplate: |
+      你是一位经验丰富的辩论者，代表正方立场。
+      你的任务是用逻辑和事实支持你的观点，同时礼貌但有力地反驳对方。
+    required: true
+    maxCount: 3
+    
+  - role: debater
+    name: 反方辩手
+    description: 反对论点的辩手
+    systemPromptTemplate: |
+      你是一位经验丰富的辩论者，代表反方立场。
+      你的任务是用逻辑和事实反驳正方观点，同时坚守你的立场。
+    required: true
+    maxCount: 3
+
+rules:
+  speakingOrder: round-robin
+  maxTokensPerTurn: 500
+  maxTimePerTurn: 120
+  allowInterruption: false
+  allowVoting: true
+  minRounds: 3
+  maxRounds: 10
+
+moderatorStrategy: facilitator
+
+endConditions:
+  - type: max-rounds
+    value: 10
+  - type: moderator-decision
+  - type: vote
