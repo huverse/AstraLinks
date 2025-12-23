@@ -1,0 +1,146 @@
+# 正式辩论场景配置
+# 
+# 目标：验证 opposing 阵营 + 多阶段流程 + 中度干预
+
+id: demo_debate
+name: 远程办公辩论
+description: 正反双方围绕"远程办公是否应该成为主流工作方式"展开辩论
+version: "1.0.0"
+author: System Demo
+
+# ============================================
+# 阵营结构
+# ============================================
+alignment:
+  type: opposing
+  factions:
+    - id: pro
+      name: 正方
+      description: 支持远程办公成为主流工作方式
+      color: "#4CAF50"
+      minMembers: 2
+      maxMembers: 3
+    - id: con
+      name: 反方
+      description: 反对远程办公成为主流工作方式
+      color: "#F44336"
+      minMembers: 2
+      maxMembers: 3
+  allowNeutral: false
+
+# ============================================
+# 讨论流程
+# ============================================
+flow:
+  phases:
+    - id: opening
+      type: opening
+      name: 开场
+      description: 主持人介绍议题，各方阐述立场
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      generateOpening: true
+      forceSummary: false
+    
+    - id: free_discussion
+      type: free_discussion
+      name: 自由辩论
+      description: 双方自由交锋，可相互质疑
+      maxRounds: 6
+      allowInterrupt: true
+      speakingOrder: free
+      endCondition: max_rounds
+      maxTokensPerSpeech: 300
+      forceSummary: true
+    
+    - id: focused_conflict
+      type: focused_conflict
+      name: 焦点交锋
+      description: 针对核心分歧进行正面对抗
+      maxRounds: 4
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: moderator_decision
+      maxTokensPerSpeech: 400
+      forceSummary: true
+    
+    - id: closing
+      type: closing
+      name: 总结陈词
+      description: 双方总结观点，主持人做最终点评
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      factionOrder: [con, pro]
+      endCondition: max_rounds
+      forceSummary: true
+  
+  allowSkipPhase: false
+  allowRollback: false
+  globalTimeout: 1800
+
+# ============================================
+# 主持人策略
+# ============================================
+moderatorPolicy:
+  interventionLevel: 2  # 中度干预
+  coldThreshold: 20
+  maxIdleRounds: 2
+  forceSummaryEachPhase: true
+  summaryMaxTokens: 300
+  biasAllowed: false
+  balanceCheck:
+    enabled: true
+    maxSpeakRatio: 0.5
+  contentFilter: false
+  offTopicDetection: true
+
+# ============================================
+# Agent 预设
+# ============================================
+suggestedRoles:
+  - id: pro_lead
+    name: 李明
+    description: 正方一辩，IT公司远程团队负责人
+    factionId: pro
+    systemPromptTemplate: |
+      你是李明，正方一辩，在一家科技公司担任远程团队负责人。
+      你有5年远程团队管理经验，坚信远程办公能提高效率。
+      说话风格：数据驱动，逻辑清晰，善用案例。
+    required: true
+    maxCount: 1
+  
+  - id: pro_support
+    name: 王芳
+    description: 正方二辩，HR专家
+    factionId: pro
+    systemPromptTemplate: |
+      你是王芳，正方二辩，是一位资深HR专家。
+      你关注员工满意度和人才吸引，认为灵活工作是大势所趋。
+      说话风格：人文关怀，善于从员工角度思考。
+    required: true
+    maxCount: 1
+  
+  - id: con_lead
+    name: 张强
+    description: 反方一辩，传统企业管理者
+    factionId: con
+    systemPromptTemplate: |
+      你是张强，反方一辩，在制造业担任高管多年。
+      你认为面对面沟通和现场管理不可替代。
+      说话风格：务实，强调执行力和团队凝聚力。
+    required: true
+    maxCount: 1
+  
+  - id: con_support
+    name: 陈华
+    description: 反方二辩，组织行为学专家
+    factionId: con
+    systemPromptTemplate: |
+      你是陈华，反方二辩，是组织行为学教授。
+      你从学术角度分析远程办公对组织文化和协作的负面影响。
+      说话风格：学术严谨，善用研究数据和理论框架。
+    required: true
+    maxCount: 1

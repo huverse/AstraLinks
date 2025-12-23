@@ -1,0 +1,130 @@
+# 项目讨论会场景配置
+# 
+# 目标：验证 free 模式 + 共识收敛 + 决策产出
+
+id: demo_project_review
+name: 新功能技术方案讨论
+description: 围绕"用户认证系统升级方案"进行多角度讨论，达成决策共识
+version: "1.0.0"
+author: System Demo
+
+# ============================================
+# 阵营结构
+# ============================================
+alignment:
+  type: free
+  allowNeutral: true
+  # free 模式无需定义 factions
+
+# ============================================
+# 讨论流程
+# ============================================
+flow:
+  phases:
+    - id: problem_definition
+      type: opening
+      name: 问题定义
+      description: 明确当前认证系统的问题和升级目标
+      maxRounds: 3
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      generateOpening: true
+      forceSummary: true
+    
+    - id: option_discussion
+      type: free_discussion
+      name: 方案讨论
+      description: 各方提出并讨论可能的技术方案
+      maxRounds: 8
+      allowInterrupt: true
+      speakingOrder: free
+      endCondition: moderator_decision
+      maxTokensPerSpeech: 400
+      forceSummary: true
+    
+    - id: convergence
+      type: convergence
+      name: 共识收敛
+      description: 整合各方意见，收敛到1-2个可行方案
+      maxRounds: 4
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: consensus
+      maxTokensPerSpeech: 300
+      timeout: 600
+      forceSummary: true
+    
+    - id: decision
+      type: closing
+      name: 决策确认
+      description: 确认最终方案，明确下一步行动
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      forceSummary: true
+  
+  allowSkipPhase: true
+  allowRollback: true
+  globalTimeout: 3600
+
+# ============================================
+# 主持人策略
+# ============================================
+moderatorPolicy:
+  interventionLevel: 3  # 高度干预，主导节奏
+  coldThreshold: 15
+  maxIdleRounds: 1
+  forceSummaryEachPhase: true
+  summaryMaxTokens: 400
+  biasAllowed: false
+  balanceCheck:
+    enabled: true
+    maxSpeakRatio: 0.4
+  contentFilter: false
+  offTopicDetection: true
+
+# ============================================
+# Agent 预设
+# ============================================
+suggestedRoles:
+  - id: pm
+    name: 项目经理小刘
+    description: 负责项目进度和资源协调
+    systemPromptTemplate: |
+      你是项目经理小刘，负责这次系统升级的整体协调。
+      你关注项目时间线、资源分配和风险控制。
+      说话风格：务实，关注可执行性和时间节点。
+    required: true
+    maxCount: 1
+  
+  - id: tech_lead
+    name: 技术负责人老王
+    description: 后端架构师，技术决策者
+    systemPromptTemplate: |
+      你是技术负责人老王，有10年后端开发经验。
+      你关注技术可行性、系统性能和代码质量。
+      说话风格：技术导向，善于分析利弊。
+    required: true
+    maxCount: 1
+  
+  - id: security
+    name: 安全专家小张
+    description: 信息安全工程师
+    systemPromptTemplate: |
+      你是安全专家小张，专注于系统安全和合规。
+      你关注认证方案的安全性、合规性和潜在风险。
+      说话风格：谨慎，强调安全第一。
+    required: true
+    maxCount: 1
+  
+  - id: product
+    name: 产品经理小李
+    description: 负责用户体验和产品规划
+    systemPromptTemplate: |
+      你是产品经理小李，负责用户体验设计。
+      你关注用户登录体验、转化率和用户反馈。
+      说话风格：用户导向，善于从用户角度思考。
+    required: false
+    maxCount: 1
