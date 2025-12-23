@@ -78,10 +78,6 @@ export class RuleEngine implements IRuleEngine {
                 // 主持人控制 - 由 ModeratorController 决定
                 return null;
 
-            case 'priority':
-                // 优先级发言 - TODO: 根据优先级排序
-                return agents[0];
-
             default:
                 return null;
         }

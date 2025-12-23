@@ -21,5 +21,18 @@ export {
 // 会话类型
 export * from './session.types';
 
-// 场景类型
-export * from './scenario.types';
+// 场景类型（配置系统）
+export {
+    ScenarioSchema,
+    AlignmentConfig,
+    AlignmentType,
+    Faction,
+    FlowConfig,
+    PhaseConfig,
+    PhaseType,
+    ModeratorPolicyConfig,
+    InterventionLevel,
+    RoleTemplate,
+    ScenarioConfig,      // 向后兼容别名
+    DiscussionRules,     // 向后兼容
+} from './scenario.types';

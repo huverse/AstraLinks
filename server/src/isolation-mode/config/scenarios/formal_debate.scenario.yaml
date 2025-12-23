@@ -1,0 +1,211 @@
+# 正式辩论场景配置
+# 
+# 特点：
+# - opposing（正反方）阵营
+# - 明确的立论 → 对抗 → 总结流程
+# - 主持人中度介入
+
+id: formal_debate
+name: 正式辩论
+description: 围绕特定议题进行正反方辩论，通过逻辑论证和证据分析达成结论
+version: "1.0.0"
+author: Galaxyous
+tags: [debate, formal, opposing]
+
+# ============================================
+# 1️⃣ 阵营结构
+# ============================================
+alignment:
+  type: opposing
+  factions:
+    - id: pro
+      name: 正方
+      description: 支持论题的一方
+      color: "#4CAF50"
+      minMembers: 1
+      maxMembers: 3
+    - id: con
+      name: 反方
+      description: 反对论题的一方
+      color: "#F44336"
+      minMembers: 1
+      maxMembers: 3
+  allowNeutral: false
+
+# ============================================
+# 2️⃣ 讨论流程
+# ============================================
+flow:
+  phases:
+    # === 阶段1：开场 ===
+    - id: opening
+      type: opening
+      name: 开场宣言
+      description: 主持人介绍辩题，各方简要表明立场
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      generateOpening: true
+      forceSummary: false
+    
+    # === 阶段2：立论 ===
+    - id: position_statement
+      type: position_statement
+      name: 立论陈述
+      description: 正反双方依次阐述核心论点和论据
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      factionOrder: [pro, con]
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      maxTimePerSpeech: 180
+      forceSummary: true
+    
+    # === 阶段3：自由辩论 ===
+    - id: free_discussion
+      type: free_discussion
+      name: 自由辩论
+      description: 双方自由交锋，可相互质疑和反驳
+      maxRounds: 8
+      allowInterrupt: true
+      speakingOrder: free
+      endCondition: max_rounds
+      maxTokensPerSpeech: 300
+      forceSummary: true
+    
+    # === 阶段4：焦点对抗 ===
+    - id: focused_conflict
+      type: focused_conflict
+      name: 焦点交锋
+      description: 针对核心分歧点进行深入对抗
+      maxRounds: 4
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: moderator_decision
+      maxTokensPerSpeech: 400
+      forceSummary: true
+    
+    # === 阶段5：总结陈词 ===
+    - id: closing_statement
+      type: summary
+      name: 总结陈词
+      description: 双方总结己方观点，做最后陈述
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      factionOrder: [con, pro]  # 反方先，正方后
+      endCondition: max_rounds
+      maxTokensPerSpeech: 400
+      forceSummary: false
+    
+    # === 阶段6：闭幕 ===
+    - id: closing
+      type: closing
+      name: 闭幕
+      description: 主持人总结辩论要点，宣布结束
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      generateOpening: false
+      forceSummary: true
+  
+  allowSkipPhase: false
+  allowRollback: false
+  globalTimeout: 3600
+
+# ============================================
+# 3️⃣ 主持人策略
+# ============================================
+moderatorPolicy:
+  # 干预级别：中度（引导讨论方向）
+  interventionLevel: 2
+  
+  # 冷场处理
+  coldThreshold: 30  # 30秒无发言视为冷场
+  maxIdleRounds: 2   # 连续2轮无活动则干预
+  
+  # 总结策略
+  forceSummaryEachPhase: true
+  summaryMaxTokens: 300
+  
+  # 公平性
+  biasAllowed: false  # 主持人必须保持中立
+  balanceCheck:
+    enabled: true
+    maxSpeakRatio: 0.6  # 单人发言不超过60%
+  
+  # 内容控制
+  contentFilter: true
+  offTopicDetection: true
+
+# ============================================
+# 建议角色
+# ============================================
+suggestedRoles:
+  - id: pro_main
+    name: 正方主辩
+    description: 正方核心辩手，负责主要论证
+    factionId: pro
+    systemPromptTemplate: |
+      你是正方主辩手。你的任务是：
+      1. 清晰阐述正方立场和核心论点
+      2. 使用逻辑、数据和事实支持论点
+      3. 有力地反驳对方质疑
+      4. 保持专业、理性的辩论态度
+      
+      当前辩题：{{topic}}
+      你的立场：支持
+    required: true
+    maxCount: 1
+  
+  - id: con_main
+    name: 反方主辩
+    description: 反方核心辩手，负责主要论证
+    factionId: con
+    systemPromptTemplate: |
+      你是反方主辩手。你的任务是：
+      1. 清晰阐述反方立场和核心论点
+      2. 使用逻辑、数据和事实支持论点
+      3. 有力地反驳对方质疑
+      4. 保持专业、理性的辩论态度
+      
+      当前辩题：{{topic}}
+      你的立场：反对
+    required: true
+    maxCount: 1
+  
+  - id: pro_support
+    name: 正方副辩
+    description: 正方辅助辩手，补充论证
+    factionId: pro
+    systemPromptTemplate: |
+      你是正方副辩手。你的任务是：
+      1. 补充正方主辩的论点
+      2. 寻找对方论证的漏洞
+      3. 提供更多事实和数据支持
+    required: false
+    maxCount: 2
+  
+  - id: con_support
+    name: 反方副辩
+    description: 反方辅助辩手，补充论证
+    factionId: con
+    systemPromptTemplate: |
+      你是反方副辩手。你的任务是：
+      1. 补充反方主辩的论点
+      2. 寻找对方论证的漏洞
+      3. 提供更多事实和数据支持
+    required: false
+    maxCount: 2
+
+# ============================================
+# 适用场景
+# ============================================
+useCases:
+  - 政策辩论（是否应该…）
+  - 价值辩论（X和Y哪个更重要）
+  - 技术决策辩论（选择方案A还是方案B）
+  - 学术观点争论

@@ -1,0 +1,215 @@
+# 项目讨论会场景配置
+# 
+# 特点：
+# - free（无阵营）模式
+# - 目标是收敛共识
+# - 强制总结 + 决策输出
+
+id: project_meeting
+name: 项目讨论会
+description: 围绕项目方案进行多角度讨论，通过充分交流达成共识和决策
+version: "1.0.0"
+author: Galaxyous
+tags: [meeting, project, consensus, decision]
+
+# ============================================
+# 1️⃣ 阵营结构
+# ============================================
+alignment:
+  type: free
+  allowNeutral: true
+  # free 模式无需定义 factions
+
+# ============================================
+# 2️⃣ 讨论流程
+# ============================================
+flow:
+  phases:
+    # === 阶段1：开场 ===
+    - id: opening
+      type: opening
+      name: 会议开始
+      description: 主持人介绍讨论议题和目标
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      generateOpening: true
+      forceSummary: false
+    
+    # === 阶段2：方案介绍 ===
+    - id: presentation
+      type: position_statement
+      name: 方案介绍
+      description: 相关参与者介绍各自的方案或观点
+      maxRounds: 4
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      maxTokensPerSpeech: 600
+      maxTimePerSpeech: 300
+      forceSummary: true
+    
+    # === 阶段3：开放讨论 ===
+    - id: open_discussion
+      type: free_discussion
+      name: 开放讨论
+      description: 自由发言，提出问题、建议和想法
+      maxRounds: 10
+      allowInterrupt: true
+      speakingOrder: free
+      endCondition: moderator_decision
+      maxTokensPerSpeech: 300
+      forceSummary: true
+    
+    # === 阶段4：问题聚焦 ===
+    - id: issue_focus
+      type: focused_conflict
+      name: 问题聚焦
+      description: 针对核心分歧或疑问进行深入讨论
+      maxRounds: 6
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: moderator_decision
+      maxTokensPerSpeech: 400
+      forceSummary: true
+    
+    # === 阶段5：共识收敛 ===
+    - id: convergence
+      type: convergence
+      name: 共识收敛
+      description: 整合各方观点，寻找共识点
+      maxRounds: 4
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: consensus
+      maxTokensPerSpeech: 300
+      timeout: 600
+      forceSummary: true
+    
+    # === 阶段6：决策表决 ===
+    - id: voting
+      type: voting
+      name: 决策表决
+      description: 对主要议题进行表决
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      forceSummary: false
+    
+    # === 阶段7：会议总结 ===
+    - id: closing
+      type: closing
+      name: 会议总结
+      description: 主持人总结会议成果，明确后续行动项
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      forceSummary: true
+  
+  allowSkipPhase: true  # 可以跳过某些阶段
+  allowRollback: true   # 可以回退
+  globalTimeout: 5400   # 90分钟
+
+# ============================================
+# 3️⃣ 主持人策略
+# ============================================
+moderatorPolicy:
+  # 干预级别：高度（主导讨论节奏）
+  interventionLevel: 3
+  
+  # 冷场处理
+  coldThreshold: 20  # 20秒无发言视为冷场
+  maxIdleRounds: 1   # 1轮无活动即干预
+  
+  # 总结策略
+  forceSummaryEachPhase: true
+  summaryMaxTokens: 400
+  
+  # 公平性
+  biasAllowed: false  # 主持人保持中立
+  balanceCheck:
+    enabled: true
+    maxSpeakRatio: 0.4  # 单人发言不超过40%
+  
+  # 内容控制
+  contentFilter: false
+  offTopicDetection: true
+
+# ============================================
+# 建议角色
+# ============================================
+suggestedRoles:
+  - id: project_lead
+    name: 项目负责人
+    description: 负责整体项目规划和协调
+    systemPromptTemplate: |
+      你是项目负责人。你的任务是：
+      1. 介绍项目背景和当前状态
+      2. 明确讨论目标和关键决策点
+      3. 协调各方意见
+      4. 推动讨论向决策收敛
+      
+      当前议题：{{topic}}
+    required: true
+    maxCount: 1
+  
+  - id: tech_lead
+    name: 技术负责人
+    description: 从技术角度评估方案
+    systemPromptTemplate: |
+      你是技术负责人。你的任务是：
+      1. 评估方案的技术可行性
+      2. 指出技术风险和挑战
+      3. 提供技术建议和替代方案
+      4. 估算技术实现成本
+    required: true
+    maxCount: 1
+  
+  - id: product_owner
+    name: 产品负责人
+    description: 从产品和用户角度评估
+    systemPromptTemplate: |
+      你是产品负责人。你的任务是：
+      1. 关注用户需求和体验
+      2. 评估方案对产品价值的影响
+      3. 提出产品层面的建议
+      4. 平衡功能和资源
+    required: false
+    maxCount: 1
+  
+  - id: qa_lead
+    name: 质量负责人
+    description: 关注质量和风险控制
+    systemPromptTemplate: |
+      你是质量负责人。你的任务是：
+      1. 识别潜在的质量风险
+      2. 评估测试复杂度
+      3. 提出质量保障建议
+      4. 关注长期维护性
+    required: false
+    maxCount: 1
+  
+  - id: stakeholder
+    name: 利益相关方
+    description: 代表业务或客户视角
+    systemPromptTemplate: |
+      你是业务利益相关方。你的任务是：
+      1. 从业务角度评估方案
+      2. 关注成本和收益
+      3. 提出业务需求和约束
+      4. 评估对业务的影响
+    required: false
+    maxCount: 3
+
+# ============================================
+# 适用场景
+# ============================================
+useCases:
+  - 产品需求评审
+  - 技术方案讨论
+  - 项目启动会议
+  - Sprint 计划会议
+  - 问题排查和解决方案讨论

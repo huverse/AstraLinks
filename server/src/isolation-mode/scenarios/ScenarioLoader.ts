@@ -79,11 +79,14 @@ export class ScenarioLoader {
         if (!config.name) {
             throw new Error('Scenario must have a name');
         }
-        if (!config.type) {
-            throw new Error('Scenario must have a type');
+        if (!config.alignment) {
+            throw new Error('Scenario must have alignment');
         }
-        if (!config.rules) {
-            throw new Error('Scenario must have rules');
+        if (!config.flow) {
+            throw new Error('Scenario must have flow');
+        }
+        if (!config.moderatorPolicy) {
+            throw new Error('Scenario must have moderatorPolicy');
         }
     }
 
