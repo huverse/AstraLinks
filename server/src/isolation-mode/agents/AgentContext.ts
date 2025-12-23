@@ -114,6 +114,50 @@ export class AgentContext {
     }
 
     /**
+     * 构建 LLM 消息格式
+     * 用于 Agent 调用 LLM 时传递上下文
+     */
+    buildMessages(): { role: 'system' | 'user' | 'assistant'; content: string }[] {
+        const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+
+        // 历史记忆作为 system 上下文
+        if (this.memory.length > 0) {
+            messages.push({
+                role: 'system',
+                content: `历史背景:\n${this.memory.join('\n')}`
+            });
+        }
+
+        // 事件转换为对话历史
+        this.events.forEach(e => {
+            if (e.type === EventType.SPEECH) {
+                const content = typeof e.content === 'string'
+                    ? e.content
+                    : (e.content as any)?.message || JSON.stringify(e.content);
+
+                // 自己的发言是 assistant，其他人是 user
+                const role = e.speaker === this.agentId ? 'assistant' : 'user';
+                const speakerLabel = e.speaker === this.agentId ? '' : `[${e.speaker}] `;
+
+                messages.push({
+                    role,
+                    content: `${speakerLabel}${content}`
+                });
+            } else if (e.type === EventType.SYSTEM) {
+                const content = typeof e.content === 'string'
+                    ? e.content
+                    : (e.content as any)?.message || JSON.stringify(e.content);
+                messages.push({
+                    role: 'user',
+                    content: `[系统提示] ${content}`
+                });
+            }
+        });
+
+        return messages;
+    }
+
+    /**
      * 获取摘要
      */
     getSummary(): string {

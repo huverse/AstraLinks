@@ -41,6 +41,8 @@ import { initWorkflowQueue, setSocketIO } from './services/workflowQueue';
 import { initScheduler } from './services/scheduler';
 import { initWorldEngineSocket } from './isolation-mode/websocket';
 import { sessionRoutes as isolationSessionRoutes, agentRoutes as isolationAgentRoutes, eventRoutes as isolationEventRoutes } from './isolation-mode/api/routes';
+import { validateConfig, isProductionLike } from './config/world-engine.config';
+import { appLogger, logStartup } from './services/world-engine-logger';
 
 dotenv.config();
 
@@ -50,7 +52,7 @@ const PORT = process.env.PORT || 3001;
 
 // Middleware
 app.use(cors({
-    origin: process.env.NODE_ENV === 'production'
+    origin: isProductionLike
         ? ['https://astralinks.xyz', 'https://www.astralinks.xyz']
         : ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:5175', 'http://localhost:3000', 'http://127.0.0.1:5173', 'http://127.0.0.1:5174', 'http://127.0.0.1:5175'],
     credentials: true
@@ -101,9 +103,21 @@ app.get('/api/health', (req, res) => {
 // Initialize database and start server
 async function startServer() {
     try {
+        // P1: 配置校验 (生产环境必须通过)
+        const validation = validateConfig();
+        if (!validation.valid) {
+            appLogger.error({ errors: validation.errors }, 'config_validation_failed');
+            if (isProductionLike) {
+                process.exit(1);
+            }
+        }
+
+        // P1: 启动日志
+        logStartup();
+
         await initDatabase();
         await initTimezone();
-        console.log('✅ Database initialized');
+        appLogger.info('database_initialized');
 
         // Initialize WebSocket
         const io = initWebSocket(httpServer);
@@ -116,34 +130,34 @@ async function startServer() {
 
         // Schedule daily sync at 3:00 AM
         cron.schedule('0 3 * * *', async () => {
-            console.log('🔄 Starting scheduled database sync...');
+            appLogger.info('starting_scheduled_database_sync');
             try {
                 await runSync();
-                console.log('✅ Scheduled sync completed');
+                appLogger.info('scheduled_sync_completed');
             } catch (error) {
-                console.error('❌ Scheduled sync failed:', error);
+                appLogger.error({ error: (error as Error).message }, 'scheduled_sync_failed');
             }
         });
 
         httpServer.listen(PORT, async () => {
-            console.log(`🚀 Server running on http://localhost:${PORT}`);
-            console.log(`🔌 WebSocket server ready`);
-            console.log(`📅 Daily sync scheduled at 3:00 AM`);
+            appLogger.info({ port: PORT }, 'server_running');
+            appLogger.info('websocket_server_ready');
+            appLogger.info('daily_sync_scheduled');
 
             // Initialize workflow queue (Redis)
             const queueReady = await initWorkflowQueue();
             if (queueReady) {
-                console.log('✅ Workflow queue ready (Redis)');
+                appLogger.info('workflow_queue_ready');
 
                 // Initialize scheduler for cron-based triggers
                 await initScheduler();
-                console.log('⏰ Workflow scheduler initialized');
+                appLogger.info('workflow_scheduler_initialized');
             } else {
-                console.log('⚠️ Workflow queue disabled (Redis unavailable, using direct execution)');
+                appLogger.warn('workflow_queue_disabled_redis_unavailable');
             }
         });
     } catch (error) {
-        console.error('❌ Failed to start server:', error);
+        appLogger.error({ error: (error as Error).message }, 'failed_to_start_server');
         process.exit(1);
     }
 }

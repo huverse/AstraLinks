@@ -56,6 +56,12 @@ export const apiLogger = weLogger.child({ module: 'api' });
 /** WebSocket 日志 */
 export const wsLogger = weLogger.child({ module: 'websocket' });
 
+/** 应用通用日志 (启动/关闭) */
+export const appLogger = weLogger.child({ module: 'app' });
+
+/** 隔离模式日志 */
+export const isolationLogger = weLogger.child({ module: 'isolation' });
+
 // ============================================
 // 日志辅助函数
 // ============================================

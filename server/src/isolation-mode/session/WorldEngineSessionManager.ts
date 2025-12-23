@@ -29,6 +29,7 @@ import {
     createDefaultSociety,
     SocialRole
 } from '../world-engine/society';
+import { sessionLogger } from '../../services/world-engine-logger';
 
 // ============================================
 // Session Types
@@ -125,7 +126,7 @@ class WorldEngineSessionManager {
         };
 
         this.sessions.set(sessionId, session);
-        console.log(`✅ WorldEngine Session created: ${sessionId} (${config.worldType})`);
+        sessionLogger.info({ sessionId, worldType: config.worldType }, 'world_engine_session_created');
         return session;
     }
 
@@ -219,7 +220,7 @@ class WorldEngineSessionManager {
     deleteSession(sessionId: string): boolean {
         const result = this.sessions.delete(sessionId);
         if (result) {
-            console.log(`🗑️ WorldEngine Session deleted: ${sessionId}`);
+            sessionLogger.info({ sessionId }, 'world_engine_session_deleted');
         }
         return result;
     }
@@ -244,7 +245,7 @@ class WorldEngineSessionManager {
         const now = Date.now();
         for (const [id, session] of this.sessions) {
             if (now - session.lastActivityAt > SESSION_TIMEOUT_MS) {
-                console.log(`🧹 Cleaning up timed out session: ${id}`);
+                sessionLogger.info({ sessionId: id }, 'cleaning_up_timed_out_session');
                 this.sessions.delete(id);
             }
         }

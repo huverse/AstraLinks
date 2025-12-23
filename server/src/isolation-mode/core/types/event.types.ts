@@ -136,6 +136,15 @@ export interface EventContentPayload {
     // SYSTEM 类型
     action?: string;
     details?: Record<string, unknown>;
+
+    // SPEECH 类型
+    message?: string;
+    agentId?: string;
+    agentName?: string;
+    tokens?: number;
+
+    // ROUND 类型
+    round?: number;
 }
 
 /**

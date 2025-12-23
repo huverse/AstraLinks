@@ -37,7 +37,9 @@ export class EventBus implements IEventBus {
                 try {
                     handler(event);
                 } catch (err) {
-                    console.error('[EventBus] Handler error:', err);
+                    // 使用结构化日志 (避免循环依赖，使用 require)
+                    const { isolationLogger } = require('../../services/world-engine-logger');
+                    isolationLogger.error({ error: (err as Error).message, sessionId: event.sessionId }, 'event_bus_handler_error');
                 }
             });
         }

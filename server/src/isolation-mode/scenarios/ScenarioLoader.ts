@@ -31,12 +31,15 @@ export class ScenarioLoader {
         // 尝试从文件加载
         const filePath = path.join(this.scenariosDir, `${scenarioId}.scenario.yaml`);
 
-        console.log(`[ScenarioLoader] Looking for scenario at: ${filePath}`);
-        console.log(`[ScenarioLoader] __dirname: ${__dirname}`);
-        console.log(`[ScenarioLoader] scenariosDir: ${this.scenariosDir}`);
+        // 调试日志 (仅在开发环境输出)
+        import('../../services/world-engine-logger').then(({ isolationLogger }) => {
+            isolationLogger.debug({ scenarioId, filePath, dirname: __dirname, scenariosDir: this.scenariosDir }, 'scenario_loader_paths');
+        });
 
         if (!fs.existsSync(filePath)) {
-            console.error(`[ScenarioLoader] Scenario file not found: ${filePath}`);
+            import('../../services/world-engine-logger').then(({ isolationLogger }) => {
+                isolationLogger.error({ scenarioId, filePath }, 'scenario_file_not_found');
+            });
             throw new ScenarioError(`Scenario not found: ${scenarioId}`, scenarioId);
         }
 

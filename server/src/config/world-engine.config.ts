@@ -64,6 +64,10 @@ export interface LLMConfig {
     enabled: boolean;
     provider?: string;
     model?: string;
+    key?: string;
+    baseUrl?: string;
+    timeout?: number;
+    maxTokensPerMinute?: number;
 }
 
 export interface WorldEngineConfig {
@@ -173,7 +177,11 @@ function loadConfig(): WorldEngineConfig {
         llm: {
             enabled: getEnvBool('WE_LLM_ENABLED', false),
             provider: process.env.WE_LLM_PROVIDER,
-            model: process.env.WE_LLM_MODEL
+            model: process.env.WE_LLM_MODEL,
+            key: process.env.WE_LLM_KEY,
+            baseUrl: process.env.WE_LLM_BASE_URL,
+            timeout: getEnvInt('WE_LLM_TIMEOUT', 30000),
+            maxTokensPerMinute: getEnvInt('WE_LLM_MAX_TOKENS_PER_MINUTE', 10000)
         }
     };
 }

@@ -48,7 +48,11 @@ export class SessionManager {
 
             // 订阅事件
             eventBus.subscribeToSession(id, (event) => {
-                agent.receiveEvent(event).catch(console.error);
+                agent.receiveEvent(event).catch((err) => {
+                    import('../../services/world-engine-logger').then(({ isolationLogger }) => {
+                        isolationLogger.error({ error: (err as Error).message, sessionId: id }, 'agent_receive_event_error');
+                    });
+                });
             });
         }
 

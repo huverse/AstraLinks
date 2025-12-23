@@ -45,8 +45,13 @@ export class ModeratorController implements IModeratorController {
         state.startedAt = Date.now();
         state.currentRound = 1;
 
-        // TODO: 发布 session:start 事件
-        // TODO: 选择第一个发言者
+        // 异步启动讨论循环 (不阻塞)
+        // DiscussionLoop 会处理发言者选择和事件发布
+        import('../orchestrator/DiscussionLoop').then(({ discussionLoop }) => {
+            discussionLoop.start(sessionId).catch((err) => {
+                console.error(`[ModeratorController] DiscussionLoop error:`, err);
+            });
+        });
     }
 
     /**

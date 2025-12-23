@@ -257,7 +257,14 @@ export class EventLogService {
 
         this.store.set(sessionId, remaining);
 
-        console.log(`[EventLogService] Auto-pruned session ${sessionId}: ${events.length} -> ${remaining.length}`);
+        // 使用结构化日志
+        import('../../services/world-engine-logger').then(({ isolationLogger }) => {
+            isolationLogger.info({
+                sessionId,
+                before: events.length,
+                after: remaining.length
+            }, 'event_log_auto_pruned');
+        });
     }
 
     /**

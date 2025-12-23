@@ -2,12 +2,15 @@
  * Agent 执行器
  * 
  * 实现 IAgent 接口，执行 Agent 逻辑
+ * 集成 LLM Adapter 进行真正的 AI 调用
  */
 
 import { v4 as uuidv4 } from 'uuid';
 import { AgentConfig, AgentState, AgentMessage, Event, EventType } from '../core/types';
 import { IAgent } from '../core/interfaces';
 import { AgentContext } from './AgentContext';
+import { ILlmAdapter, LlmMessage, LlmError, getDefaultLlmAdapter } from '../llm';
+import { worldEngineConfig } from '../../config/world-engine.config';
 
 /**
  * Agent 执行器实现
@@ -17,8 +20,9 @@ export class AgentExecutor implements IAgent {
     private _state: AgentState;
     private context: AgentContext;
     private sessionId: string | null = null;
+    private llmAdapter: ILlmAdapter;
 
-    constructor(config: AgentConfig) {
+    constructor(config: AgentConfig, llmAdapter?: ILlmAdapter) {
         this.config = config;
         this._state = {
             agentId: config.id,
@@ -28,6 +32,7 @@ export class AgentExecutor implements IAgent {
             lastActiveAt: Date.now(),
         };
         this.context = new AgentContext(config.id);
+        this.llmAdapter = llmAdapter || getDefaultLlmAdapter();
     }
 
     get state(): AgentState {
@@ -41,8 +46,6 @@ export class AgentExecutor implements IAgent {
         this.sessionId = sessionId;
         this._state.status = 'idle';
         this.context.initialize(this.config.systemPrompt);
-
-        // TODO: 调用 LLM Provider 进行初始化 (如需要)
     }
 
     /**
@@ -77,29 +80,106 @@ export class AgentExecutor implements IAgent {
 
     /**
      * 生成发言
+     * 
+     * 调用 LLM Adapter 生成真正的 AI 回复
      */
     async generateResponse(prompt?: string): Promise<AgentMessage> {
         this._state.status = 'thinking';
         this._state.lastActiveAt = Date.now();
 
-        // TODO: 调用 LLM Provider 生成回复
-        // 1. 构建上下文消息
-        // 2. 调用 LLM
-        // 3. 解析响应
+        try {
+            // 1. 检查 LLM 是否启用
+            if (!worldEngineConfig.llm.enabled) {
+                throw new LlmError(
+                    'LLM is disabled. Set WE_LLM_ENABLED=true in environment.',
+                    'DISABLED'
+                );
+            }
 
-        // 占位实现
-        const message: AgentMessage = {
-            id: uuidv4(),
-            agentId: this.config.id,
-            content: '// TODO: 实现 LLM 调用',
-            timestamp: Date.now(),
-            tokens: 0,
-        };
+            // 2. 构建消息历史
+            const messages = this.buildLlmMessages(prompt);
 
-        this._state.speakCount += 1;
-        this._state.status = 'idle';
+            // 3. 调用 LLM
+            const result = await this.llmAdapter.generate(messages, {
+                maxTokens: 1024,
+                temperature: 0.7,
+                timeout: worldEngineConfig.llm.timeout || 30000
+            });
 
-        return message;
+            // 4. 更新 token 统计
+            this._state.totalTokens += result.tokens.total;
+            this._state.speakCount += 1;
+            this._state.status = 'idle';
+
+            // 5. 返回消息
+            return {
+                id: uuidv4(),
+                agentId: this.config.id,
+                content: result.text,
+                timestamp: Date.now(),
+                tokens: result.tokens.total,
+            };
+
+        } catch (error: any) {
+            this._state.status = 'idle';
+
+            // LLM 禁用时返回明确错误消息
+            if (error instanceof LlmError && error.code === 'DISABLED') {
+                return {
+                    id: uuidv4(),
+                    agentId: this.config.id,
+                    content: `[LLM Disabled] ${this.config.name} 无法发言: AI 功能未启用`,
+                    timestamp: Date.now(),
+                    tokens: 0,
+                };
+            }
+
+            // 其他错误
+            return {
+                id: uuidv4(),
+                agentId: this.config.id,
+                content: `[Error] ${this.config.name} 发言失败: ${error.message}`,
+                timestamp: Date.now(),
+                tokens: 0,
+            };
+        }
+    }
+
+    /**
+     * 构建 LLM 消息历史
+     */
+    private buildLlmMessages(additionalPrompt?: string): LlmMessage[] {
+        const messages: LlmMessage[] = [];
+
+        // System prompt
+        if (this.config.systemPrompt) {
+            messages.push({
+                role: 'system',
+                content: this.config.systemPrompt
+            });
+        }
+
+        // 上下文历史
+        const contextMessages = this.context.buildMessages();
+        messages.push(...contextMessages);
+
+        // 额外 prompt
+        if (additionalPrompt) {
+            messages.push({
+                role: 'user',
+                content: additionalPrompt
+            });
+        }
+
+        // 如果没有用户消息，添加触发语
+        if (!messages.some(m => m.role === 'user')) {
+            messages.push({
+                role: 'user',
+                content: '请根据当前讨论发表你的观点。'
+            });
+        }
+
+        return messages;
     }
 
     /**

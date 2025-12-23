@@ -15,6 +15,7 @@ import {
     WorldEngineType
 } from '../session/WorldEngineSessionManager';
 import { Action } from '../world-engine/interfaces';
+import { wsLogger } from '../../services/world-engine-logger';
 
 // ============================================
 // WebSocket 事件类型
@@ -46,7 +47,7 @@ export function initWorldEngineSocket(io: Server): void {
     const worldEngine = io.of('/world-engine');
 
     worldEngine.on('connection', (socket: Socket) => {
-        console.log(`🌍 World Engine client connected: ${socket.id}`);
+        wsLogger.info({ socketId: socket.id }, 'world_engine_client_connected');
 
         // 当前加入的 session
         let currentSessionId: string | null = null;
@@ -77,7 +78,7 @@ export function initWorldEngineSocket(io: Server): void {
                     worldState
                 });
 
-                console.log(`✅ Session created via WebSocket: ${session.id}`);
+                wsLogger.info({ sessionId: session.id, worldType: session.worldType }, 'session_created_via_websocket');
             } catch (error: any) {
                 callback({
                     success: false,
@@ -111,7 +112,7 @@ export function initWorldEngineSocket(io: Server): void {
                     worldState
                 });
 
-                console.log(`👤 Client joined session: ${request.sessionId}`);
+                wsLogger.info({ sessionId: request.sessionId, socketId: socket.id }, 'client_joined_session');
             } catch (error: any) {
                 callback({ success: false, error: error.message });
             }
@@ -253,14 +254,14 @@ export function initWorldEngineSocket(io: Server): void {
         // 断开连接
         // ========================================
         socket.on('disconnect', () => {
-            console.log(`🌍 World Engine client disconnected: ${socket.id}`);
+            wsLogger.info({ socketId: socket.id }, 'world_engine_client_disconnected');
             if (currentSessionId) {
                 socket.leave(`session:${currentSessionId}`);
             }
         });
     });
 
-    console.log('🌍 World Engine WebSocket namespace initialized');
+    wsLogger.info('world_engine_websocket_namespace_initialized');
 }
 
 // ============================================
