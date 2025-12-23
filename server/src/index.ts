@@ -40,6 +40,7 @@ import { initGeminiLiveProxy } from './services/geminiLive';
 import { initWorkflowQueue, setSocketIO } from './services/workflowQueue';
 import { initScheduler } from './services/scheduler';
 import { initWorldEngineSocket } from './isolation-mode/websocket';
+import { sessionRoutes as isolationSessionRoutes, agentRoutes as isolationAgentRoutes, eventRoutes as isolationEventRoutes } from './isolation-mode/api/routes';
 
 dotenv.config();
 
@@ -86,6 +87,11 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/workflows', collaborationRoutes); // P5 协作功能 (嵌套在 workflows 下)
 app.use('/api/database', databaseRoutes); // P7 数据库连接器
 app.use('/api/v1/world-engine', worldEngineRoutes); // World Engine API v1
+
+// 隔离模式 API
+app.use('/api/isolation/sessions', isolationSessionRoutes);
+app.use('/api/isolation/agents', isolationAgentRoutes);
+app.use('/api/isolation/events', isolationEventRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
