@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Settings, Users, Trash2, Menu, ImagePlus, BrainCircuit, X, Gavel, BookOpen, AlertTriangle, Share2, Download, Copy, Check, Plus, MessageSquare, MoreHorizontal, FileJson, Square, Handshake, Lock, Upload, User, Zap, Cpu, Sparkles, Coffee, Vote, Edit2, BarChart2, Wand2, RefreshCw, Hammer, Loader2, FileText, Book, ChevronDown, ChevronUp, UserX, LogIn, UserCheck, Layers, Key } from 'lucide-react';
+import { Send, Settings, Users, Trash2, Menu, ImagePlus, BrainCircuit, X, Gavel, BookOpen, AlertTriangle, Share2, Download, Copy, Check, Plus, MessageSquare, MoreHorizontal, FileJson, Square, Handshake, Lock, Upload, User, Zap, Cpu, Sparkles, Coffee, Vote, Edit2, BarChart2, Wand2, RefreshCw, Hammer, Loader2, FileText, Book, ChevronDown, ChevronUp, UserX, LogIn, UserCheck, Layers, Key, FlaskConical } from 'lucide-react';
 import { DEFAULT_PARTICIPANTS, USER_ID } from './constants';
 import { Message, Participant, ParticipantConfig, GameMode, Session, ProviderType, TokenUsage, RefereeContext, VoteState } from './types';
 import ChatMessage from './components/ChatMessage';
@@ -17,6 +17,7 @@ import { WorkspaceSwitch, WorkspaceList, WorkspaceLayout, AppMode } from './comp
 import { useWorkspace } from './hooks/useWorkspace';
 import { useAuth } from './contexts/AuthContext';
 import { generateResponse, generateSessionTitle, detectRefereeIntent, summarizeHistory } from './services/aiService';
+import { IsolationModeContainer } from './components/isolation-mode';
 
 // Declare html2canvas globally
 declare const html2canvas: any;
@@ -251,6 +252,26 @@ const App: React.FC = () => {
   const [appMode, setAppMode] = useState<AppMode>('CHAT');
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
   const { workspace } = useWorkspace(selectedWorkspaceId);
+
+  // Isolation Mode State (Experimental)
+  const [isolationMode, setIsolationMode] = useState(() => {
+    try {
+      return localStorage.getItem('galaxyous_isolation_mode') === 'true';
+    } catch { return false; }
+  });
+  const [isolationModeFlipping, setIsolationModeFlipping] = useState(false);
+
+  const toggleIsolationMode = () => {
+    setIsolationModeFlipping(true);
+    setTimeout(() => {
+      setIsolationMode(prev => {
+        const next = !prev;
+        localStorage.setItem('galaxyous_isolation_mode', String(next));
+        return next;
+      });
+      setTimeout(() => setIsolationModeFlipping(false), 600);
+    }, 300);
+  };
 
   // Auth Context
   const { user, token, isAuthenticated, logout } = useAuth();
@@ -1583,8 +1604,34 @@ const App: React.FC = () => {
   const activeCount = participants.filter(p => p.config.enabled).length;
   const isJudgeModeActive = activeSession.gameMode === GameMode.JUDGE_MODE;
 
+  // Isolation Mode: Show completely different UI
+  if (isolationMode) {
+    return (
+      <div
+        className={`h-[100dvh] transition-transform duration-600 ${isolationModeFlipping ? 'animate-flip-in' : ''}`}
+        style={{ perspective: '1000px' }}
+      >
+        <IsolationModeContainer onExit={toggleIsolationMode} />
+        <style>{`
+          @keyframes flip-in {
+            0% { transform: rotateY(180deg); opacity: 0; }
+            100% { transform: rotateY(0deg); opacity: 1; }
+          }
+          .animate-flip-in { animation: flip-in 0.6s ease-out; }
+        `}</style>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-[100dvh] bg-[#f5f5f7] dark:bg-black font-sans text-slate-900 dark:text-slate-100 overflow-hidden relative selection:bg-blue-200 dark:selection:bg-blue-900">
+    <div className={`flex h-[100dvh] bg-[#f5f5f7] dark:bg-black font-sans text-slate-900 dark:text-slate-100 overflow-hidden relative selection:bg-blue-200 dark:selection:bg-blue-900 ${isolationModeFlipping ? 'animate-flip-out' : ''}`}>
+      <style>{`
+        @keyframes flip-out {
+          0% { transform: rotateY(0deg); opacity: 1; }
+          100% { transform: rotateY(-180deg); opacity: 0; }
+        }
+        .animate-flip-out { animation: flip-out 0.3s ease-in forwards; perspective: 1000px; }
+      `}</style>
       <input type="file" ref={configFileInputRef} className="hidden" accept=".galaxy,.json,text/plain" onChange={handleFileChange} />
       {/* Hidden input for image uploads from chat bar */}
       <input type="file" ref={imageInputRef} className="hidden" multiple accept="image/*" onChange={handleImageUpload} />
@@ -1688,6 +1735,29 @@ const App: React.FC = () => {
         </div>
 
         <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-2">
+          {/* Isolation Mode Toggle - Experimental */}
+          <button
+            onClick={() => {
+              if (!isolationMode) {
+                if (confirm('⚠️ 隔离模式是实验性功能，仍在开发中。是否启用？')) {
+                  toggleIsolationMode();
+                }
+              } else {
+                toggleIsolationMode();
+              }
+              setIsSidebarOpen(false);
+            }}
+            className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl transition-all text-sm font-medium ${isolationMode
+              ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg shadow-purple-500/20'
+              : 'bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300'
+              }`}
+          >
+            <FlaskConical size={18} />
+            隔离模式
+            <span className="px-1.5 py-0.5 text-[10px] bg-yellow-500/20 text-yellow-500 rounded-full">
+              实验
+            </span>
+          </button>
           {/* Workspace Switch Button - 仅桌面端显示 */}
           <button
             onClick={() => { setAppMode(appMode === 'CHAT' ? 'WORKSPACE' : 'CHAT'); setIsSidebarOpen(false); }}

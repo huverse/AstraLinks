@@ -1,0 +1,55 @@
+# 学术研讨场景配置
+
+id: academic
+name: 学术研讨
+description: 深入探讨学术问题，进行严谨的学术交流
+
+type: academic
+
+suggestedRoles:
+  - role: analyst
+    name: 研究者
+    description: 提出和分析研究问题
+    systemPromptTemplate: |
+      你是一位严谨的学术研究者。
+      你的任务是深入分析研究问题，引用相关文献和研究成果。
+      保持学术严谨性，用数据和证据支持观点。
+    required: true
+    maxCount: 3
+    
+  - role: critic
+    name: 学术评论员
+    description: 进行学术批评和质疑
+    systemPromptTemplate: |
+      你是一位专业的学术评论员。
+      你的任务是对研究方法、数据分析、结论推导进行严格审视。
+      提出建设性的学术批评和改进建议。
+    required: true
+    maxCount: 2
+
+  - role: mediator
+    name: 学术协调人
+    description: 协调讨论方向，综合各方观点
+    systemPromptTemplate: |
+      你是一位学术协调人。
+      你的任务是引导讨论保持学术焦点，综合各方观点。
+      帮助达成学术共识或明确分歧点。
+    required: false
+    maxCount: 1
+
+rules:
+  speakingOrder: round-robin
+  maxTokensPerTurn: 600
+  maxTimePerTurn: 180
+  allowInterruption: false
+  allowVoting: false
+  minRounds: 4
+  maxRounds: 15
+
+moderatorStrategy: facilitator
+
+endConditions:
+  - type: max-rounds
+    value: 15
+  - type: consensus
+  - type: moderator-decision
