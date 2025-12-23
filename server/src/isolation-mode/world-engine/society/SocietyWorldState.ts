@@ -50,6 +50,8 @@ export interface AgentSocialState {
     isActive: boolean;
     /** 连续资源为0的 tick 数 */
     zeroResourceTicks: number;
+    /** 连续低情绪的 tick 数 */
+    lowMoodTicks: number;
     /** 上一次行动的 tick */
     lastActionTick: number;
 }
@@ -191,7 +193,9 @@ export type SocietyEventType =
     | 'ACTION_REJECTED'
     | 'STATE_DELTA'
     | 'AGENT_EXIT'
-    | 'SOCIETY_SUMMARY';
+    | 'SOCIETY_SUMMARY'
+    | 'SHOCK_EVENT'
+    | 'CONFLICT_ESCALATION';
 
 // ============================================
 // 常量
@@ -231,6 +235,49 @@ export const CONFLICT_RELATIONSHIP_PENALTY = -0.3;
 export const CONFLICT_RESOURCE_LOSS = [5, 10, 15];
 
 // ============================================
+// 社会压力常量 (A-6 增强)
+// ============================================
+
+/** 工作收益递减开始 tick */
+export const WORK_DIMINISHING_START_TICK = 30;
+
+/** 工作收益递减率 (每 tick 减少的百分比) */
+export const WORK_DIMINISHING_RATE = 0.01;
+
+/** 工作收益最低比例 */
+export const WORK_MIN_EFFICIENCY = 0.3;
+
+/** 消耗成本增加阈值 (mood 高于此值时增加成本) */
+export const CONSUME_INDULGENCE_THRESHOLD = 0.7;
+
+/** 消耗成本增加率 */
+export const CONSUME_INDULGENCE_COST_MULTIPLIER = 1.5;
+
+/** 随机冲击间隔 (ticks) */
+export const SHOCK_INTERVAL = 15;
+
+/** 随机冲击影响人数 */
+export const SHOCK_AGENT_COUNT = 2;
+
+/** 随机冲击资源损失范围 */
+export const SHOCK_RESOURCE_LOSS = [5, 15];
+
+/** 随机冲击情绪损失范围 */
+export const SHOCK_MOOD_LOSS = [0.1, 0.3];
+
+/** 冲突升级关系阈值 */
+export const CONFLICT_ESCALATION_THRESHOLD = -0.4;
+
+/** 冲突升级概率 (当 talk hostile 且关系低于阈值时) */
+export const CONFLICT_ESCALATION_PROBABILITY = 0.3;
+
+/** 低情绪阈值 (低于此值开始计数) */
+export const LOW_MOOD_THRESHOLD = -0.5;
+
+/** 低情绪退出阈值 (持续 tick 数) */
+export const LOW_MOOD_EXIT_THRESHOLD = 8;
+
+// ============================================
 // 工厂函数
 // ============================================
 
@@ -262,6 +309,7 @@ export function createInitialSocietyWorldState(
             relationships,
             isActive: true,
             zeroResourceTicks: 0,
+            lowMoodTicks: 0,
             lastActionTick: 0
         });
     }

@@ -240,9 +240,29 @@ export class SocietyWorldEngine implements IWorldEngine {
         // 4. 约束检查
         const constraintChanges = this.ruleEngine.enforceConstraints(this.state);
 
-        // 记录 Agent 退出事件
+        // [A-6] 记录 SHOCK_EVENT (从 globalVars 获取)
+        const pendingShocks = this.state.globalVars.get('pendingShockEvents') as any[] | undefined;
+        if (pendingShocks && pendingShocks.length > 0) {
+            this.events.push({
+                eventId: uuidv4(),
+                eventType: 'SHOCK_EVENT',
+                timestamp: Date.now(),
+                source: 'system',
+                content: {
+                    tick: this.state.timeTick + 1,
+                    affectedCount: pendingShocks.length,
+                    shocks: pendingShocks
+                }
+            });
+            this.state.globalVars.delete('pendingShockEvents');
+        }
+
+        // 记录 Agent 退出事件 (带原因)
         for (const change of constraintChanges) {
             if (change.fieldPath === 'isActive' && change.newValue === false) {
+                const exitReason = this.state.globalVars.get(`exitReason_${change.entityId}`) || 'unknown';
+                const agent = this.state.agents.get(change.entityId);
+
                 this.events.push({
                     eventId: uuidv4(),
                     eventType: 'AGENT_EXIT',
@@ -250,9 +270,12 @@ export class SocietyWorldEngine implements IWorldEngine {
                     source: 'system',
                     content: {
                         agentId: change.entityId,
-                        reason: 'resources_depleted'
+                        agentName: agent?.name || change.entityId,
+                        reason: exitReason
                     }
                 });
+
+                this.state.globalVars.delete(`exitReason_${change.entityId}`);
             }
         }
 

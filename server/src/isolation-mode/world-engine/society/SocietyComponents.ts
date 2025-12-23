@@ -43,7 +43,21 @@ import {
     CONFLICT_RELATIONSHIP_PENALTY,
     CONFLICT_RESOURCE_LOSS,
     ZERO_RESOURCE_EXIT_THRESHOLD,
-    calculateGiniCoefficient
+    calculateGiniCoefficient,
+    // 社会压力常量 (A-6)
+    WORK_DIMINISHING_START_TICK,
+    WORK_DIMINISHING_RATE,
+    WORK_MIN_EFFICIENCY,
+    CONSUME_INDULGENCE_THRESHOLD,
+    CONSUME_INDULGENCE_COST_MULTIPLIER,
+    SHOCK_INTERVAL,
+    SHOCK_AGENT_COUNT,
+    SHOCK_RESOURCE_LOSS,
+    SHOCK_MOOD_LOSS,
+    CONFLICT_ESCALATION_THRESHOLD,
+    CONFLICT_ESCALATION_PROBABILITY,
+    LOW_MOOD_THRESHOLD,
+    LOW_MOOD_EXIT_THRESHOLD
 } from './SocietyWorldState';
 
 // ============================================
@@ -212,12 +226,21 @@ export class SocietyRuleEngine implements IRuleEngine {
 
         // 角色加成
         const roleBonus = agent.role === 'worker' ? 1.5 : 1.0;
+
+        // [A-6] 生存压力: 工作收益随 timeTick 递减
+        let efficiencyPenalty = 1.0;
+        if (state.timeTick > WORK_DIMINISHING_START_TICK) {
+            const ticksOver = state.timeTick - WORK_DIMINISHING_START_TICK;
+            efficiencyPenalty = Math.max(WORK_MIN_EFFICIENCY, 1.0 - ticksOver * WORK_DIMINISHING_RATE);
+        }
+
         // 情绪影响成功概率
         const successRate = 0.7 + agent.mood * 0.3;
         const success = Math.random() < successRate;
 
         if (success) {
-            const reward = Math.floor(WORK_REWARD[params.intensity - 1] * roleBonus);
+            const baseReward = WORK_REWARD[params.intensity - 1];
+            const reward = Math.floor(baseReward * roleBonus * efficiencyPenalty);
             const oldResources = agent.resources;
             agent.resources += reward;
 
@@ -239,6 +262,7 @@ export class SocietyRuleEngine implements IRuleEngine {
                     actionType: 'work',
                     intensity: params.intensity,
                     reward,
+                    efficiency: efficiencyPenalty,
                     newResources: agent.resources
                 }
             });
@@ -263,13 +287,19 @@ export class SocietyRuleEngine implements IRuleEngine {
         const events: WorldEvent[] = [];
         const effects: WorldStateChange[] = [];
 
-        const actualConsume = Math.min(params.amount, agent.resources);
+        // [A-6] 生存压力: 情绪过高时消耗成本增加
+        let actualCost = params.amount;
+        if (agent.mood > CONSUME_INDULGENCE_THRESHOLD) {
+            actualCost = Math.floor(params.amount * CONSUME_INDULGENCE_COST_MULTIPLIER);
+        }
+
+        const actualConsume = Math.min(actualCost, agent.resources);
         const oldResources = agent.resources;
         const oldMood = agent.mood;
 
         agent.resources -= actualConsume;
 
-        if (actualConsume >= params.amount) {
+        if (actualConsume >= actualCost) {
             // 消耗成功，情绪提升
             agent.mood = Math.min(1.0, agent.mood + CONSUME_MOOD_BOOST);
         } else {
@@ -303,7 +333,9 @@ export class SocietyRuleEngine implements IRuleEngine {
             content: {
                 actionType: 'consume',
                 requested: params.amount,
+                actualCost,
                 actual: actualConsume,
+                indulgencePenalty: actualCost > params.amount,
                 newResources: agent.resources,
                 newMood: agent.mood
             }
@@ -324,21 +356,60 @@ export class SocietyRuleEngine implements IRuleEngine {
         const oldRelationship = agent.relationships.get(params.targetAgentId) || 0;
         let relationshipDelta = 0;
 
-        switch (params.talkType) {
-            case 'friendly':
-                relationshipDelta = TALK_FRIENDLY_RELATIONSHIP_BOOST * roleBonus;
-                agent.mood = Math.min(1.0, agent.mood + 0.05);
-                target.mood = Math.min(1.0, target.mood + 0.05);
-                break;
-            case 'hostile':
-                relationshipDelta = TALK_HOSTILE_RELATIONSHIP_PENALTY;
-                agent.mood = Math.max(-1.0, agent.mood - 0.05);
-                target.mood = Math.max(-1.0, target.mood - 0.1);
-                break;
-            case 'neutral':
-            default:
-                relationshipDelta = 0.02;
-                break;
+        // [A-6] 冲突升级机制: hostile talk + 低关系 = 可能升级为冲突
+        let escalatedToConflict = false;
+        if (params.talkType === 'hostile' && oldRelationship < CONFLICT_ESCALATION_THRESHOLD) {
+            if (Math.random() < CONFLICT_ESCALATION_PROBABILITY) {
+                escalatedToConflict = true;
+
+                // 直接造成冲突后果
+                const loss = CONFLICT_RESOURCE_LOSS[0];  // 最低强度
+                const agentLoss = Math.min(agent.resources, loss);
+                const targetLoss = Math.min(target.resources, loss);
+                agent.resources -= agentLoss;
+                target.resources -= targetLoss;
+
+                // 关系更大幅度下降
+                relationshipDelta = CONFLICT_RELATIONSHIP_PENALTY;
+                agent.mood = Math.max(-1.0, agent.mood - 0.2);
+                target.mood = Math.max(-1.0, target.mood - 0.25);
+
+                state.statistics.conflictCount++;
+
+                events.push({
+                    eventId: uuidv4(),
+                    eventType: 'CONFLICT_ESCALATION',
+                    timestamp: Date.now(),
+                    source: agent.agentId,
+                    content: {
+                        trigger: 'hostile_talk',
+                        targetAgentId: params.targetAgentId,
+                        oldRelationship,
+                        agentLoss,
+                        targetLoss,
+                        reason: `关系已恶化 (${oldRelationship.toFixed(2)})，对话升级为冲突`
+                    }
+                });
+            }
+        }
+
+        if (!escalatedToConflict) {
+            switch (params.talkType) {
+                case 'friendly':
+                    relationshipDelta = TALK_FRIENDLY_RELATIONSHIP_BOOST * roleBonus;
+                    agent.mood = Math.min(1.0, agent.mood + 0.05);
+                    target.mood = Math.min(1.0, target.mood + 0.05);
+                    break;
+                case 'hostile':
+                    relationshipDelta = TALK_HOSTILE_RELATIONSHIP_PENALTY;
+                    agent.mood = Math.max(-1.0, agent.mood - 0.05);
+                    target.mood = Math.max(-1.0, target.mood - 0.1);
+                    break;
+                case 'neutral':
+                default:
+                    relationshipDelta = 0.02;
+                    break;
+            }
         }
 
         // 更新双方关系（对称）
@@ -358,7 +429,8 @@ export class SocietyRuleEngine implements IRuleEngine {
                 target: params.targetAgentId,
                 talkType: params.talkType,
                 oldRelationship,
-                newRelationship
+                newRelationship,
+                escalatedToConflict
             }
         });
 
@@ -470,29 +542,88 @@ export class SocietyRuleEngine implements IRuleEngine {
      */
     enforceConstraints(worldState: SocietyWorldState): WorldStateChange[] {
         const changes: WorldStateChange[] = [];
+        const shockEvents: any[] = [];
+
+        // [A-6] 随机冲击事件
+        if (worldState.timeTick > 0 && worldState.timeTick % SHOCK_INTERVAL === 0) {
+            const activeAgents = Array.from(worldState.agents.values()).filter(a => a.isActive);
+            if (activeAgents.length > 0) {
+                const shockCount = Math.min(SHOCK_AGENT_COUNT, activeAgents.length);
+                const shuffled = activeAgents.sort(() => Math.random() - 0.5);
+                const targets = shuffled.slice(0, shockCount);
+
+                for (const target of targets) {
+                    const resourceLoss = SHOCK_RESOURCE_LOSS[0] + Math.random() * (SHOCK_RESOURCE_LOSS[1] - SHOCK_RESOURCE_LOSS[0]);
+                    const moodLoss = SHOCK_MOOD_LOSS[0] + Math.random() * (SHOCK_MOOD_LOSS[1] - SHOCK_MOOD_LOSS[0]);
+
+                    const oldResources = target.resources;
+                    const oldMood = target.mood;
+
+                    target.resources = Math.max(0, target.resources - Math.floor(resourceLoss));
+                    target.mood = Math.max(-1.0, target.mood - moodLoss);
+
+                    shockEvents.push({
+                        agentId: target.agentId,
+                        agentName: target.name,
+                        resourceLoss: Math.floor(resourceLoss),
+                        moodLoss: parseFloat(moodLoss.toFixed(2)),
+                        oldResources,
+                        newResources: target.resources,
+                        oldMood,
+                        newMood: target.mood
+                    });
+                }
+            }
+        }
+
+        // 保存冲击事件到 globalVars 以便 WorldEngine 获取
+        if (shockEvents.length > 0) {
+            worldState.globalVars.set('pendingShockEvents', shockEvents);
+        }
 
         for (const [agentId, agent] of worldState.agents) {
             if (!agent.isActive) continue;
+
+            let exitReason: string | null = null;
 
             // 检查资源为0
             if (agent.resources <= 0) {
                 agent.zeroResourceTicks++;
 
                 if (agent.zeroResourceTicks >= ZERO_RESOURCE_EXIT_THRESHOLD) {
-                    agent.isActive = false;
-                    worldState.statistics.exitedAgentCount++;
-
-                    changes.push({
-                        changeType: 'update',
-                        entityType: 'agent',
-                        entityId: agentId,
-                        fieldPath: 'isActive',
-                        oldValue: true,
-                        newValue: false
-                    });
+                    exitReason = `资源耗尽 (连续 ${agent.zeroResourceTicks} tick)`;
                 }
             } else {
                 agent.zeroResourceTicks = 0;
+            }
+
+            // [A-6] 检查低情绪
+            if (agent.mood < LOW_MOOD_THRESHOLD) {
+                agent.lowMoodTicks++;
+
+                if (agent.lowMoodTicks >= LOW_MOOD_EXIT_THRESHOLD) {
+                    exitReason = `情绪崩溃 (mood=${agent.mood.toFixed(2)} 持续 ${agent.lowMoodTicks} tick)`;
+                }
+            } else {
+                agent.lowMoodTicks = 0;
+            }
+
+            // 执行退出
+            if (exitReason) {
+                agent.isActive = false;
+                worldState.statistics.exitedAgentCount++;
+
+                changes.push({
+                    changeType: 'update',
+                    entityType: 'agent',
+                    entityId: agentId,
+                    fieldPath: 'isActive',
+                    oldValue: true,
+                    newValue: false
+                });
+
+                // 保存退出原因
+                worldState.globalVars.set(`exitReason_${agentId}`, exitReason);
             }
 
             // 确保 mood 在范围内
