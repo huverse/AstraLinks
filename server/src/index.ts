@@ -32,12 +32,14 @@ import codeRoutes from './routes/code';
 import webhookRoutes from './routes/webhooks';
 import collaborationRoutes from './routes/collaboration';
 import databaseRoutes from './routes/database';
+import worldEngineRoutes from './routes/world-engine';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
 import { initGeminiLiveProxy } from './services/geminiLive';
 import { initWorkflowQueue, setSocketIO } from './services/workflowQueue';
 import { initScheduler } from './services/scheduler';
+import { initWorldEngineSocket } from './isolation-mode/websocket';
 
 dotenv.config();
 
@@ -83,6 +85,7 @@ app.use('/api/code', codeRoutes);
 app.use('/api/webhooks', webhookRoutes);
 app.use('/api/workflows', collaborationRoutes); // P5 协作功能 (嵌套在 workflows 下)
 app.use('/api/database', databaseRoutes); // P7 数据库连接器
+app.use('/api/world-engine', worldEngineRoutes); // World Engine API
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -97,7 +100,10 @@ async function startServer() {
         console.log('✅ Database initialized');
 
         // Initialize WebSocket
-        initWebSocket(httpServer);
+        const io = initWebSocket(httpServer);
+
+        // Initialize World Engine WebSocket namespace
+        initWorldEngineSocket(io);
 
         // Initialize Gemini Live WebSocket proxy (for China users)
         initGeminiLiveProxy(httpServer);

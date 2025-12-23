@@ -7,8 +7,10 @@
 
 import { Resend } from 'resend';
 
-// Initialize Resend with API key from environment
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize Resend with API key from environment (graceful - won't fail if not set)
+const resend = process.env.RESEND_API_KEY
+    ? new Resend(process.env.RESEND_API_KEY)
+    : null;
 
 const SENDER_EMAIL = process.env.SENDER_EMAIL || 'codesafe@astralinks.xyz';
 const SENDER_NAME = 'AstraLinks';
@@ -28,6 +30,10 @@ export async function sendVerificationEmail(
     code: string
 ): Promise<{ success: boolean; error?: string }> {
     try {
+        if (!resend) {
+            console.warn('[Email] Resend not configured, skipping email send');
+            return { success: false, error: 'Email service not configured' };
+        }
         const { data, error } = await resend.emails.send({
             from: `${SENDER_NAME} <${SENDER_EMAIL}>`,
             to: [toEmail],
