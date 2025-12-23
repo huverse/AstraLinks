@@ -2,9 +2,12 @@
  * Agent 私有上下文
  * 
  * 每个 Agent 独立维护，不与其他 Agent 共享
+ * 
+ * 注意：Agent 只能通过 Event 了解外部世界
+ * 永远不能看到其他 Agent 的私有上下文
  */
 
-import { DiscussionEvent } from '../core/types';
+import { Event, EventType } from '../core/types';
 
 /**
  * Agent 私有上下文
@@ -12,7 +15,7 @@ import { DiscussionEvent } from '../core/types';
 export class AgentContext {
     private agentId: string;
     private systemPrompt: string = '';
-    private events: DiscussionEvent[] = [];
+    private events: Event[] = [];
     private memory: string[] = [];
     private maxEvents: number = 50;  // 最多保留的事件数
 
@@ -32,7 +35,7 @@ export class AgentContext {
     /**
      * 添加事件到上下文
      */
-    addEvent(event: DiscussionEvent): void {
+    addEvent(event: Event): void {
         this.events.push(event);
 
         // 如果超过最大数量，触发压缩
@@ -61,20 +64,20 @@ export class AgentContext {
     /**
      * 将事件转换为摘要
      */
-    private summarizeEvents(events: DiscussionEvent[]): string {
+    private summarizeEvents(events: Event[]): string {
         // TODO: 可以调用 LLM 生成更智能的摘要
         // 目前使用简单的文本拼接
         const speakers = new Set<string>();
-        let topicCount = 0;
+        let speechCount = 0;
 
         events.forEach(e => {
-            if (e.type === 'agent:speak') {
-                speakers.add(e.sourceId);
-                topicCount++;
+            if (e.type === EventType.SPEECH) {
+                speakers.add(e.speaker);
+                speechCount++;
             }
         });
 
-        return `[历史摘要] ${speakers.size} 位参与者进行了 ${topicCount} 次发言`;
+        return `[历史摘要] ${speakers.size} 位参与者进行了 ${speechCount} 次发言`;
     }
 
     /**
@@ -95,12 +98,15 @@ export class AgentContext {
 
         // 近期事件
         this.events.forEach(e => {
-            if (e.type === 'agent:speak') {
-                const payload = (e as any).payload;
-                parts.push(`[${e.sourceId}] ${payload?.content || ''}`);
-            } else if (e.type === 'moderator:announce') {
-                const payload = (e as any).payload;
-                parts.push(`[主持人] ${payload?.message || ''}`);
+            if (e.type === EventType.SPEECH) {
+                const content = typeof e.content === 'string' ? e.content : JSON.stringify(e.content);
+                parts.push(`[${e.speaker}] ${content}`);
+            } else if (e.type === EventType.SUMMARY) {
+                const content = typeof e.content === 'string' ? e.content : JSON.stringify(e.content);
+                parts.push(`[主持人总结] ${content}`);
+            } else if (e.type === EventType.SYSTEM) {
+                const content = typeof e.content === 'string' ? e.content : JSON.stringify(e.content);
+                parts.push(`[系统] ${content}`);
             }
         });
 

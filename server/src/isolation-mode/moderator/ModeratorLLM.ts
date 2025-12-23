@@ -4,7 +4,7 @@
  * 负责智能决策，调用 LLM
  */
 
-import { DiscussionEvent } from '../core/types';
+import { Event, EventType } from '../core/types';
 import { IModeratorLLM, ILLMProvider, LLMMessage } from '../core/interfaces';
 
 /**
@@ -50,15 +50,18 @@ export class ModeratorLLM implements IModeratorLLM {
     /**
      * 生成中场总结
      */
-    async generateSummary(events: DiscussionEvent[]): Promise<string> {
+    async generateSummary(events: Event[]): Promise<string> {
         if (!this.llmProvider) {
             return `目前已有 ${events.length} 条发言。`;
         }
 
         // 提取发言内容
-        const speakEvents = events.filter(e => e.type === 'agent:speak');
+        const speakEvents = events.filter(e => e.type === EventType.SPEECH);
         const summary = speakEvents
-            .map(e => `${e.sourceId}: ${(e as any).payload?.content || ''}`)
+            .map(e => {
+                const content = typeof e.content === 'string' ? e.content : JSON.stringify(e.content);
+                return `${e.speaker}: ${content}`;
+            })
             .join('\n');
 
         const messages: LLMMessage[] = [
@@ -83,7 +86,7 @@ export class ModeratorLLM implements IModeratorLLM {
     /**
      * 生成结束语
      */
-    async generateClosing(events: DiscussionEvent[]): Promise<string> {
+    async generateClosing(events: Event[]): Promise<string> {
         if (!this.llmProvider) {
             return '感谢各位的精彩讨论！本次讨论到此结束。';
         }
@@ -110,7 +113,7 @@ export class ModeratorLLM implements IModeratorLLM {
     /**
      * 决定是否干预
      */
-    async shouldIntervene(events: DiscussionEvent[]): Promise<boolean> {
+    async shouldIntervene(events: Event[]): Promise<boolean> {
         // TODO: 分析讨论内容，决定是否需要干预
         // 例如：讨论偏题、争论过于激烈、某人发言过多等
         return false;
@@ -119,7 +122,7 @@ export class ModeratorLLM implements IModeratorLLM {
     /**
      * 生成干预内容
      */
-    async generateIntervention(events: DiscussionEvent[]): Promise<string> {
+    async generateIntervention(events: Event[]): Promise<string> {
         if (!this.llmProvider) {
             return '请各位保持讨论的主题聚焦和专业性。';
         }
@@ -131,7 +134,7 @@ export class ModeratorLLM implements IModeratorLLM {
     /**
      * 评估讨论质量
      */
-    async evaluateDiscussion(events: DiscussionEvent[]): Promise<{
+    async evaluateDiscussion(events: Event[]): Promise<{
         score: number;
         feedback: string;
     }> {

@@ -5,7 +5,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { AgentConfig, AgentState, AgentMessage, DiscussionEvent } from '../core/types';
+import { AgentConfig, AgentState, AgentMessage, Event, EventType } from '../core/types';
 import { IAgent } from '../core/interfaces';
 import { AgentContext } from './AgentContext';
 
@@ -49,24 +49,25 @@ export class AgentExecutor implements IAgent {
      * 接收事件
      * Agent 根据事件类型选择处理方式
      */
-    async receiveEvent(event: DiscussionEvent): Promise<void> {
+    async receiveEvent(event: Event): Promise<void> {
         // 只处理与自己相关或公共的事件
-        if (event.sourceId === this.config.id) {
+        if (event.speaker === this.config.id) {
             return; // 忽略自己发出的事件
         }
 
         // 记录到私有上下文
         this.context.addEvent(event);
 
-        // TODO: 根据事件类型触发不同处理
+        // 根据事件类型触发不同处理
         switch (event.type) {
-            case 'moderator:direct':
-                // 主持人指定发言
-                if ((event as any).payload?.targetAgentId === this.config.id) {
+            case EventType.SYSTEM:
+                // 系统事件，检查是否有指令
+                const content = event.content as any;
+                if (content?.action === 'DIRECT_SPEAK' && content?.targetAgentId === this.config.id) {
                     this._state.status = 'thinking';
                 }
                 break;
-            case 'agent:speak':
+            case EventType.SPEECH:
                 // 其他 Agent 发言，可能需要响应
                 break;
             default:

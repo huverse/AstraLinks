@@ -7,7 +7,7 @@ import { SessionConfig, SessionState, SessionSummary } from '../core/types';
 import { SessionError } from '../core/errors';
 import { agentFactory } from '../agents';
 import { moderatorController } from '../moderator';
-import { eventLog, eventBus } from '../event-log';
+import { eventLogService, eventBus } from '../event-log';
 import { scenarioLoader } from '../scenarios';
 
 /**
@@ -93,7 +93,7 @@ export class SessionManager {
      */
     async delete(sessionId: string): Promise<void> {
         this.sessions.delete(sessionId);
-        eventLog.clearSession(sessionId);
+        eventLogService.clearSession(sessionId);
         eventBus.clearSession(sessionId);
     }
 
@@ -112,7 +112,7 @@ export class SessionManager {
                     topic: config.topic,
                     scenarioName: config.scenario.name,
                     agentCount: config.agents.length,
-                    eventCount: eventLog.getEventCount(sessionId),
+                    eventCount: eventLogService.getEventCount(sessionId),
                     totalRounds: state?.currentRound || 0,
                     duration: state?.endedAt
                         ? state.endedAt - (state.startedAt || config.createdAt)
