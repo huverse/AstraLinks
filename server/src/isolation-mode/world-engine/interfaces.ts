@@ -50,6 +50,12 @@ export type ActionType =
     | 'write_text'      // 写作
     | 'compose_music'   // 作曲
 
+    // === 逻辑推理类 ===
+    | 'derive'          // 推导
+    | 'refute'          // 反驳
+    | 'extend'          // 扩展
+    | 'accept'          // 接受
+
     // === 通用 ===
     | 'custom';         // 自定义
 
@@ -150,6 +156,7 @@ export type WorldType =
     | 'social_sim'      // 社会仿真
     | 'creative'        // 创作
     | 'research'        // 推理/研究
+    | 'logic'           // 逻辑推理
     | 'custom';         // 自定义
 
 /**

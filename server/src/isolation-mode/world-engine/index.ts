@@ -28,3 +28,6 @@ export * from './debate';
 
 // 游戏世界引擎
 export * from './game';
+
+// 逻辑推理世界引擎
+export * from './logic';
