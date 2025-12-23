@@ -237,6 +237,9 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit 
             const data = await response.json();
             setCurrentSession({
                 ...data.data,
+                id: data.data.id || data.data.sessionId,
+                status: 'pending',
+                currentRound: 0,
                 agents: data.data.agents.map((a: any) => ({ ...a, status: 'idle', speakCount: 0 })),
                 events: [],
             });
