@@ -31,7 +31,12 @@ export class ScenarioLoader {
         // 尝试从文件加载
         const filePath = path.join(this.scenariosDir, `${scenarioId}.scenario.yaml`);
 
+        console.log(`[ScenarioLoader] Looking for scenario at: ${filePath}`);
+        console.log(`[ScenarioLoader] __dirname: ${__dirname}`);
+        console.log(`[ScenarioLoader] scenariosDir: ${this.scenariosDir}`);
+
         if (!fs.existsSync(filePath)) {
+            console.error(`[ScenarioLoader] Scenario file not found: ${filePath}`);
             throw new ScenarioError(`Scenario not found: ${scenarioId}`, scenarioId);
         }
 
