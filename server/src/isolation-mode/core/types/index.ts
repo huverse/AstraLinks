@@ -47,3 +47,22 @@ export {
     DiscussionHealth,
     PhaseTransition,
 } from './moderator.types';
+
+// Agent 执行器类型
+export {
+    AgentPersona,
+    SpeakingStyle,
+    AgentPrivateContext,
+    ShortTermMemory,
+    MemoryEntry,
+    AgentVisibleContext,
+    AgentVisibleEventSlim,
+    IntentOutput,
+    SpeechOutput,
+    LLMRequest,
+    LLMResponse,
+    DEFAULT_SHORT_TERM_MAX_ENTRIES,
+    DEFAULT_SHORT_TERM_MAX_TOKENS,
+    DEFAULT_RECENT_EVENTS_LIMIT,
+    MAX_RECENT_EVENTS_LIMIT,
+} from './agent-executor.types';
