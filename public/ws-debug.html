@@ -65,7 +65,9 @@
 
     <div style="margin: 20px 0;">
         <button onclick="testRawWebSocket()">测试原生 WebSocket</button>
-        <button onclick="testSocketIO()">测试 Socket.IO</button>
+        <button onclick="testSocketIO()">测试 Socket.IO (WS)</button>
+        <button onclick="testSocketIOPolling()">测试 Socket.IO (Polling)</button>
+        <button onclick="testRootNamespace()">测试根 Namespace</button>
         <button onclick="disconnect()">断开连接</button>
         <button onclick="clearLogs()">清空日志</button>
     </div>
@@ -178,6 +180,75 @@
 
             } catch (err) {
                 log('Socket.IO 创建失败: ' + err.message, 'error');
+            }
+        }
+
+        // 测试 3: Socket.IO with Polling
+        function testSocketIOPolling() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                log('请先获取 Token', 'error');
+                return;
+            }
+
+            log('=== 测试 Socket.IO (Polling 优先) ===', 'info');
+            log('连接到 /world-engine namespace...', 'info');
+
+            try {
+                socket = io('/world-engine', {
+                    auth: { token },
+                    transports: ['polling', 'websocket'],  // polling 优先
+                    reconnection: false
+                });
+
+                socket.on('connect', () => {
+                    log('Socket.IO (Polling) 连接成功! ID: ' + socket.id, 'success');
+                });
+
+                socket.on('connect_error', (err) => {
+                    log('Socket.IO (Polling) 连接错误: ' + err.message, 'error');
+                });
+
+                socket.on('disconnect', (reason) => {
+                    log('Socket.IO (Polling) 断开: ' + reason, 'warn');
+                });
+
+            } catch (err) {
+                log('Socket.IO (Polling) 创建失败: ' + err.message, 'error');
+            }
+        }
+
+        // 测试 4: 根 Namespace
+        function testRootNamespace() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                log('请先获取 Token', 'error');
+                return;
+            }
+
+            log('=== 测试根 Namespace ===', 'info');
+
+            try {
+                socket = io('/', {
+                    auth: { token },
+                    transports: ['polling', 'websocket'],
+                    reconnection: false
+                });
+
+                socket.on('connect', () => {
+                    log('根 Namespace 连接成功! ID: ' + socket.id, 'success');
+                });
+
+                socket.on('connect_error', (err) => {
+                    log('根 Namespace 连接错误: ' + err.message, 'error');
+                });
+
+                socket.on('disconnect', (reason) => {
+                    log('根 Namespace 断开: ' + reason, 'warn');
+                });
+
+            } catch (err) {
+                log('根 Namespace 创建失败: ' + err.message, 'error');
             }
         }
 
