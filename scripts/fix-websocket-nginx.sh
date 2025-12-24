@@ -44,6 +44,10 @@ else
         proxy_set_header X-Forwarded-Proto $scheme;\
         proxy_read_timeout 86400s;\
         proxy_send_timeout 86400s;\
+        # 关键: 禁用缓冲和压缩\
+        proxy_buffering off;\
+        proxy_cache off;\
+        gzip off;\
     }\
 ' "$NGINX_CONF"
 fi
