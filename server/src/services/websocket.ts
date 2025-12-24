@@ -49,15 +49,25 @@ export function initWebSocket(httpServer: HttpServer): Server {
 
     io.use((socket, next) => {
         const token = socket.handshake.auth.token;
+        wsLogger.info({
+            socketId: socket.id,
+            hasToken: !!token,
+            tokenPrefix: token ? token.substring(0, 20) + '...' : 'none',
+            namespace: socket.nsp.name
+        }, 'auth_middleware_start');
+
         if (!token) {
+            wsLogger.warn({ socketId: socket.id }, 'auth_no_token');
             return next(new Error('Authentication required'));
         }
 
         const decoded = verifyToken(token);
         if (!decoded) {
+            wsLogger.warn({ socketId: socket.id }, 'auth_invalid_token');
             return next(new Error('Invalid token'));
         }
 
+        wsLogger.info({ socketId: socket.id, userId: decoded.id }, 'auth_success');
         socket.data.user = decoded;
         next();
     });
