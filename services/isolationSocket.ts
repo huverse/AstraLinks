@@ -164,7 +164,9 @@ class IsolationSocketService {
 
         this.socket = io(`${wsUrl}/world-engine`, {
             auth: { token },
-            transports: ['websocket', 'polling'],
+            // 注意: 生产环境 WebSocket 有问题，先用 polling
+            // 待 WebSocket 问题修复后可改回 ['websocket', 'polling']
+            transports: ['polling', 'websocket'],
             reconnection: false, // 手动管理重连以实现指数退避
             timeout: 10000,
             forceNew: true,
