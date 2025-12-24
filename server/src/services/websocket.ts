@@ -33,7 +33,18 @@ export function initWebSocket(httpServer: HttpServer): Server {
         // 防止升级超时
         upgradeTimeout: 30000,
         // 允许 HTTP 长轮询作为回退
-        allowEIO3: true
+        allowEIO3: true,
+        // Socket.IO path
+        path: '/socket.io/'
+    });
+
+    // Debug: 底层引擎连接日志
+    io.engine.on('connection', (rawSocket) => {
+        wsLogger.info({ transport: rawSocket.transport.name }, 'engine_raw_connection');
+    });
+
+    io.engine.on('connection_error', (err) => {
+        wsLogger.error({ error: err.message, code: err.code }, 'engine_connection_error');
     });
 
     io.use((socket, next) => {
