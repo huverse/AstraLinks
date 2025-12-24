@@ -49,6 +49,13 @@ export function initWorldEngineSocket(io: Server): void {
 
     // 认证中间件
     worldEngine.use((socket, next) => {
+        wsLogger.info({
+            socketId: socket.id,
+            hasToken: !!socket.handshake.auth.token,
+            authKeys: Object.keys(socket.handshake.auth || {}),
+            queryKeys: Object.keys(socket.handshake.query || {})
+        }, 'world_engine_auth_middleware_entry');
+
         const token = socket.handshake.auth.token;
         if (!token) {
             wsLogger.warn({ socketId: socket.id }, 'world_engine_auth_required');
@@ -61,6 +68,7 @@ export function initWorldEngineSocket(io: Server): void {
             return next(new Error('Invalid token'));
         }
 
+        wsLogger.info({ socketId: socket.id, userId: decoded.id }, 'world_engine_auth_success');
         // 存储用户信息到 socket
         socket.data.user = decoded;
         next();
