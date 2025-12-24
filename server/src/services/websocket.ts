@@ -47,6 +47,19 @@ export function initWebSocket(httpServer: HttpServer): Server {
         wsLogger.error({ error: err.message, code: err.code }, 'engine_connection_error');
     });
 
+    // Debug: 记录初始握手信息
+    io.engine.on('initial_headers', (headers, req) => {
+        wsLogger.info({
+            url: req.url,
+            method: req.method
+        }, 'engine_initial_headers');
+    });
+
+    // 捕获所有 namespace 连接
+    io.on('new_namespace', (namespace) => {
+        wsLogger.info({ namespaceName: namespace.name }, 'new_namespace_created');
+    });
+
     io.use((socket, next) => {
         const token = socket.handshake.auth.token;
         wsLogger.info({
