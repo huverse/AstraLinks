@@ -24,7 +24,16 @@ export function initWebSocket(httpServer: HttpServer): Server {
             origin: getCorsOrigins(),
             methods: ['GET', 'POST'],
             credentials: true
-        }
+        },
+        // 传输配置：优先使用 websocket
+        transports: ['websocket', 'polling'],
+        // 增加超时时间，防止断连
+        pingTimeout: 60000,
+        pingInterval: 25000,
+        // 防止升级超时
+        upgradeTimeout: 30000,
+        // 允许 HTTP 长轮询作为回退
+        allowEIO3: true
     });
 
     io.use((socket, next) => {
