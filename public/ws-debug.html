@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>WebSocket 诊断</title>
+    <style>
+        body {
+            font-family: monospace;
+            background: #1a1a2e;
+            color: #eee;
+            padding: 20px;
+        }
+
+        .log {
+            padding: 4px 8px;
+            margin: 2px 0;
+            border-radius: 4px;
+        }
+
+        .info {
+            background: #0f3460;
+        }
+
+        .success {
+            background: #16a34a;
+        }
+
+        .error {
+            background: #dc2626;
+        }
+
+        .warn {
+            background: #ca8a04;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+        }
+
+        #logs {
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #333;
+            padding: 10px;
+        }
+
+        input {
+            padding: 8px;
+            width: 300px;
+            margin: 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🔍 WebSocket 诊断工具</h1>
+
+    <div>
+        <input type="text" id="token" placeholder="JWT Token (从 localStorage 获取)">
+        <button onclick="getToken()">自动获取 Token</button>
+    </div>
+
+    <div style="margin: 20px 0;">
+        <button onclick="testRawWebSocket()">测试原生 WebSocket</button>
+        <button onclick="testSocketIO()">测试 Socket.IO</button>
+        <button onclick="disconnect()">断开连接</button>
+        <button onclick="clearLogs()">清空日志</button>
+    </div>
+
+    <div id="logs"></div>
+
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <script>
+        let socket = null;
+        let rawWs = null;
+
+        function log(msg, type = 'info') {
+            const logs = document.getElementById('logs');
+            const div = document.createElement('div');
+            div.className = 'log ' + type;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logs.appendChild(div);
+            logs.scrollTop = logs.scrollHeight;
+        }
+
+        function getToken() {
+            const token = localStorage.getItem('token');
+            if (token) {
+                document.getElementById('token').value = token;
+                log('Token 获取成功: ' + token.substring(0, 20) + '...', 'success');
+            } else {
+                log('未找到 Token，请先登录', 'error');
+            }
+        }
+
+        function clearLogs() {
+            document.getElementById('logs').innerHTML = '';
+        }
+
+        // 测试 1: 原生 WebSocket
+        function testRawWebSocket() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                log('请先获取 Token', 'error');
+                return;
+            }
+
+            log('=== 测试原生 WebSocket ===', 'info');
+
+            // 构建 WebSocket URL
+            const wsUrl = `wss://${location.host}/socket.io/?EIO=4&transport=websocket&token=${token}`;
+            log('连接 URL: ' + wsUrl, 'info');
+
+            try {
+                rawWs = new WebSocket(wsUrl);
+
+                rawWs.onopen = () => {
+                    log('原生 WebSocket 连接成功!', 'success');
+                };
+
+                rawWs.onmessage = (e) => {
+                    log('收到消息: ' + e.data, 'success');
+                };
+
+                rawWs.onerror = (e) => {
+                    log('原生 WebSocket 错误: ' + JSON.stringify(e), 'error');
+                };
+
+                rawWs.onclose = (e) => {
+                    log(`连接关闭: code=${e.code}, reason=${e.reason}, wasClean=${e.wasClean}`, 'warn');
+                };
+            } catch (err) {
+                log('创建 WebSocket 失败: ' + err.message, 'error');
+            }
+        }
+
+        // 测试 2: Socket.IO
+        function testSocketIO() {
+            const token = document.getElementById('token').value;
+            if (!token) {
+                log('请先获取 Token', 'error');
+                return;
+            }
+
+            log('=== 测试 Socket.IO ===', 'info');
+            log('连接到 /world-engine namespace...', 'info');
+
+            try {
+                socket = io('/world-engine', {
+                    auth: { token },
+                    transports: ['websocket'],  // 只用 websocket
+                    reconnection: false
+                });
+
+                socket.on('connect', () => {
+                    log('Socket.IO 连接成功! ID: ' + socket.id, 'success');
+                });
+
+                socket.on('connect_error', (err) => {
+                    log('Socket.IO 连接错误: ' + err.message, 'error');
+                    log('错误详情: ' + JSON.stringify(err), 'error');
+                });
+
+                socket.on('disconnect', (reason) => {
+                    log('Socket.IO 断开: ' + reason, 'warn');
+                });
+
+                socket.on('world_event', (data) => {
+                    log('收到 world_event: ' + JSON.stringify(data), 'success');
+                });
+
+                socket.onAny((event, ...args) => {
+                    log(`收到事件 [${event}]: ${JSON.stringify(args)}`, 'info');
+                });
+
+            } catch (err) {
+                log('Socket.IO 创建失败: ' + err.message, 'error');
+            }
+        }
+
+        function disconnect() {
+            if (socket) {
+                socket.disconnect();
+                socket = null;
+                log('Socket.IO 已断开', 'info');
+            }
+            if (rawWs) {
+                rawWs.close();
+                rawWs = null;
+                log('原生 WebSocket 已断开', 'info');
+            }
+        }
+
+        // 页面加载时自动尝试获取 token
+        window.onload = getToken;
+    </script>
+</body>
+
+</html>
