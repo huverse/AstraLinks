@@ -87,7 +87,7 @@
         }
 
         function getToken() {
-            const token = localStorage.getItem('token');
+            const token = localStorage.getItem('galaxyous_token');
             if (token) {
                 document.getElementById('token').value = token;
                 log('Token 获取成功: ' + token.substring(0, 20) + '...', 'success');
