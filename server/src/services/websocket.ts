@@ -38,9 +38,7 @@ export function initWebSocket(httpServer: HttpServer): Server {
         path: '/socket.io/',
         // 完全禁用所有压缩
         perMessageDeflate: false,
-        httpCompression: false,
-        // ws 库配置 - 禁用压缩扩展
-        wsEngine: require('ws').Server
+        httpCompression: false
     });
 
     // Debug: 底层引擎连接日志
