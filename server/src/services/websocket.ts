@@ -35,7 +35,9 @@ export function initWebSocket(httpServer: HttpServer): Server {
         // 允许 HTTP 长轮询作为回退
         allowEIO3: true,
         // Socket.IO path
-        path: '/socket.io/'
+        path: '/socket.io/',
+        // 禁用 WebSocket 压缩，防止 RSV1 帧头错误
+        perMessageDeflate: false
     });
 
     // Debug: 底层引擎连接日志
