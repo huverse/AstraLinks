@@ -164,8 +164,8 @@ class IsolationSocketService {
 
         this.socket = io(`${wsUrl}/world-engine`, {
             auth: { token },
-            // WebSocket 优先，polling 作为回退
-            transports: ['websocket', 'polling'],
+            // Polling 优先，因为 WebSocket 存在 RSV1 帧问题
+            transports: ['polling', 'websocket'],
             reconnection: false, // 手动管理重连以实现指数退避
             timeout: 10000,
             forceNew: true,
