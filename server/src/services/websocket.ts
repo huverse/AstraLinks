@@ -41,6 +41,11 @@ export function initWebSocket(httpServer: HttpServer): Server {
         httpCompression: false
     });
 
+    // 强制在 engine.io 层面禁用压缩
+    if (io.engine.opts) {
+        io.engine.opts.perMessageDeflate = false;
+    }
+
     // Debug: 底层引擎连接日志
     io.engine.on('connection', (rawSocket) => {
         wsLogger.info({ transport: rawSocket.transport.name }, 'engine_raw_connection');
