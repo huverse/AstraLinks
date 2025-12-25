@@ -36,8 +36,11 @@ export function initWebSocket(httpServer: HttpServer): Server {
         allowEIO3: true,
         // Socket.IO path
         path: '/socket.io/',
-        // 禁用 WebSocket 压缩，防止 RSV1 帧头错误
-        perMessageDeflate: false
+        // 完全禁用所有压缩
+        perMessageDeflate: false,
+        httpCompression: false,
+        // ws 库配置 - 禁用压缩扩展
+        wsEngine: require('ws').Server
     });
 
     // Debug: 底层引擎连接日志
