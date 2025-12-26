@@ -6,6 +6,7 @@
  */
 
 import * as crypto from 'crypto';
+import { isProductionLike } from '../../config/world-engine.config';
 
 // ============================================
 // 配置
@@ -18,13 +19,21 @@ const SALT_LENGTH = 32;
 const PBKDF2_ITERATIONS = 100000;
 const KEY_LENGTH = 32;
 const DEFAULT_SALT = 'salt';
+const DEFAULT_DEV_KEY = 'default-dev-key-do-not-use-in-production!!';
+const PLACEHOLDER_KEY = 'your-32-char-random-secret-key!!';
 
 // 从环境变量获取加密密钥（生产环境必须设置）
 const getEncryptionKey = (): string => {
     const key = process.env.ISOLATION_ENCRYPTION_KEY;
     if (!key) {
+        if (isProductionLike) {
+            throw new Error('ISOLATION_ENCRYPTION_KEY is required in production');
+        }
         // 开发环境使用默认密钥（生产环境必须覆盖）
-        return 'default-dev-key-do-not-use-in-production!!';
+        return DEFAULT_DEV_KEY;
+    }
+    if (isProductionLike && (key === DEFAULT_DEV_KEY || key === PLACEHOLDER_KEY)) {
+        throw new Error('ISOLATION_ENCRYPTION_KEY must be set to a secure value');
     }
     return key;
 };

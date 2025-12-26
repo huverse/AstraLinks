@@ -8,7 +8,7 @@ import { AgentConfig } from '../core/types';
 import { IAgent, IAgentFactory } from '../core/interfaces';
 import { AgentExecutor } from './AgentExecutor';
 import { ILlmAdapter } from '../llm';
-// import presets from './presets';
+import agentPresets from './presets';
 
 /**
  * Agent 工厂实现
@@ -24,19 +24,24 @@ export class AgentFactory implements IAgentFactory {
      * 加载预设 Agent 配置
      */
     private loadPresets(): void {
-        // TODO: 从 presets/ 目录加载预设
-        // 预留接口，后续实现
+        Object.entries(agentPresets).forEach(([id, preset]) => {
+            this.registerPreset(id, preset);
+        });
     }
 
     /**
      * 创建 Agent 实例
      */
     create(config: AgentConfig, llmAdapter?: ILlmAdapter): IAgent {
-        // TODO: 实现 Agent 创建逻辑
-        // 1. 验证配置
-        // 2. 获取 LLM Provider
-        // 3. 创建 Agent 实例
-        return new AgentExecutor(config, llmAdapter);
+        const normalized: AgentConfig = {
+            ...config,
+            name: config.name || config.id,
+            role: (config.role || 'custom') as AgentConfig['role'],
+            llmProviderId: config.llmProviderId || 'galaxyous',
+            systemPrompt: config.systemPrompt || ''
+        };
+
+        return new AgentExecutor(normalized, llmAdapter);
     }
 
     /**

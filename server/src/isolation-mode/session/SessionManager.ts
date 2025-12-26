@@ -95,6 +95,14 @@ export class SessionManager {
             createdAt: now,
         };
 
+        // 解析用户 LLM 配置（如有）
+        const llmAdapter = config.llmConfig
+            ? createLlmAdapterFromUserConfig(config.llmConfig)
+            : getDefaultLlmAdapter();
+        if (config.llmConfig && !llmAdapter.isAvailable()) {
+            throw new SessionError('Invalid LLM configuration', id);
+        }
+
         // 保存配置
         this.sessions.set(id, config);
 
@@ -105,11 +113,6 @@ export class SessionManager {
         const sessionRuleEngine = new RuleEngine();
         sessionRuleEngine.setRules(rules);
         moderatorController.setRuleEngine(id, sessionRuleEngine);
-
-        // 解析用户 LLM 配置（如有）
-        const llmAdapter = config.llmConfig
-            ? createLlmAdapterFromUserConfig(config.llmConfig)
-            : getDefaultLlmAdapter();
 
         // 创建 Agent 实例并注册
         for (const agentConfig of config.agents) {
@@ -168,7 +171,7 @@ export class SessionManager {
      */
     async delete(sessionId: string): Promise<void> {
         this.sessions.delete(sessionId);
-        eventLogService.clearSession(sessionId);
+        await eventLogService.clearSession(sessionId);
         eventBus.clearSession(sessionId);
         moderatorController.clearSession(sessionId);
     }
@@ -176,19 +179,23 @@ export class SessionManager {
     /**
      * 获取用户的所有会话
      */
-    listByUser(userId: string): SessionSummary[] {
-        const summaries: SessionSummary[] = [];
+    async listByUser(userId: string): Promise<SessionSummary[]> {
+        const summaries = await Promise.all(
+            Array.from(this.sessions.entries()).map(async ([sessionId, config]) => {
+                if (config.createdBy !== userId) {
+                    return null;
+                }
 
-        this.sessions.forEach((config, sessionId) => {
-            if (config.createdBy === userId) {
                 const state = moderatorController.getSessionState(sessionId);
-                summaries.push({
+                const eventCount = await eventLogService.getEventCount(sessionId);
+
+                return {
                     sessionId,
                     title: config.title,
                     topic: config.topic,
                     scenarioName: config.scenario.name,
                     agentCount: config.agents.length,
-                    eventCount: eventLogService.getEventCount(sessionId),
+                    eventCount,
                     totalRounds: state?.currentRound || 0,
                     duration: state?.endedAt
                         ? state.endedAt - (state.startedAt || config.createdAt)
@@ -196,11 +203,13 @@ export class SessionManager {
                     status: state?.status || 'pending',
                     createdAt: config.createdAt,
                     endedAt: state?.endedAt,
-                });
-            }
-        });
+                } as SessionSummary;
+            })
+        );
 
-        return summaries.sort((a, b) => b.createdAt - a.createdAt);
+        return summaries
+            .filter((summary): summary is SessionSummary => summary !== null)
+            .sort((a, b) => b.createdAt - a.createdAt);
     }
 }
 

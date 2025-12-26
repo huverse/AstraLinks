@@ -5,6 +5,7 @@
 import sessionRoutes from './session.routes';
 import agentRoutes from './agent.routes';
 import eventRoutes from './event.routes';
+import scenarioRoutes from './scenario.routes';
 
-export { sessionRoutes, agentRoutes, eventRoutes };
-export default { sessionRoutes, agentRoutes, eventRoutes };
+export { sessionRoutes, agentRoutes, eventRoutes, scenarioRoutes };
+export default { sessionRoutes, agentRoutes, eventRoutes, scenarioRoutes };

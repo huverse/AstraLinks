@@ -8,6 +8,7 @@
 import { ILlmAdapter } from './ILlmAdapter';
 import { DisabledAdapter, disabledAdapter } from './DisabledAdapter';
 import { GeminiAdapter } from './GeminiAdapter';
+import { OpenAICompatibleAdapter } from './OpenAICompatibleAdapter';
 import { worldEngineConfig } from '../../config/world-engine.config';
 import { EncryptedLlmConfig } from '../core/types';
 import { decryptLlmConfig, isValidEncryptedConfig } from '../utils/crypto';
@@ -35,6 +36,20 @@ export function createLlmAdapter(): ILlmAdapter {
             return new GeminiAdapter({
                 model: worldEngineConfig.llm.model,
                 apiKey: worldEngineConfig.llm.key,
+                baseUrl: worldEngineConfig.llm.baseUrl,
+                timeout: 30000,
+                maxRetries: 2
+            });
+
+        case 'openai':
+        case 'openai-compatible':
+        case 'openai_compatible':
+        case 'openai-compat':
+        case 'openai_compat':
+            return new OpenAICompatibleAdapter({
+                model: worldEngineConfig.llm.model,
+                apiKey: worldEngineConfig.llm.key,
+                baseUrl: worldEngineConfig.llm.baseUrl,
                 timeout: 30000,
                 maxRetries: 2
             });
@@ -88,9 +103,7 @@ export function createLlmAdapterFromUserConfig(encryptedConfig?: EncryptedLlmCon
                 });
 
             case 'OPENAI_COMPATIBLE':
-                // 使用 GeminiAdapter 的 OpenAI 兼容模式
-                // 注: 如需完整支持，可创建 OpenAICompatibleAdapter
-                return new GeminiAdapter({
+                return new OpenAICompatibleAdapter({
                     apiKey: config.apiKey,
                     baseUrl: config.baseUrl || 'https://api.openai.com/v1',
                     model: config.modelName,

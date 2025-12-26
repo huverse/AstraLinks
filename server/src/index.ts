@@ -41,11 +41,14 @@ import { initWorkflowQueue, setSocketIO } from './services/workflowQueue';
 import { initScheduler } from './services/scheduler';
 import { initWorldEngineSocket } from './isolation-mode/websocket';
 import { initializeWebSocketGateway } from './isolation-mode/api/websocket/DiscussionGateway';
-import { sessionRoutes as isolationSessionRoutes, agentRoutes as isolationAgentRoutes, eventRoutes as isolationEventRoutes } from './isolation-mode/api/routes';
+import { sessionRoutes as isolationSessionRoutes, agentRoutes as isolationAgentRoutes, eventRoutes as isolationEventRoutes, scenarioRoutes as isolationScenarioRoutes } from './isolation-mode/api/routes';
 import { validateConfig, isProductionLike } from './config/world-engine.config';
 import { appLogger, logStartup } from './services/world-engine-logger';
+import { warnEnvDuplicates, warnInsecureTlsSetting } from './config/env.guard';
 
 dotenv.config();
+warnEnvDuplicates();
+warnInsecureTlsSetting();
 
 const app = express();
 const httpServer = createServer(app);
@@ -95,6 +98,7 @@ app.use('/api/v1/world-engine', worldEngineRoutes); // World Engine API v1
 app.use('/api/isolation/sessions', isolationSessionRoutes);
 app.use('/api/isolation/agents', isolationAgentRoutes);
 app.use('/api/isolation/events', isolationEventRoutes);
+app.use('/api/isolation/scenarios', isolationScenarioRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {

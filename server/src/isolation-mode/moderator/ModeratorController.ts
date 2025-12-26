@@ -59,7 +59,7 @@ export class ModeratorController implements IModeratorController {
         state.currentRound = 1;
 
         // 发布 session:start 事件
-        this.publishSystemEvent(sessionId, 'SESSION_START', {
+        await this.publishSystemEvent(sessionId, 'SESSION_START', {
             message: '讨论开始',
             round: 1
         });
@@ -96,7 +96,7 @@ export class ModeratorController implements IModeratorController {
             state.status = 'paused';
 
             // 发布 session:pause 事件
-            this.publishSystemEvent(sessionId, 'SESSION_PAUSE', {
+            await this.publishSystemEvent(sessionId, 'SESSION_PAUSE', {
                 message: '讨论已暂停',
                 round: state.currentRound
             });
@@ -114,7 +114,7 @@ export class ModeratorController implements IModeratorController {
             state.status = 'active';
 
             // 发布 session:resume 事件
-            this.publishSystemEvent(sessionId, 'SESSION_RESUME', {
+            await this.publishSystemEvent(sessionId, 'SESSION_RESUME', {
                 message: '讨论已恢复',
                 round: state.currentRound
             });
@@ -133,7 +133,7 @@ export class ModeratorController implements IModeratorController {
             state.endedAt = Date.now();
 
             // 发布 session:end 事件
-            this.publishSystemEvent(sessionId, 'SESSION_END', {
+            await this.publishSystemEvent(sessionId, 'SESSION_END', {
                 message: reason || '讨论正常结束',
                 round: state.currentRound,
                 reason
@@ -157,7 +157,7 @@ export class ModeratorController implements IModeratorController {
             state.status = 'aborted';
             state.endedAt = Date.now();
 
-            this.publishSystemEvent(sessionId, 'SESSION_ABORTED', {
+            void this.publishSystemEvent(sessionId, 'SESSION_ABORTED', {
                 message: reason,
                 round: state.currentRound,
                 reason
@@ -198,7 +198,7 @@ export class ModeratorController implements IModeratorController {
             state.currentSpeakerId = agentId;
 
             // 发布 moderator:direct 事件
-            this.publishSystemEvent(sessionId, 'MODERATOR_DIRECT', {
+            await this.publishSystemEvent(sessionId, 'MODERATOR_DIRECT', {
                 message: `主持人指定 ${agentId} 发言`,
                 targetAgentId: agentId
             });
@@ -227,7 +227,7 @@ export class ModeratorController implements IModeratorController {
             state.currentRound += 1;
 
             // 发布 round:advance 事件
-            this.publishSystemEvent(sessionId, 'ROUND_ADVANCE', {
+            await this.publishSystemEvent(sessionId, 'ROUND_ADVANCE', {
                 message: `进入第 ${state.currentRound} 轮`,
                 round: state.currentRound
             });
@@ -262,12 +262,12 @@ export class ModeratorController implements IModeratorController {
     /**
      * 发布系统事件
      */
-    private publishSystemEvent(
+    private async publishSystemEvent(
         sessionId: string,
         action: string,
         details: Record<string, unknown>
-    ): void {
-        const event = eventLogService.appendEvent({
+    ): Promise<void> {
+        const event = await eventLogService.appendEvent({
             sessionId,
             type: EventType.SYSTEM,
             speaker: 'moderator',

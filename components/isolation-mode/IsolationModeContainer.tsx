@@ -57,6 +57,13 @@ interface Scenario {
     type: string;
 }
 
+const DEFAULT_SCENARIOS: Scenario[] = [
+    { id: 'debate', name: '辩论', description: '正反双方围绕主题辩论', type: 'debate' },
+    { id: 'brainstorm', name: '头脑风暴', description: '自由发散思维，产生创意', type: 'brainstorm' },
+    { id: 'review', name: '项目评审', description: '多角度评估项目方案', type: 'review' },
+    { id: 'academic', name: '学术研讨', description: '深入探讨学术问题', type: 'academic' },
+];
+
 interface IsolationModeContainerProps {
     onExit: () => void;
     participants?: Participant[]; // 从 Galaxyous 配置中心传递的 AI 配置
@@ -176,12 +183,8 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [error, setError] = useState<string | null>(null);
 
     // 场景
-    const [scenarios] = useState<Scenario[]>([
-        { id: 'debate', name: '辩论', description: '正反双方围绕主题辩论', type: 'debate' },
-        { id: 'brainstorm', name: '头脑风暴', description: '自由发散思维，产生创意', type: 'brainstorm' },
-        { id: 'review', name: '项目评审', description: '多角度评估项目方案', type: 'review' },
-        { id: 'academic', name: '学术研讨', description: '深入探讨学术问题', type: 'academic' },
-    ]);
+    const [scenarios, setScenarios] = useState<Scenario[]>(DEFAULT_SCENARIOS);
+    const [scenarioLoading, setScenarioLoading] = useState(false);
     const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
 
     // 会话
@@ -213,6 +216,34 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     useEffect(() => {
         loadSessions();
     }, [loadSessions]);
+
+    // 加载场景预设
+    useEffect(() => {
+        let active = true;
+
+        const loadScenarios = async () => {
+            setScenarioLoading(true);
+            try {
+                const response = await fetch(`${API_BASE}/api/isolation/scenarios`);
+                if (!response.ok) return;
+                const data = await response.json();
+                const list = Array.isArray(data?.data) ? data.data : [];
+                if (active && list.length > 0) {
+                    setScenarios(list);
+                }
+            } catch (e: any) {
+                isolationLogger.warn('Failed to load scenarios', { error: e?.message });
+            } finally {
+                if (active) setScenarioLoading(false);
+            }
+        };
+
+        loadScenarios();
+
+        return () => {
+            active = false;
+        };
+    }, []);
 
     // Socket 连接管理 - 只在 token 变化时重新连接
     const [reconnectInfo, setReconnectInfo] = useState({ attempts: 0, isReconnecting: false });
@@ -297,9 +328,10 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         setError(null);
 
         try {
+            const scenarioInfo = scenarios.find(s => s.id === selectedScenario);
             // 从 participants 获取启用的 AI 配置 (Galaxyous 配置中心)
             let encryptedLlmConfig = undefined;
-            const enabledParticipant = participants.find(p => p.config.enabled);
+            const enabledParticipant = participants.find(p => p.config.enabled && p.config.apiKey);
 
             if (enabledParticipant) {
                 const llmConfigData: LlmConfigData = {
@@ -321,7 +353,11 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                 body: JSON.stringify({
                     title: `${topic} - ${new Date().toLocaleDateString()}`,
                     topic,
-                    scenario: { id: selectedScenario, name: selectedScenario, type: selectedScenario },
+                    scenario: {
+                        id: selectedScenario,
+                        name: scenarioInfo?.name || selectedScenario,
+                        type: scenarioInfo?.type || selectedScenario
+                    },
                     agents: [
                         { id: 'agent-1', name: '正方', role: 'debater', systemPrompt: '你是正方辩手' },
                         { id: 'agent-2', name: '反方', role: 'debater', systemPrompt: '你是反方辩手' },
@@ -448,11 +484,15 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                     <div className="max-w-3xl mx-auto space-y-6">
                         <div>
                             <h2 className="text-lg font-semibold text-white mb-4">选择讨论场景</h2>
-                            <ScenarioSelector
-                                scenarios={scenarios}
-                                selected={selectedScenario}
-                                onSelect={setSelectedScenario}
-                            />
+                            {scenarioLoading && scenarios.length === 0 ? (
+                                <div className="text-sm text-slate-400">加载场景中...</div>
+                            ) : (
+                                <ScenarioSelector
+                                    scenarios={scenarios}
+                                    selected={selectedScenario}
+                                    onSelect={setSelectedScenario}
+                                />
+                            )}
                         </div>
 
                         <div>

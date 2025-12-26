@@ -14,6 +14,9 @@ const getEncryptionKey = (): string => {
     // @ts-ignore
     const key = import.meta.env.VITE_ISOLATION_ENCRYPTION_KEY;
     if (!key) {
+        if (import.meta.env.PROD) {
+            throw new Error('Missing VITE_ISOLATION_ENCRYPTION_KEY');
+        }
         // 开发环境使用默认密钥（生产环境必须覆盖）
         return 'default-dev-key-do-not-use-in-production!!';
     }

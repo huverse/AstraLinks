@@ -56,6 +56,10 @@ export class MemoryEventLogStore implements IEventLogStore {
         return next;
     }
 
+    async setSequence(sessionId: string, sequence: number): Promise<void> {
+        this.sequences.set(sessionId, sequence);
+    }
+
     async prune(sessionId: string, keepCount: number): Promise<number> {
         const events = this.events.get(sessionId);
         if (!events || events.length <= keepCount) {

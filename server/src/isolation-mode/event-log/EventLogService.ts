@@ -1,4 +1,4 @@
-/**
+﻿/**
  * EventLogService - 公共事件日志服务
  * 
  * 这是整个多 Agent 讨论系统中：
@@ -23,6 +23,8 @@ import {
     AgentVisibleEvent,
     toAgentVisibleEvent
 } from '../core/types/event.types';
+import { IEventLogStore } from './IEventLogStore';
+import { getEventLogStore } from './RedisEventLogStore';
 
 // ============================================
 // 常量
@@ -35,25 +37,32 @@ const DEFAULT_LIMIT = 20;
 const MAX_LIMIT = 100;
 
 /** 单个会话最大事件数（超过则自动裁剪） */
-const MAX_EVENTS_PER_SESSION = 500;
+const DEFAULT_MAX_EVENTS_PER_SESSION = 500;
 
 // ============================================
 // EventLogService 实现
 // ============================================
 
-/**
- * 事件日志服务（内存实现）
- * 
- * 线程安全注意事项：
- * - Node.js 单线程，无需加锁
- * - 如需多进程部署，请替换为 Redis 实现
- */
 export class EventLogService {
-    /** 会话 -> 事件列表 */
-    private store: Map<string, Event[]> = new Map();
+    private store: IEventLogStore | null = null;
 
-    /** 会话 -> 序号计数器 */
-    private sequenceCounters: Map<string, number> = new Map();
+    private getStore(): IEventLogStore {
+        if (!this.store) {
+            this.store = getEventLogStore();
+        }
+        return this.store;
+    }
+
+    private getMaxEventsPerSession(): number {
+        const raw = process.env.WE_EVENT_LOG_MAX_SIZE;
+        if (!raw) {
+            return DEFAULT_MAX_EVENTS_PER_SESSION;
+        }
+        const parsed = parseInt(raw, 10);
+        return Number.isFinite(parsed) && parsed > 0
+            ? parsed
+            : DEFAULT_MAX_EVENTS_PER_SESSION;
+    }
 
     // ===== 写入操作 =====
 
@@ -63,25 +72,17 @@ export class EventLogService {
      * @param params 事件参数（不含 eventId、sequence、timestamp）
      * @returns 创建的完整事件
      */
-    appendEvent(params: {
+    async appendEvent(params: {
         sessionId: string;
         type: EventType;
         speaker: EventSpeaker;
         content: string | EventContentPayload;
         meta?: EventMeta;
-    }): Event {
+    }): Promise<Event> {
         const { sessionId, type, speaker, content, meta } = params;
+        const store = this.getStore();
 
-        // 获取或创建会话存储
-        if (!this.store.has(sessionId)) {
-            this.store.set(sessionId, []);
-            this.sequenceCounters.set(sessionId, 0);
-        }
-
-        // 生成事件
-        const sequence = (this.sequenceCounters.get(sessionId) || 0) + 1;
-        this.sequenceCounters.set(sessionId, sequence);
-
+        const sequence = await store.getNextSequence(sessionId);
         const event: Event = {
             eventId: uuidv4(),
             type,
@@ -93,13 +94,12 @@ export class EventLogService {
             meta,
         };
 
-        // 追加事件
-        const events = this.store.get(sessionId)!;
-        events.push(event);
+        await store.append(event);
 
-        // 自动裁剪检查
-        if (events.length > MAX_EVENTS_PER_SESSION) {
-            this.autoPrune(sessionId);
+        const maxEvents = this.getMaxEventsPerSession();
+        const count = await store.count(sessionId);
+        if (count > maxEvents) {
+            await this.autoPrune(sessionId, maxEvents);
         }
 
         return event;
@@ -110,23 +110,15 @@ export class EventLogService {
     /**
      * 获取最近的事件
      * 
-     * ⚠️ 必须显式指定 limit，防止 token 爆炸
+     * ?? 必须显式指定 limit，防止 token 爆炸
      * 
      * @param sessionId 会话 ID
      * @param limit 返回事件数量上限（必填，最大 100）
      * @returns 最近的事件列表（按时间正序）
      */
-    getRecentEvents(sessionId: string, limit: number): Event[] {
+    async getRecentEvents(sessionId: string, limit: number): Promise<Event[]> {
         this.validateLimit(limit);
-
-        const events = this.store.get(sessionId);
-        if (!events || events.length === 0) {
-            return [];
-        }
-
-        // 取最后 N 条，保持时间正序
-        const start = Math.max(0, events.length - limit);
-        return events.slice(start);
+        return this.getStore().getRecent(sessionId, limit);
     }
 
     /**
@@ -137,18 +129,15 @@ export class EventLogService {
      * @param limit 返回事件数量上限（默认 20，最大 100）
      * @returns 匹配类型的事件列表（按时间正序）
      */
-    getEventsByType(sessionId: string, type: EventType, limit: number = DEFAULT_LIMIT): Event[] {
+    async getEventsByType(sessionId: string, type: EventType, limit: number = DEFAULT_LIMIT): Promise<Event[]> {
         this.validateLimit(limit);
 
-        const events = this.store.get(sessionId);
-        if (!events) {
-            return [];
+        const events = await this.getStore().getByType(sessionId, type);
+        if (events.length <= limit) {
+            return events;
         }
 
-        // 过滤 + 取最后 N 条
-        const filtered = events.filter(e => e.type === type);
-        const start = Math.max(0, filtered.length - limit);
-        return filtered.slice(start);
+        return events.slice(-limit);
     }
 
     /**
@@ -159,18 +148,14 @@ export class EventLogService {
      * @param limit 返回事件数量上限（默认 20，最大 100）
      * @returns 序号大于 afterSequence 的事件
      */
-    getEventsAfterSequence(
+    async getEventsAfterSequence(
         sessionId: string,
         afterSequence: number,
         limit: number = DEFAULT_LIMIT
-    ): Event[] {
+    ): Promise<Event[]> {
         this.validateLimit(limit);
 
-        const events = this.store.get(sessionId);
-        if (!events) {
-            return [];
-        }
-
+        const events = await this.getStore().getBySession(sessionId);
         return events
             .filter(e => e.sequence > afterSequence)
             .slice(0, limit);
@@ -185,8 +170,8 @@ export class EventLogService {
      * @param limit 返回事件数量上限
      * @returns Agent 可见的精简事件列表
      */
-    getAgentVisibleEvents(sessionId: string, limit: number): AgentVisibleEvent[] {
-        const events = this.getRecentEvents(sessionId, limit);
+    async getAgentVisibleEvents(sessionId: string, limit: number): Promise<AgentVisibleEvent[]> {
+        const events = await this.getRecentEvents(sessionId, limit);
         return events.map(toAgentVisibleEvent);
     }
 
@@ -199,28 +184,24 @@ export class EventLogService {
      * @param strategy 裁剪策略
      * @returns 被裁剪的事件数量
      */
-    pruneEvents(sessionId: string, strategy: PruneStrategy): number {
-        const events = this.store.get(sessionId);
-        if (!events || events.length === 0) {
+    async pruneEvents(sessionId: string, strategy: PruneStrategy): Promise<number> {
+        const events = await this.getStore().getBySession(sessionId);
+        if (events.length === 0) {
             return 0;
         }
 
-        const originalLength = events.length;
         let remaining: Event[];
 
         switch (strategy.type) {
             case 'byCount':
-                // 保留最近 N 条
                 remaining = events.slice(-strategy.keep);
                 break;
 
             case 'byType':
-                // 只保留指定类型的事件
                 remaining = events.filter(e => strategy.keepTypes.includes(e.type));
                 break;
 
             case 'beforeSequence':
-                // 删除指定序号之前的事件
                 remaining = events.filter(e => e.sequence >= strategy.sequence);
                 break;
 
@@ -228,8 +209,8 @@ export class EventLogService {
                 remaining = events;
         }
 
-        this.store.set(sessionId, remaining);
-        return originalLength - remaining.length;
+        await this.replaceSessionEvents(sessionId, remaining);
+        return Math.max(0, events.length - remaining.length);
     }
 
     // ===== 辅助方法 =====
@@ -239,25 +220,23 @@ export class EventLogService {
      * 
      * 策略：保留所有 SUMMARY 和最近一半的其他事件
      */
-    private autoPrune(sessionId: string): void {
-        const events = this.store.get(sessionId);
-        if (!events) return;
+    private async autoPrune(sessionId: string, maxEvents: number): Promise<void> {
+        const events = await this.getStore().getBySession(sessionId);
+        if (events.length <= maxEvents) {
+            return;
+        }
 
-        // 分离 SUMMARY 事件和其他事件
         const summaries = events.filter(e => e.type === EventType.SUMMARY);
         const others = events.filter(e => e.type !== EventType.SUMMARY);
 
-        // 保留最近一半的其他事件
-        const keepCount = Math.floor(MAX_EVENTS_PER_SESSION / 2);
+        const keepCount = Math.floor(maxEvents / 2);
         const keptOthers = others.slice(-keepCount);
 
-        // 合并并按序号排序
         const remaining = [...summaries, ...keptOthers]
             .sort((a, b) => a.sequence - b.sequence);
 
-        this.store.set(sessionId, remaining);
+        await this.replaceSessionEvents(sessionId, remaining);
 
-        // 使用结构化日志
         import('../../services/world-engine-logger').then(({ isolationLogger }) => {
             isolationLogger.info({
                 sessionId,
@@ -265,6 +244,20 @@ export class EventLogService {
                 after: remaining.length
             }, 'event_log_auto_pruned');
         });
+    }
+
+    private async replaceSessionEvents(sessionId: string, events: Event[]): Promise<void> {
+        const store = this.getStore();
+        await store.clear(sessionId);
+
+        for (const event of events) {
+            await store.append(event);
+        }
+
+        const lastSequence = events.length > 0
+            ? events[events.length - 1].sequence
+            : 0;
+        await store.setSequence(sessionId, lastSequence);
     }
 
     /**
@@ -284,30 +277,31 @@ export class EventLogService {
     /**
      * 获取会话事件数量
      */
-    getEventCount(sessionId: string): number {
-        return this.store.get(sessionId)?.length || 0;
+    async getEventCount(sessionId: string): Promise<number> {
+        return this.getStore().count(sessionId);
     }
 
     /**
      * 获取会话当前序号
      */
-    getCurrentSequence(sessionId: string): number {
-        return this.sequenceCounters.get(sessionId) || 0;
+    async getCurrentSequence(sessionId: string): Promise<number> {
+        const events = await this.getStore().getRecent(sessionId, 1);
+        return events.length > 0 ? events[events.length - 1].sequence : 0;
     }
 
     /**
      * 清除会话数据
      */
-    clearSession(sessionId: string): void {
-        this.store.delete(sessionId);
-        this.sequenceCounters.delete(sessionId);
+    async clearSession(sessionId: string): Promise<void> {
+        await this.getStore().clear(sessionId);
     }
 
     /**
      * 检查会话是否存在
      */
-    hasSession(sessionId: string): boolean {
-        return this.store.has(sessionId);
+    async hasSession(sessionId: string): Promise<boolean> {
+        const count = await this.getStore().count(sessionId);
+        return count > 0;
     }
 }
 

@@ -1611,7 +1611,7 @@ const App: React.FC = () => {
         className={`h-[100dvh] transition-transform duration-600 ${isolationModeFlipping ? 'animate-flip-in' : ''}`}
         style={{ perspective: '1000px' }}
       >
-        <IsolationModeContainer onExit={toggleIsolationMode} />
+        <IsolationModeContainer onExit={toggleIsolationMode} participants={participants} />
         <style>{`
           @keyframes flip-in {
             0% { transform: rotateY(180deg); opacity: 0; }

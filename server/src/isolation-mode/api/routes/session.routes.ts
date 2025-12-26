@@ -14,7 +14,7 @@ const router = Router();
 router.get('/', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user?.id || 'anonymous';
-        const sessions = sessionManager.listByUser(userId);
+        const sessions = await sessionManager.listByUser(userId);
         res.json({ success: true, data: sessions });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });

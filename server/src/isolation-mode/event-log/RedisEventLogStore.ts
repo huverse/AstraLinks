@@ -108,6 +108,12 @@ export class RedisEventLogStore implements IEventLogStore {
         return seq;
     }
 
+    async setSequence(sessionId: string, sequence: number): Promise<void> {
+        const key = this.key(sessionId, 'seq');
+        await this.redis.set(key, String(sequence));
+        await this.redis.expire(key, EVENT_TTL);
+    }
+
     async prune(sessionId: string, keepCount: number): Promise<number> {
         const key = this.key(sessionId, 'list');
         const currentLen = await this.redis.llen(key);

@@ -9,5 +9,6 @@ export * from './providers';
 export * from './ILlmAdapter';
 export * from './DisabledAdapter';
 export * from './GeminiAdapter';
+export * from './OpenAICompatibleAdapter';
 export * from './LlmAdapterFactory';
 

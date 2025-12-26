@@ -206,7 +206,7 @@ export class DiscussionOrchestrator {
         const events: Event[] = [];
 
         // 1. 构建 Agent 可见上下文
-        const visibleContext = this.buildVisibleContext(session);
+        const visibleContext = await this.buildVisibleContext(session);
 
         // 2. 收集所有 Agent 的 Intent
         const intents: Intent[] = [];
@@ -226,7 +226,7 @@ export class DiscussionOrchestrator {
                     });
 
                     // 记录 INTENT 事件
-                    const intentEvent = eventLogService.appendEvent({
+                    const intentEvent = await eventLogService.appendEvent({
                         sessionId,
                         type: EventType.INTENT,
                         speaker: agentId,
@@ -241,7 +241,7 @@ export class DiscussionOrchestrator {
         }
 
         // 3. 获取最近事件
-        const recentEvents = eventLogService.getRecentEvents(sessionId, 10);
+        const recentEvents = await eventLogService.getRecentEvents(sessionId, 10);
 
         // 4. Controller 决策
         const decision = controller.decideNextAction(moderatorState, intents, recentEvents);
@@ -261,7 +261,7 @@ export class DiscussionOrchestrator {
 
             case ModeratorAction.CALL_AGENT:
                 // 记录点名事件
-                const callEvent = eventLogService.appendEvent({
+                const callEvent = await eventLogService.appendEvent({
                     sessionId,
                     type: EventType.SYSTEM,
                     speaker: 'moderator',
@@ -287,7 +287,7 @@ export class DiscussionOrchestrator {
                 break;
 
             case ModeratorAction.SWITCH_PHASE:
-                const phaseEvent = eventLogService.appendEvent({
+                const phaseEvent = await eventLogService.appendEvent({
                     sessionId,
                     type: EventType.SYSTEM,
                     speaker: 'system',
@@ -307,7 +307,7 @@ export class DiscussionOrchestrator {
                 break;
 
             case ModeratorAction.END_DISCUSSION:
-                const endEvent = eventLogService.appendEvent({
+                const endEvent = await eventLogService.appendEvent({
                     sessionId,
                     type: EventType.SYSTEM,
                     speaker: 'system',
@@ -335,7 +335,7 @@ export class DiscussionOrchestrator {
         try {
             const speechOutput = await executor.runSpeechGeneration(visibleContext);
 
-            return eventLogService.appendEvent({
+            return await eventLogService.appendEvent({
                 sessionId: session.sessionId,
                 type: EventType.SPEECH,
                 speaker: agentId,
@@ -355,7 +355,7 @@ export class DiscussionOrchestrator {
         const { sessionId, scenario, moderatorState } = session;
 
         // 获取精简的事件
-        const recentEvents = eventLogService.getRecentEvents(sessionId, 10);
+        const recentEvents = await eventLogService.getRecentEvents(sessionId, 10);
         const condensedEvents = recentEvents
             .filter(e => e.type === EventType.SPEECH)
             .map(e => ({
@@ -381,7 +381,7 @@ export class DiscussionOrchestrator {
         try {
             const summaryOutput = await this.moderatorLLM.generateSummary(summaryInput);
 
-            return eventLogService.appendEvent({
+            return await eventLogService.appendEvent({
                 sessionId,
                 type: EventType.SUMMARY,
                 speaker: 'moderator',
@@ -407,7 +407,7 @@ export class DiscussionOrchestrator {
     ): Promise<Event | null> {
         const { sessionId, scenario, moderatorState } = session;
 
-        const recentEvents = eventLogService.getRecentEvents(sessionId, 5);
+        const recentEvents = await eventLogService.getRecentEvents(sessionId, 5);
 
         const questionInput: QuestionInput = {
             topic: scenario.description,
@@ -431,7 +431,7 @@ export class DiscussionOrchestrator {
         try {
             const questionOutput = await this.moderatorLLM.generateQuestion(questionInput);
 
-            return eventLogService.appendEvent({
+            return await eventLogService.appendEvent({
                 sessionId,
                 type: EventType.SYSTEM,
                 speaker: 'moderator',
@@ -447,14 +447,14 @@ export class DiscussionOrchestrator {
     /**
      * 构建 Agent 可见上下文
      */
-    private buildVisibleContext(session: DiscussionSession): AgentVisibleContext {
+    private async buildVisibleContext(session: DiscussionSession): Promise<AgentVisibleContext> {
         const { sessionId, scenario, moderatorState } = session;
 
         // 获取最近事件
-        const recentEvents = eventLogService.getRecentEvents(sessionId, 10);
+        const recentEvents = await eventLogService.getRecentEvents(sessionId, 10);
 
         // 获取最近的 Summary（如果有）
-        const summaryEvents = eventLogService.getEventsByType(sessionId, EventType.SUMMARY, 1);
+        const summaryEvents = await eventLogService.getEventsByType(sessionId, EventType.SUMMARY, 1);
         const phaseSummary = summaryEvents.length > 0
             ? (typeof summaryEvents[0].content === 'string' ? summaryEvents[0].content : undefined)
             : undefined;
@@ -495,8 +495,8 @@ export class DiscussionOrchestrator {
     /**
      * 清理会话
      */
-    cleanupSession(sessionId: string): void {
-        eventLogService.clearSession(sessionId);
+    async cleanupSession(sessionId: string): Promise<void> {
+        await eventLogService.clearSession(sessionId);
         this.agentService.clear();
     }
 }

@@ -101,7 +101,7 @@ export function initializeWebSocketGateway(io: SocketIOServer): void {
             }
         };
 
-        const joinSession = (data: JoinSessionRequest, callback?: (response: any) => void) => {
+        const joinSession = async (data: JoinSessionRequest, callback?: (response: any) => void) => {
             const { sessionId, requestFullState } = data;
 
             const session = sessionManager.get(sessionId);
@@ -138,14 +138,14 @@ export function initializeWebSocketGateway(io: SocketIOServer): void {
                 }
             });
 
-            const currentSequence = eventLogService.getCurrentSequence(sessionId);
+            const currentSequence = await eventLogService.getCurrentSequence(sessionId);
             const initialState = buildStateUpdate(sessionId, currentSequence);
             if (initialState) {
                 socket.emit('state_update', initialState);
             }
 
             if (requestFullState) {
-                const events = eventLogService.getRecentEvents(sessionId, MAX_FULL_STATE_EVENTS);
+                const events = await eventLogService.getRecentEvents(sessionId, MAX_FULL_STATE_EVENTS);
                 socket.emit('full_state', {
                     sessionId,
                     worldState: initialState?.worldState || {},
@@ -158,11 +158,11 @@ export function initializeWebSocketGateway(io: SocketIOServer): void {
         };
 
         socket.on('join_session', (data: JoinSessionRequest, callback?: (response: any) => void) => {
-            joinSession(data, callback);
+            void joinSession(data, callback);
         });
 
         socket.on('join:session', (data: { sessionId: string }) => {
-            joinSession({ sessionId: data.sessionId, requestFullState: false });
+            void joinSession({ sessionId: data.sessionId, requestFullState: false });
         });
 
         socket.on('leave_session', () => {

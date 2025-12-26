@@ -209,7 +209,7 @@ export class DiscussionLoop {
         }
     ): Promise<void> {
         // 使用 EventLogService 的正确签名
-        const event = eventLogService.appendEvent({
+        const event = await eventLogService.appendEvent({
             sessionId,
             type: eventData.type,
             speaker: eventData.speaker || 'moderator',

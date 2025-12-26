@@ -20,9 +20,9 @@ router.get('/:sessionId', async (req: Request, res: Response) => {
 
         let events;
         if (type && Object.values(EventType).includes(type as EventType)) {
-            events = eventLogService.getEventsByType(sessionId, type as EventType, limitNum);
+            events = await eventLogService.getEventsByType(sessionId, type as EventType, limitNum);
         } else {
-            events = eventLogService.getRecentEvents(sessionId, limitNum);
+            events = await eventLogService.getRecentEvents(sessionId, limitNum);
         }
 
         res.json({ success: true, data: events });
@@ -41,7 +41,7 @@ router.get('/:sessionId/latest', async (req: Request, res: Response) => {
         const { count = '10' } = req.query;
 
         const limitNum = Math.min(parseInt(count as string) || 10, 100);
-        const events = eventLogService.getRecentEvents(sessionId, limitNum);
+        const events = await eventLogService.getRecentEvents(sessionId, limitNum);
 
         res.json({ success: true, data: events });
     } catch (error: any) {
@@ -59,7 +59,7 @@ router.get('/:sessionId/after/:sequence', async (req: Request, res: Response) =>
         const { limit = '20' } = req.query;
 
         const limitNum = Math.min(parseInt(limit as string) || 20, 100);
-        const events = eventLogService.getEventsAfterSequence(
+        const events = await eventLogService.getEventsAfterSequence(
             sessionId,
             parseInt(sequence),
             limitNum
@@ -81,7 +81,7 @@ router.get('/:sessionId/agent-view', async (req: Request, res: Response) => {
         const { limit = '15' } = req.query;
 
         const limitNum = Math.min(parseInt(limit as string) || 15, 50);
-        const events = eventLogService.getAgentVisibleEvents(sessionId, limitNum);
+        const events = await eventLogService.getAgentVisibleEvents(sessionId, limitNum);
 
         res.json({ success: true, data: events });
     } catch (error: any) {

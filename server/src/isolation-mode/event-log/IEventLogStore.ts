@@ -44,6 +44,11 @@ export interface IEventLogStore {
     getNextSequence(sessionId: string): Promise<number>;
 
     /**
+     * 设置当前序号
+     */
+    setSequence(sessionId: string, sequence: number): Promise<void>;
+
+    /**
      * 清理过期事件 (保留最近 N 条)
      */
     prune(sessionId: string, keepCount: number): Promise<number>;
