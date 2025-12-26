@@ -31,7 +31,7 @@ npm run build
 popd >/dev/null
 
 echo ">>> Restart pm2"
-pm2 restart astralinks-api || pm2 start dist/index.js --name astralinks-api
+pm2 startOrRestart ecosystem.config.cjs --update-env
 
 echo ">>> Deploy finished"
 echo ">>> Logs: pm2 logs astralinks-api"
