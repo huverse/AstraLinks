@@ -24,6 +24,12 @@ interface ClientWorldEvent {
     payload: Record<string, unknown>;
 }
 
+type ClientPayload = Record<string, unknown> & {
+    message?: string;
+    content?: string;
+    action?: unknown;
+};
+
 interface StateUpdatePayload {
     sessionId: string;
     worldState: Record<string, unknown>;
@@ -35,11 +41,14 @@ interface StateUpdatePayload {
 const MAX_FULL_STATE_EVENTS = 200;
 
 function toClientWorldEvent(event: Event): ClientWorldEvent {
-    const payload = typeof event.content === 'string'
+    const payload: ClientPayload = typeof event.content === 'string'
         ? { message: event.content }
         : { ...(event.content as Record<string, unknown>) };
 
-    if (!payload.message && !payload.content && payload.action) {
+    const hasMessage = typeof payload.message === 'string' && payload.message.length > 0;
+    const hasContent = typeof payload.content === 'string' && payload.content.length > 0;
+
+    if (!hasMessage && !hasContent && payload.action !== undefined) {
         payload.message = String(payload.action);
     }
 
