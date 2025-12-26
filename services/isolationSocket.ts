@@ -136,7 +136,7 @@ class IsolationSocketService {
     }
 
     /**
-     * 连接到 World Engine WebSocket
+     * 连接到隔离模式 WebSocket
      */
     connect(callbacks?: SocketCallbacks): void {
         if (this.socket?.connected) {
@@ -162,7 +162,7 @@ class IsolationSocketService {
 
         isolationLogger.info('Connecting to WebSocket', { url: wsUrl });
 
-        this.socket = io(`${wsUrl}/world-engine`, {
+        this.socket = io(`${wsUrl}/isolation`, {
             auth: { token },
             // Polling 优先，因为 WebSocket 存在 RSV1 帧问题
             transports: ['polling', 'websocket'],
@@ -321,12 +321,12 @@ class IsolationSocketService {
      */
     joinSession(sessionId: string): Promise<{ success: boolean; worldState?: Record<string, unknown>; error?: string }> {
         return new Promise((resolve) => {
+            this.currentSessionId = sessionId;
+
             if (!this.socket?.connected) {
                 resolve({ success: false, error: 'Not connected' });
                 return;
             }
-
-            this.currentSessionId = sessionId;
 
             this.socket.emit('join_session', { sessionId }, (response: { success: boolean; worldState?: Record<string, unknown>; error?: string }) => {
                 if (response.success) {
@@ -348,21 +348,9 @@ class IsolationSocketService {
         maxTicks?: number;
         problemStatement?: string;
     }): Promise<{ success: boolean; sessionId?: string; worldState?: Record<string, unknown>; error?: string }> {
-        return new Promise((resolve) => {
-            if (!this.socket?.connected) {
-                resolve({ success: false, error: 'Not connected' });
-                return;
-            }
-
-            this.socket.emit('create_session', config, (response: { success: boolean; sessionId?: string; worldState?: Record<string, unknown>; error?: string }) => {
-                if (response.success && response.sessionId) {
-                    this.currentSessionId = response.sessionId;
-                    isolationLogger.info('Created session', { sessionId: response.sessionId });
-                } else {
-                    isolationLogger.error('Failed to create session', { error: response.error });
-                }
-                resolve(response);
-            });
+        return Promise.resolve({
+            success: false,
+            error: 'Isolation socket does not support create_session. Use /api/isolation/sessions.'
         });
     }
 
@@ -377,25 +365,9 @@ class IsolationSocketService {
         terminationReason?: string;
         error?: string;
     }> {
-        return new Promise((resolve) => {
-            if (!this.socket?.connected || !this.currentSessionId) {
-                resolve({ success: false, error: 'Not connected or no session' });
-                return;
-            }
-
-            this.socket.emit('step', {
-                sessionId: this.currentSessionId,
-                actions
-            }, (response: {
-                success: boolean;
-                events?: WorldEvent[];
-                worldState?: Record<string, unknown>;
-                isTerminated?: boolean;
-                terminationReason?: string;
-                error?: string;
-            }) => {
-                resolve(response);
-            });
+        return Promise.resolve({
+            success: false,
+            error: 'Isolation socket does not support step actions.'
         });
     }
 
@@ -408,28 +380,9 @@ class IsolationSocketService {
         tickInterval?: number;
         error?: string;
     }> {
-        return new Promise((resolve) => {
-            if (!this.socket?.connected || !this.currentSessionId) {
-                resolve({ success: false, error: 'Not connected or no session' });
-                return;
-            }
-
-            this.socket.emit('start_auto_simulation', {
-                sessionId: this.currentSessionId,
-                tickInterval
-            }, (response: {
-                success: boolean;
-                message?: string;
-                tickInterval?: number;
-                error?: string;
-            }) => {
-                if (response.success) {
-                    isolationLogger.info('Auto simulation started', { tickInterval: response.tickInterval });
-                } else {
-                    isolationLogger.error('Failed to start auto simulation', { error: response.error });
-                }
-                resolve(response);
-            });
+        return Promise.resolve({
+            success: false,
+            error: 'Isolation socket does not support auto simulation.'
         });
     }
 
@@ -437,20 +390,9 @@ class IsolationSocketService {
      * 停止自动模拟
      */
     stopAutoSimulation(): Promise<{ success: boolean; error?: string }> {
-        return new Promise((resolve) => {
-            if (!this.socket?.connected || !this.currentSessionId) {
-                resolve({ success: false, error: 'Not connected or no session' });
-                return;
-            }
-
-            this.socket.emit('stop_auto_simulation', {
-                sessionId: this.currentSessionId
-            }, (response: { success: boolean; error?: string }) => {
-                if (response.success) {
-                    isolationLogger.info('Auto simulation stopped');
-                }
-                resolve(response);
-            });
+        return Promise.resolve({
+            success: false,
+            error: 'Isolation socket does not support auto simulation.'
         });
     }
 

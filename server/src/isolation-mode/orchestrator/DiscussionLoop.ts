@@ -56,6 +56,10 @@ export class DiscussionLoop {
         }
 
         const fullConfig = { ...DEFAULT_CONFIG, ...config };
+        const sessionConfig = sessionManager.get(sessionId);
+        if (sessionConfig?.maxRounds) {
+            fullConfig.maxRounds = sessionConfig.maxRounds;
+        }
         this.running.set(sessionId, true);
         this.lastProgressTime.set(sessionId, Date.now());
 

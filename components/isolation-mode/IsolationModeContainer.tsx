@@ -108,10 +108,12 @@ const EventTimeline: React.FC<{ events: DiscussionEvent[] }> = ({ events }) => {
                     <p>等待讨论开始...</p>
                 </div>
             ) : (
-                events.map(event => (
+                events.map(event => {
+                    const isSpeech = event.type === 'agent:speak' || event.type === 'SPEECH';
+                    return (
                     <div
                         key={event.id}
-                        className={`p-4 rounded-xl ${event.type === 'agent:speak'
+                        className={`p-4 rounded-xl ${isSpeech
                             ? 'bg-slate-800/50 border border-white/5'
                             : 'bg-purple-500/10 border border-purple-500/20'
                             }`}
@@ -129,7 +131,8 @@ const EventTimeline: React.FC<{ events: DiscussionEvent[] }> = ({ events }) => {
                             {event.payload?.content || event.payload?.message || ''}
                         </div>
                     </div>
-                ))
+                );
+                })
             )}
         </div>
     );
@@ -332,9 +335,14 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             }
 
             const data = await response.json();
+            const sessionId = data.data.id || data.data.sessionId;
+            const joinResult = await isolationSocket.joinSession(sessionId);
+            if (!joinResult.success) {
+                isolationLogger.warn('Failed to join session via socket', { sessionId, error: joinResult.error });
+            }
             setCurrentSession({
                 ...data.data,
-                id: data.data.id || data.data.sessionId,
+                id: sessionId,
                 status: 'pending',
                 currentRound: 0,
                 agents: data.data.agents.map((a: any) => ({ ...a, status: 'idle', speakCount: 0 })),

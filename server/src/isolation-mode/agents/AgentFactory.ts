@@ -7,6 +7,7 @@
 import { AgentConfig } from '../core/types';
 import { IAgent, IAgentFactory } from '../core/interfaces';
 import { AgentExecutor } from './AgentExecutor';
+import { ILlmAdapter } from '../llm';
 // import presets from './presets';
 
 /**
@@ -30,12 +31,12 @@ export class AgentFactory implements IAgentFactory {
     /**
      * 创建 Agent 实例
      */
-    create(config: AgentConfig): IAgent {
+    create(config: AgentConfig, llmAdapter?: ILlmAdapter): IAgent {
         // TODO: 实现 Agent 创建逻辑
         // 1. 验证配置
         // 2. 获取 LLM Provider
         // 3. 创建 Agent 实例
-        return new AgentExecutor(config);
+        return new AgentExecutor(config, llmAdapter);
     }
 
     /**

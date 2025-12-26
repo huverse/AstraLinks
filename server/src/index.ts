@@ -40,6 +40,7 @@ import { initGeminiLiveProxy } from './services/geminiLive';
 import { initWorkflowQueue, setSocketIO } from './services/workflowQueue';
 import { initScheduler } from './services/scheduler';
 import { initWorldEngineSocket } from './isolation-mode/websocket';
+import { initializeWebSocketGateway } from './isolation-mode/api/websocket/DiscussionGateway';
 import { sessionRoutes as isolationSessionRoutes, agentRoutes as isolationAgentRoutes, eventRoutes as isolationEventRoutes } from './isolation-mode/api/routes';
 import { validateConfig, isProductionLike } from './config/world-engine.config';
 import { appLogger, logStartup } from './services/world-engine-logger';
@@ -124,6 +125,8 @@ async function startServer() {
 
         // Initialize World Engine WebSocket namespace
         initWorldEngineSocket(io);
+        // Initialize Isolation Mode WebSocket namespace
+        initializeWebSocketGateway(io);
 
         // Initialize Gemini Live WebSocket proxy (for China users)
         initGeminiLiveProxy(httpServer);

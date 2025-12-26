@@ -15,6 +15,9 @@ const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 16;
 const AUTH_TAG_LENGTH = 16;
 const SALT_LENGTH = 32;
+const PBKDF2_ITERATIONS = 100000;
+const KEY_LENGTH = 32;
+const DEFAULT_SALT = 'salt';
 
 // 从环境变量获取加密密钥（生产环境必须设置）
 const getEncryptionKey = (): string => {
@@ -39,8 +42,29 @@ export interface EncryptedData {
 /**
  * 加密字符串
  */
+function deriveKey(): Buffer {
+    return crypto.pbkdf2Sync(getEncryptionKey(), DEFAULT_SALT, PBKDF2_ITERATIONS, KEY_LENGTH, 'sha256');
+}
+
+function deriveLegacyKey(): Buffer {
+    return crypto.scryptSync(getEncryptionKey(), DEFAULT_SALT, KEY_LENGTH);
+}
+
+function decryptWithKey(encrypted: EncryptedData, key: Buffer): string {
+    const iv = Buffer.from(encrypted.iv, 'base64');
+    const authTag = Buffer.from(encrypted.authTag, 'base64');
+
+    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+    decipher.setAuthTag(authTag);
+
+    let plaintext = decipher.update(encrypted.ciphertext, 'base64', 'utf8');
+    plaintext += decipher.final('utf8');
+
+    return plaintext;
+}
+
 export function encrypt(plaintext: string): EncryptedData {
-    const key = crypto.scryptSync(getEncryptionKey(), 'salt', 32);
+    const key = deriveKey();
     const iv = crypto.randomBytes(IV_LENGTH);
 
     const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
@@ -61,17 +85,12 @@ export function encrypt(plaintext: string): EncryptedData {
  * 解密字符串
  */
 export function decrypt(encrypted: EncryptedData): string {
-    const key = crypto.scryptSync(getEncryptionKey(), 'salt', 32);
-    const iv = Buffer.from(encrypted.iv, 'base64');
-    const authTag = Buffer.from(encrypted.authTag, 'base64');
-
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(authTag);
-
-    let plaintext = decipher.update(encrypted.ciphertext, 'base64', 'utf8');
-    plaintext += decipher.final('utf8');
-
-    return plaintext;
+    try {
+        return decryptWithKey(encrypted, deriveKey());
+    } catch (error) {
+        // 兼容旧版 scrypt 加密
+        return decryptWithKey(encrypted, deriveLegacyKey());
+    }
 }
 
 // ============================================

@@ -71,12 +71,16 @@ export class RuleEngine implements IRuleEngine {
                 return nextAgent;
 
             case 'free':
-                // 自由发言 - 返回 null，任何人都可以发言
-                return null;
+                // 自由发言 - 仍需选择一个发言者以推进自动讨论
+                const freeAgent = agents[this.speakerIndex % agents.length];
+                this.speakerIndex++;
+                return freeAgent;
 
             case 'moderated':
-                // 主持人控制 - 由 ModeratorController 决定
-                return null;
+                // 主持人控制 - 当前实现使用轮流发言作为降级策略
+                const moderatedAgent = agents[this.speakerIndex % agents.length];
+                this.speakerIndex++;
+                return moderatedAgent;
 
             default:
                 return null;

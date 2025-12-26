@@ -88,10 +88,10 @@ export class AgentExecutor implements IAgent {
         this._state.lastActiveAt = Date.now();
 
         try {
-            // 1. 检查 LLM 是否启用
-            if (!worldEngineConfig.llm.enabled) {
+            // 1. 检查 LLM 是否可用
+            if (!this.llmAdapter.isAvailable()) {
                 throw new LlmError(
-                    'LLM is disabled. Set WE_LLM_ENABLED=true in environment.',
+                    'LLM is unavailable. Provide a valid API key or enable LLM configuration.',
                     'DISABLED'
                 );
             }

@@ -17,13 +17,22 @@ import { weLogger } from '../../services/world-engine-logger';
 export class ModeratorController implements IModeratorController {
     private sessions: Map<string, SessionState> = new Map();
     private agents: Map<string, Map<string, IAgent>> = new Map();
-    private ruleEngine: IRuleEngine | null = null;
+    private ruleEngines: Map<string, IRuleEngine> = new Map();
 
     /**
      * 设置规则引擎
      */
-    setRuleEngine(engine: IRuleEngine): void {
-        this.ruleEngine = engine;
+    setRuleEngine(sessionId: string, engine: IRuleEngine): void {
+        this.ruleEngines.set(sessionId, engine);
+    }
+
+    /**
+     * 清理会话数据
+     */
+    clearSession(sessionId: string): void {
+        this.sessions.delete(sessionId);
+        this.agents.delete(sessionId);
+        this.ruleEngines.delete(sessionId);
     }
 
     /**
@@ -164,13 +173,14 @@ export class ModeratorController implements IModeratorController {
     async selectNextSpeaker(sessionId: string): Promise<IAgent | null> {
         const state = this.sessions.get(sessionId);
         const sessionAgents = this.agents.get(sessionId);
+        const ruleEngine = this.ruleEngines.get(sessionId);
 
-        if (!state || !sessionAgents || !this.ruleEngine) {
+        if (!state || !sessionAgents || !ruleEngine) {
             return null;
         }
 
         const agentList = Array.from(sessionAgents.values());
-        const nextSpeaker = this.ruleEngine.getNextSpeaker(state, agentList);
+        const nextSpeaker = ruleEngine.getNextSpeaker(state, agentList);
 
         if (nextSpeaker) {
             state.currentSpeakerId = nextSpeaker.config.id;
