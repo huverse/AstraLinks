@@ -3,12 +3,12 @@
 
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#1e40af" />
   <meta name="description" content="Galaxyous 管理后台" />
-  <link rel="manifest" href="/manifest.json" />
-  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
   <title>Admin Panel | Galaxyous</title>
 </head>
 
@@ -17,9 +17,9 @@
   <script type="module" src="/src/main.tsx"></script>
   <script>
     // Register service worker
-    if ('serviceWorker' in navigator) {
+    if ('serviceWorker' in navigator && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1') {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('/sw.js')
+        navigator.serviceWorker.register('./sw.js', { scope: './' })
           .then(reg => console.log('SW registered:', reg.scope))
           .catch(err => console.log('SW registration failed:', err));
       });

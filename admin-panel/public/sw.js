@@ -1,8 +1,10 @@
 const CACHE_NAME = 'admin-panel-v1';
+const BASE_URL = self.registration.scope;
 const STATIC_ASSETS = [
-    '/',
-    '/index.html',
-    '/manifest.json'
+    BASE_URL,
+    `${BASE_URL}index.html`,
+    `${BASE_URL}manifest.json`,
+    `${BASE_URL}icon.svg`
 ];
 
 // Install - cache static assets
@@ -54,7 +56,7 @@ self.addEventListener('fetch', (event) => {
                     }
                     // Return offline page for navigation
                     if (event.request.mode === 'navigate') {
-                        return caches.match('/');
+                        return caches.match(BASE_URL);
                     }
                     return new Response('Offline', { status: 503 });
                 });
