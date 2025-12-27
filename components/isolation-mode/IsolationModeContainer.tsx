@@ -7,7 +7,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     FlaskConical, Users, Play, Pause, Square,
-    History, ChevronLeft, Plus, RefreshCw, Wifi, WifiOff, Loader2
+    History, ChevronLeft, Plus, RefreshCw, Wifi, WifiOff, Loader2,
+    X, Eye, Download
 } from 'lucide-react';
 import { API_BASE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,7 +29,7 @@ interface IsolationModeContainerProps {
 
 const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit, participants = [] }) => {
     const { token } = useAuth();
-    const [view, setView] = useState<'setup' | 'discussion' | 'history'>('setup');
+    const [view, setView] = useState<'setup' | 'discussion' | 'history' | 'history-detail'>('setup');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -49,6 +50,16 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
 
     // 会话历史
     const [sessions, setSessions] = useState<Session[]>([]);
+    const [selectedHistorySession, setSelectedHistorySession] = useState<any>(null);
+    const [historyLoading, setHistoryLoading] = useState(false);
+
+    // 自动清除错误
+    useEffect(() => {
+        if (error) {
+            const timer = setTimeout(() => setError(null), 5000);
+            return () => clearTimeout(timer);
+        }
+    }, [error]);
 
     // Socket 连接管理 (使用 Hook)
     const {
@@ -61,15 +72,40 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         onWorldEvent: (event) => {
             setCurrentSession(prev => {
                 if (!prev || event.sessionId !== prev.id) return prev;
+                const payload = event.payload as Record<string, unknown>;
+                const speakerId = payload?.speaker as string || payload?.agentId as string;
+
+                // 更新 Agent 状态
+                let updatedAgents = prev.agents;
+                if (event.type === 'agent:speaking' || event.type === 'agent:speak') {
+                    updatedAgents = prev.agents.map(a => ({
+                        ...a,
+                        status: a.id === speakerId ? 'speaking' : 'idle',
+                        speakCount: a.id === speakerId ? a.speakCount + 1 : a.speakCount
+                    }));
+                } else if (event.type === 'agent:thinking') {
+                    updatedAgents = prev.agents.map(a => ({
+                        ...a,
+                        status: a.id === speakerId ? 'thinking' : a.status
+                    }));
+                } else if (event.type === 'agent:done' || event.type === 'turn:end') {
+                    updatedAgents = prev.agents.map(a => ({ ...a, status: 'idle' }));
+                }
+
+                // 更新轮次
+                const newRound = event.type === 'round:start'
+                    ? (payload?.round as number || prev.currentRound + 1)
+                    : prev.currentRound;
+
                 const newEvent: DiscussionEvent = {
                     id: event.eventId,
                     type: event.type,
-                    sourceId: (event.payload as Record<string, unknown>)?.speaker as string || 'system',
+                    sourceId: speakerId || 'system',
                     timestamp: Date.now(),
                     sequence: event.tick,
-                    payload: event.payload as { content?: string; message?: string }
+                    payload: payload as { content?: string; message?: string }
                 };
-                return { ...prev, events: [...prev.events, newEvent] };
+                return { ...prev, events: [...prev.events, newEvent], agents: updatedAgents, currentRound: newRound };
             });
         },
         onStateUpdate: (state) => {
@@ -101,8 +137,51 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             }
         } catch (e) {
             console.error('Failed to load sessions', e);
+            setError('加载历史记录失败');
         }
     }, [token]);
+
+    // 加载历史会话详情
+    const loadSessionDetail = useCallback(async (sessionId: string) => {
+        if (!token) return;
+        setHistoryLoading(true);
+        try {
+            const response = await fetch(`${API_BASE}/api/isolation/sessions/${sessionId}`, {
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setSelectedHistorySession(data.data);
+                setView('history-detail');
+            } else {
+                setError('加载会话详情失败');
+            }
+        } catch (e) {
+            console.error('Failed to load session detail', e);
+            setError('加载会话详情失败');
+        } finally {
+            setHistoryLoading(false);
+        }
+    }, [token]);
+
+    // 导出会话记录
+    const exportSession = (session: any) => {
+        const content = session.events?.map((e: any) => {
+            const time = new Date(e.timestamp).toLocaleTimeString();
+            const speaker = e.sourceId === 'moderator' ? '主持人' : e.sourceId;
+            return `[${time}] ${speaker}: ${e.payload?.content || e.payload?.message || ''}`;
+        }).join('\n\n') || '';
+
+        const markdown = `# ${session.title}\n\n**主题**: ${session.topic}\n**场景**: ${session.scenarioName || session.scenario?.name}\n**参与者**: ${session.agentCount || session.agents?.length} 人\n**时间**: ${new Date(session.createdAt).toLocaleString()}\n\n---\n\n${content}`;
+
+        const blob = new Blob([markdown], { type: 'text/markdown' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${session.title || 'discussion'}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+    };
 
     useEffect(() => {
         loadSessions();
@@ -280,6 +359,37 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             setCurrentSession(prev => prev ? { ...prev, status: 'active' } : null);
         } catch (e) {
             console.error('Failed to start', e);
+            setError('开始讨论失败');
+        }
+    };
+
+    // 暂停讨论
+    const handlePauseDiscussion = async () => {
+        if (!currentSession) return;
+        try {
+            await fetch(`${API_BASE}/api/isolation/sessions/${currentSession.id}/pause`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setCurrentSession(prev => prev ? { ...prev, status: 'paused' } : null);
+        } catch (e) {
+            console.error('Failed to pause', e);
+            setError('暂停讨论失败');
+        }
+    };
+
+    // 恢复讨论
+    const handleResumeDiscussion = async () => {
+        if (!currentSession) return;
+        try {
+            await fetch(`${API_BASE}/api/isolation/sessions/${currentSession.id}/resume`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            setCurrentSession(prev => prev ? { ...prev, status: 'active' } : null);
+        } catch (e) {
+            console.error('Failed to resume', e);
+            setError('恢复讨论失败');
         }
     };
 
@@ -303,12 +413,22 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     };
 
     return (
-        <div className="h-full flex flex-col bg-gradient-to-br from-slate-900 via-slate-900 to-purple-900/20">
+        <div className="h-full flex flex-col bg-gradient-to-br from-slate-900 via-slate-900 to-purple-900/20 relative">
+            {/* 全局错误提示 */}
+            {error && (
+                <div className="absolute top-4 right-4 z-50 flex items-center gap-2 px-4 py-3 bg-red-500/90 text-white rounded-lg shadow-lg animate-in slide-in-from-top-2">
+                    <span className="text-sm">{error}</span>
+                    <button onClick={() => setError(null)} className="p-1 hover:bg-white/20 rounded">
+                        <X size={14} />
+                    </button>
+                </div>
+            )}
+
             {/* 头部 */}
             <header className="px-6 py-4 border-b border-white/10 flex items-center justify-between">
                 <div className="flex items-center gap-4">
                     <button
-                        onClick={onExit}
+                        onClick={view === 'history-detail' ? () => setView('history') : onExit}
                         className="p-2 hover:bg-white/10 rounded-lg transition-colors"
                     >
                         <ChevronLeft size={20} className="text-slate-400" />
@@ -443,9 +563,30 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 )}
                                 {currentSession.status === 'active' && (
                                     <>
-                                        <button className="w-full py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg flex items-center justify-center gap-2">
+                                        <button
+                                            onClick={handlePauseDiscussion}
+                                            className="w-full py-2 bg-yellow-600 hover:bg-yellow-700 text-white rounded-lg flex items-center justify-center gap-2"
+                                        >
                                             <Pause size={16} />
                                             暂停
+                                        </button>
+                                        <button
+                                            onClick={handleEndDiscussion}
+                                            className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg flex items-center justify-center gap-2"
+                                        >
+                                            <Square size={16} />
+                                            结束
+                                        </button>
+                                    </>
+                                )}
+                                {currentSession.status === 'paused' && (
+                                    <>
+                                        <button
+                                            onClick={handleResumeDiscussion}
+                                            className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg flex items-center justify-center gap-2"
+                                        >
+                                            <Play size={16} />
+                                            继续
                                         </button>
                                         <button
                                             onClick={handleEndDiscussion}
@@ -474,7 +615,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                     第 {currentSession.currentRound} 轮
                                 </div>
                             </div>
-                            <EventTimeline events={currentSession.events} />
+                            <EventTimeline events={currentSession.events} agents={currentSession.agents} />
                         </div>
                     </div>
                 )}
@@ -491,16 +632,113 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 {sessions.map((session: any) => (
                                     <div
                                         key={session.sessionId}
-                                        className="p-4 bg-slate-800/50 border border-white/10 rounded-xl hover:border-purple-500/30 transition-colors cursor-pointer"
+                                        onClick={() => loadSessionDetail(session.sessionId)}
+                                        className="p-4 bg-slate-800/50 border border-white/10 rounded-xl hover:border-purple-500/30 transition-colors cursor-pointer group"
                                     >
-                                        <div className="font-medium text-white">{session.title}</div>
+                                        <div className="flex items-center justify-between">
+                                            <div className="font-medium text-white">{session.title}</div>
+                                            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); exportSession(session); }}
+                                                    className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-white"
+                                                    title="导出"
+                                                >
+                                                    <Download size={14} />
+                                                </button>
+                                                <Eye size={14} className="text-purple-400" />
+                                            </div>
+                                        </div>
                                         <div className="text-sm text-slate-400 mt-1">
                                             {session.scenarioName} • {session.agentCount} 参与者 • {session.eventCount} 条发言
+                                        </div>
+                                        <div className="text-xs text-slate-500 mt-1">
+                                            {new Date(session.createdAt).toLocaleString()}
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         )}
+                    </div>
+                )}
+
+                {view === 'history-detail' && selectedHistorySession && (
+                    <div className="h-full flex gap-6">
+                        {/* 左侧 - 会话信息 */}
+                        <div className="w-64 shrink-0 space-y-4">
+                            <div className="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                                <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
+                                    会话信息
+                                </h3>
+                                <div className="space-y-2 text-sm">
+                                    <div>
+                                        <span className="text-slate-500">主题:</span>
+                                        <span className="text-white ml-2">{selectedHistorySession.topic}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">场景:</span>
+                                        <span className="text-white ml-2">{selectedHistorySession.scenarioName || selectedHistorySession.scenario?.name}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">状态:</span>
+                                        <span className={`ml-2 ${selectedHistorySession.status === 'completed' ? 'text-green-400' : 'text-yellow-400'}`}>
+                                            {selectedHistorySession.status === 'completed' ? '已完成' : selectedHistorySession.status}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="text-slate-500">时间:</span>
+                                        <span className="text-white ml-2">{new Date(selectedHistorySession.createdAt).toLocaleString()}</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="bg-slate-800/50 rounded-xl p-4 border border-white/5">
+                                <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider mb-3">
+                                    参与者 ({selectedHistorySession.agents?.length || selectedHistorySession.agentCount})
+                                </h3>
+                                <div className="space-y-2">
+                                    {selectedHistorySession.agents?.map((agent: any) => (
+                                        <div key={agent.id} className="flex items-center gap-2 text-sm">
+                                            <div className={`w-2 h-2 rounded-full ${
+                                                agent.stance === 'for' ? 'bg-green-400' :
+                                                agent.stance === 'against' ? 'bg-red-400' : 'bg-slate-400'
+                                            }`} />
+                                            <span className="text-white">{agent.name}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => exportSession(selectedHistorySession)}
+                                className="w-full py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg flex items-center justify-center gap-2"
+                            >
+                                <Download size={16} />
+                                导出记录
+                            </button>
+                        </div>
+
+                        {/* 右侧 - 事件时间线 */}
+                        <div className="flex-1 bg-slate-800/30 rounded-2xl p-6 border border-white/5">
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-white">
+                                    {selectedHistorySession.title}
+                                </h3>
+                                <div className="text-sm text-slate-400">
+                                    {selectedHistorySession.eventCount || selectedHistorySession.events?.length || 0} 条发言
+                                </div>
+                            </div>
+                            {historyLoading ? (
+                                <div className="flex items-center justify-center py-12">
+                                    <Loader2 className="animate-spin text-purple-400" size={32} />
+                                </div>
+                            ) : (
+                                <EventTimeline
+                                    events={selectedHistorySession.events || []}
+                                    agents={selectedHistorySession.agents || []}
+                                    autoScroll={false}
+                                />
+                            )}
+                        </div>
                     </div>
                 )}
             </main>
