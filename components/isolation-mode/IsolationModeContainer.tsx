@@ -19,6 +19,7 @@ import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS } from './
 import { AgentCard } from './AgentCard';
 import { EventTimeline } from './EventTimeline';
 import { ScenarioSelector } from './ScenarioSelector';
+import { AgentConfigPanel } from './AgentConfigPanel';
 
 interface IsolationModeContainerProps {
     onExit: () => void;
@@ -35,6 +36,12 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [scenarios, setScenarios] = useState<Scenario[]>(DEFAULT_SCENARIOS);
     const [scenarioLoading, setScenarioLoading] = useState(false);
     const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
+
+    // Agent 配置
+    const [configuredAgents, setConfiguredAgents] = useState<Agent[]>([
+        { id: 'agent-1', name: '正方', role: 'debater', status: 'idle', speakCount: 0, systemPrompt: '你是正方辩手，需要支持讨论主题中的观点。', stance: 'for', agentLlmConfig: { useSessionConfig: true, configSource: 'session' } },
+        { id: 'agent-2', name: '反方', role: 'debater', status: 'idle', speakCount: 0, systemPrompt: '你是反方辩手，需要反对讨论主题中的观点。', stance: 'against', agentLlmConfig: { useSessionConfig: true, configSource: 'session' } },
+    ]);
 
     // 会话
     const [currentSession, setCurrentSession] = useState<Session | null>(null);
@@ -136,11 +143,18 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             return;
         }
 
+        if (configuredAgents.length < 2) {
+            setError('至少需要 2 个 Agent');
+            return;
+        }
+
         setLoading(true);
         setError(null);
 
         try {
             const scenarioInfo = scenarios.find(s => s.id === selectedScenario);
+
+            // 准备会话级 LLM 配置（默认配置）
             let encryptedLlmConfig = undefined;
             const enabledParticipant = participants.find(p => p.config.enabled && p.config.apiKey);
 
@@ -154,6 +168,40 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                 };
                 encryptedLlmConfig = await encryptLlmConfig(llmConfigData);
             }
+
+            // 准备 Agent 配置，包括每个 Agent 的独立 LLM 配置
+            const agentsPayload = await Promise.all(configuredAgents.map(async (agent) => {
+                const agentPayload: any = {
+                    id: agent.id,
+                    name: agent.name,
+                    role: agent.role,
+                    systemPrompt: agent.systemPrompt || `你是${agent.name}`,
+                    personality: agent.personality,
+                    stance: agent.stance,
+                };
+
+                // 如果 Agent 有独立的 LLM 配置
+                if (agent.agentLlmConfig && !agent.agentLlmConfig.useSessionConfig && agent.agentLlmConfig.galaxyousConfigId) {
+                    const agentParticipant = participants.find(p => p.id === agent.agentLlmConfig?.galaxyousConfigId);
+                    if (agentParticipant && agentParticipant.config.apiKey) {
+                        const agentLlmConfigData: LlmConfigData = {
+                            provider: agentParticipant.provider,
+                            apiKey: agentParticipant.config.apiKey,
+                            baseUrl: agentParticipant.config.baseUrl,
+                            modelName: agentParticipant.config.modelName,
+                            temperature: agentParticipant.config.temperature
+                        };
+                        agentPayload.agentLlmConfig = {
+                            useSessionConfig: false,
+                            llmConfig: await encryptLlmConfig(agentLlmConfigData),
+                            configSource: 'galaxyous',
+                            galaxyousConfigId: agent.agentLlmConfig.galaxyousConfigId,
+                        };
+                    }
+                }
+
+                return agentPayload;
+            }));
 
             const response = await fetch(`${API_BASE}/api/isolation/sessions`, {
                 method: 'POST',
@@ -169,10 +217,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                         name: scenarioInfo?.name || selectedScenario,
                         type: scenarioInfo?.type || selectedScenario
                     },
-                    agents: [
-                        { id: 'agent-1', name: '正方', role: 'debater', systemPrompt: '你是正方辩手' },
-                        { id: 'agent-2', name: '反方', role: 'debater', systemPrompt: '你是反方辩手' },
-                    ],
+                    agents: agentsPayload,
                     llmConfig: encryptedLlmConfig,
                 }),
             });
@@ -314,6 +359,16 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 onChange={e => setTopic(e.target.value)}
                                 placeholder="输入你想讨论的问题..."
                                 className="w-full px-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:border-purple-500 focus:outline-none transition-colors"
+                            />
+                        </div>
+
+                        {/* Agent 配置面板 */}
+                        <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5">
+                            <AgentConfigPanel
+                                agents={configuredAgents}
+                                onAgentsChange={setConfiguredAgents}
+                                participants={participants}
+                                scenarioType={selectedScenario || undefined}
                             />
                         </div>
 

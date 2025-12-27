@@ -2,12 +2,33 @@
  * 隔离模式类型定义
  */
 
+/**
+ * Agent LLM 配置
+ * 允许每个 Agent 使用不同的模型
+ */
+export interface AgentLlmConfig {
+    /** 使用会话级配置 (默认) */
+    useSessionConfig?: boolean;
+    /** Galaxyous 配置中心的配置 ID */
+    galaxyousConfigId?: string;
+    /** 配置来源标识 */
+    configSource?: 'session' | 'custom' | 'galaxyous';
+}
+
 export interface Agent {
     id: string;
     name: string;
     role: string;
     status: 'idle' | 'thinking' | 'speaking';
     speakCount: number;
+    /** 系统提示词 */
+    systemPrompt?: string;
+    /** 人格描述 */
+    personality?: string;
+    /** 立场 */
+    stance?: 'for' | 'against' | 'neutral';
+    /** Agent 独立 LLM 配置 */
+    agentLlmConfig?: AgentLlmConfig;
 }
 
 export interface DiscussionEvent {

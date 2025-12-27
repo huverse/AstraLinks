@@ -2,6 +2,23 @@
  * Agent 类型定义
  */
 
+import { EncryptedLlmConfig } from './session.types';
+
+/**
+ * Agent 独立 LLM 配置
+ * 允许每个 Agent 使用不同的模型（Claude vs GPT vs Gemini）
+ */
+export interface AgentLlmConfig {
+    /** 使用会话级配置 (默认) */
+    useSessionConfig?: boolean;
+    /** 独立的加密 LLM 配置 */
+    llmConfig?: EncryptedLlmConfig;
+    /** 配置来源标识 (用于 UI 显示) */
+    configSource?: 'session' | 'custom' | 'galaxyous';
+    /** Galaxyous 配置中心的配置 ID */
+    galaxyousConfigId?: string;
+}
+
 export interface AgentConfig {
     /** 唯一标识符 */
     id: string;
@@ -9,7 +26,7 @@ export interface AgentConfig {
     name: string;
     /** 角色类型 */
     role: AgentRole;
-    /** LLM Provider 配置 ID */
+    /** LLM Provider 配置 ID (旧版兼容) */
     llmProviderId: string;
     /** 系统提示词 */
     systemPrompt: string;
@@ -17,6 +34,8 @@ export interface AgentConfig {
     personality?: string;
     /** 立场 (辩论场景) */
     stance?: 'for' | 'against' | 'neutral';
+    /** Agent 独立 LLM 配置 */
+    agentLlmConfig?: AgentLlmConfig;
     /** 额外配置 */
     metadata?: Record<string, unknown>;
 }

@@ -11,6 +11,7 @@ import { eventLogService, eventBus } from '../event-log';
 import { scenarioLoader } from '../scenarios';
 import { resolveDiscussionRules } from '../scenarios/RulesResolver';
 import { createLlmAdapterFromUserConfig, getDefaultLlmAdapter } from '../llm';
+import { ILlmAdapter } from '../llm/ILlmAdapter';
 
 /**
  * 会话管理器
@@ -39,11 +40,11 @@ export class SessionManager {
             createdAt: now,
         };
 
-        // 解析用户 LLM 配置（如有）
-        const llmAdapter = config.llmConfig
+        // 解析会话级 LLM 配置（作为默认）
+        const sessionLlmAdapter = config.llmConfig
             ? createLlmAdapterFromUserConfig(config.llmConfig)
             : getDefaultLlmAdapter();
-        if (config.llmConfig && !llmAdapter.isAvailable()) {
+        if (config.llmConfig && !sessionLlmAdapter.isAvailable()) {
             throw new SessionError('Invalid LLM configuration', id);
         }
 
@@ -60,7 +61,13 @@ export class SessionManager {
 
         // 创建 Agent 实例并注册
         for (const agentConfig of config.agents) {
-            const agent = agentFactory.create(agentConfig, llmAdapter);
+            // 为每个 Agent 解析独立的 LLM 配置
+            const agentLlmAdapter = this.resolveAgentLlmAdapter(
+                agentConfig,
+                sessionLlmAdapter
+            );
+
+            const agent = agentFactory.create(agentConfig, agentLlmAdapter);
             await agent.initialize(id);
             moderatorController.registerAgent(id, agent);
 
@@ -75,6 +82,39 @@ export class SessionManager {
         }
 
         return config;
+    }
+
+    /**
+     * 解析 Agent 的 LLM Adapter
+     * 支持每个 Agent 使用不同的模型（Claude vs GPT vs Gemini）
+     */
+    private resolveAgentLlmAdapter(
+        agentConfig: SessionConfig['agents'][0],
+        sessionLlmAdapter: ILlmAdapter
+    ): ILlmAdapter {
+        const agentLlmConfig = agentConfig.agentLlmConfig;
+
+        // 如果没有独立配置或明确使用会话配置，返回会话级 adapter
+        if (!agentLlmConfig || agentLlmConfig.useSessionConfig !== false) {
+            return sessionLlmAdapter;
+        }
+
+        // 如果有独立的 LLM 配置，创建独立的 adapter
+        if (agentLlmConfig.llmConfig) {
+            const adapter = createLlmAdapterFromUserConfig(agentLlmConfig.llmConfig);
+            if (adapter.isAvailable()) {
+                return adapter;
+            }
+            // 如果独立配置无效，回退到会话配置
+            import('../../services/world-engine-logger').then(({ isolationLogger }) => {
+                isolationLogger.warn({
+                    agentId: agentConfig.id,
+                    configSource: agentLlmConfig.configSource
+                }, 'agent_llm_config_invalid_fallback_to_session');
+            });
+        }
+
+        return sessionLlmAdapter;
     }
 
     /**
