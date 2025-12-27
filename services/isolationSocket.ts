@@ -443,6 +443,161 @@ class IsolationSocketService {
             isReconnecting: this.isConnecting && this.reconnectAttempts > 0,
         };
     }
+
+    // ============================================
+    // 高级功能 API
+    // ============================================
+
+    /**
+     * 提交举手/插话意图
+     */
+    submitIntent(intent: {
+        agentId: string;
+        urgency: 'low' | 'medium' | 'high' | 'critical' | 'interrupt';
+        reason?: string;
+    }): Promise<{ success: boolean; intentId?: string; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('intent:submit', {
+                sessionId: this.currentSessionId,
+                ...intent
+            }, resolve);
+        });
+    }
+
+    /**
+     * 获取待处理意图列表
+     */
+    listIntents(): Promise<{ success: boolean; intents?: any[]; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('intent:list', { sessionId: this.currentSessionId }, resolve);
+        });
+    }
+
+    /**
+     * 主持人点名指定 Agent 发言
+     */
+    moderatorCall(agentId: string, topic?: string): Promise<{ success: boolean; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('moderator:call', {
+                sessionId: this.currentSessionId,
+                agentId,
+                topic
+            }, resolve);
+        });
+    }
+
+    /**
+     * 主持人要求某 Agent 回应另一个 Agent
+     */
+    moderatorRequestResponse(targetAgentId: string, sourceAgentId: string): Promise<{ success: boolean; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('moderator:request-response', {
+                sessionId: this.currentSessionId,
+                targetAgentId,
+                sourceAgentId
+            }, resolve);
+        });
+    }
+
+    /**
+     * 设置介入程度 (0-3)
+     */
+    setInterventionLevel(level: number): Promise<{ success: boolean; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('intervention:set', {
+                sessionId: this.currentSessionId,
+                level
+            }, resolve);
+        });
+    }
+
+    /**
+     * 获取当前介入程度
+     */
+    getInterventionLevel(): Promise<{ success: boolean; level?: number; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('intervention:get', { sessionId: this.currentSessionId }, resolve);
+        });
+    }
+
+    /**
+     * 生成讨论大纲
+     */
+    generateOutline(): Promise<{ success: boolean; outline?: any; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('outline:generate', { sessionId: this.currentSessionId }, resolve);
+        });
+    }
+
+    /**
+     * 获取讨论大纲
+     */
+    getOutline(): Promise<{ success: boolean; outline?: any; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('outline:get', { sessionId: this.currentSessionId }, resolve);
+        });
+    }
+
+    /**
+     * 触发评分
+     */
+    triggerJudgeScore(): Promise<{ success: boolean; scores?: any; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('judge:score', { sessionId: this.currentSessionId }, resolve);
+        });
+    }
+
+    /**
+     * 请求指定 Agent 发言
+     */
+    requestSpeak(agentId: string): Promise<{ success: boolean; error?: string }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('speak:request', {
+                sessionId: this.currentSessionId,
+                agentId
+            }, resolve);
+        });
+    }
 }
 
 // 单例导出

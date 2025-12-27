@@ -8,13 +8,14 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     FlaskConical, Users, Play, Pause, Square,
     History, ChevronLeft, Plus, RefreshCw, Wifi, WifiOff, Loader2,
-    X, Eye, Download
+    X, Eye, Download, Hand, Zap, Megaphone, SlidersHorizontal, FileText, Trash2
 } from 'lucide-react';
 import { API_BASE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { encryptLlmConfig, LlmConfigData } from '../../utils/isolationCrypto';
 import { Participant } from '../../types';
 import { useIsolationSession } from '../../hooks/useIsolationSession';
+import { isolationSocket } from '../../services/isolationSocket';
 import { isolationLogger } from '../../utils/logger';
 import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS } from './types';
 import { AgentCard } from './AgentCard';
@@ -48,10 +49,19 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [currentSession, setCurrentSession] = useState<Session | null>(null);
     const [topic, setTopic] = useState('');
 
+    // 讨论控制
+    const [selectedAgentId, setSelectedAgentId] = useState<string>('');
+    const [interventionLevel, setInterventionLevel] = useState(1);
+    const [outline, setOutline] = useState('');
+    const [outlineLoading, setOutlineLoading] = useState(false);
+    const [intentSubmitting, setIntentSubmitting] = useState(false);
+    const [callSubmitting, setCallSubmitting] = useState(false);
+
     // 会话历史
     const [sessions, setSessions] = useState<Session[]>([]);
     const [selectedHistorySession, setSelectedHistorySession] = useState<any>(null);
     const [historyLoading, setHistoryLoading] = useState(false);
+    const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
 
     // 自动清除错误
     useEffect(() => {
@@ -124,6 +134,31 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             });
         },
     });
+
+    // 初始化选中的 Agent
+    useEffect(() => {
+        if (!currentSession?.agents?.length) return;
+        setSelectedAgentId(prev => currentSession.agents.some(a => a.id === prev) ? prev : currentSession.agents[0].id);
+    }, [currentSession?.id, currentSession?.agents]);
+
+    // 会话切换时重置大纲
+    useEffect(() => {
+        if (!currentSession) return;
+        setOutline('');
+    }, [currentSession?.id]);
+
+    // 获取当前介入程度
+    useEffect(() => {
+        let active = true;
+        if (!currentSession || !socketConnected) return;
+        isolationSocket.getInterventionLevel().then(result => {
+            if (!active) return;
+            if (result.success && typeof result.level === 'number') {
+                setInterventionLevel(result.level);
+            }
+        });
+        return () => { active = false; };
+    }, [currentSession?.id, socketConnected]);
 
     const loadSessions = useCallback(async () => {
         if (!token) return;
@@ -412,6 +447,116 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         }
     };
 
+    // 格式化大纲
+    const formatOutline = (raw: unknown): string => {
+        if (!raw) return '';
+        if (typeof raw === 'string') return raw;
+        if (Array.isArray(raw)) {
+            return raw.map(item => (typeof item === 'string' ? item : JSON.stringify(item))).join('\n');
+        }
+        try {
+            return JSON.stringify(raw, null, 2);
+        } catch {
+            return String(raw);
+        }
+    };
+
+    // 提交举手/插话意图
+    const handleSubmitIntent = async (urgency: 'low' | 'interrupt') => {
+        if (!selectedAgentId) {
+            setError('请选择一个 Agent');
+            return;
+        }
+        setIntentSubmitting(true);
+        try {
+            const result = await isolationSocket.submitIntent({ agentId: selectedAgentId, urgency });
+            if (!result.success) {
+                setError(result.error || '提交请求失败');
+            }
+        } catch {
+            setError('提交请求失败');
+        } finally {
+            setIntentSubmitting(false);
+        }
+    };
+
+    // 主持人点名
+    const handleModeratorCall = async () => {
+        if (!selectedAgentId) {
+            setError('请选择一个 Agent');
+            return;
+        }
+        setCallSubmitting(true);
+        try {
+            const result = await isolationSocket.moderatorCall(selectedAgentId);
+            if (!result.success) {
+                setError(result.error || '点名失败');
+            }
+        } catch {
+            setError('点名失败');
+        } finally {
+            setCallSubmitting(false);
+        }
+    };
+
+    // 设置介入程度
+    const handleInterventionChange = async (value: number) => {
+        const prevLevel = interventionLevel;
+        setInterventionLevel(value);
+        try {
+            const result = await isolationSocket.setInterventionLevel(value);
+            if (!result.success) {
+                setInterventionLevel(prevLevel); // 回滚
+                setError(result.error || '设置介入程度失败');
+            }
+        } catch {
+            setInterventionLevel(prevLevel); // 回滚
+            setError('设置介入程度失败');
+        }
+    };
+
+    // 生成大纲
+    const handleGenerateOutline = async () => {
+        setOutlineLoading(true);
+        try {
+            const result = await isolationSocket.generateOutline();
+            if (result.success) {
+                setOutline(formatOutline(result.outline) || '暂无大纲');
+            } else {
+                setError(result.error || '生成大纲失败');
+            }
+        } catch {
+            setError('生成大纲失败');
+        } finally {
+            setOutlineLoading(false);
+        }
+    };
+
+    // 删除会话
+    const handleDeleteSession = async (sessionId: string) => {
+        if (!token || !sessionId) return;
+        const confirmed = window.confirm('确定删除该会话吗？');
+        if (!confirmed) return;
+        setDeletingSessionId(sessionId);
+        try {
+            const response = await fetch(`${API_BASE}/api/isolation/sessions/${sessionId}`, {
+                method: 'DELETE',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (!response.ok) {
+                throw new Error('删除会话失败');
+            }
+            setSessions(prev => prev.filter((s: any) => (s.sessionId ?? s.id) !== sessionId));
+        } catch {
+            setError('删除会话失败');
+        } finally {
+            setDeletingSessionId(null);
+        }
+    };
+
+    const controlsDisabled = !socketConnected || !currentSession || currentSession.status !== 'active';
+    const canTargetAgent = !controlsDisabled && !!selectedAgentId;
+
     return (
         <div className="h-full flex flex-col bg-gradient-to-br from-slate-900 via-slate-900 to-purple-900/20 relative">
             {/* 全局错误提示 */}
@@ -551,6 +696,104 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 ))}
                             </div>
 
+                            {/* 主持人控制面板 */}
+                            <div className="bg-slate-800/50 rounded-xl p-3 border border-white/5 space-y-3">
+                                <div className="flex items-center justify-between">
+                                    <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider">
+                                        主持人控制
+                                    </h4>
+                                    <span className={`text-xs ${socketConnected ? 'text-green-400' : 'text-red-400'}`}>
+                                        {socketConnected ? '已连接' : '未连接'}
+                                    </span>
+                                </div>
+                                <div className="space-y-2">
+                                    <label className="text-xs text-slate-500">选择 Agent</label>
+                                    <select
+                                        value={selectedAgentId}
+                                        onChange={e => setSelectedAgentId(e.target.value)}
+                                        disabled={controlsDisabled}
+                                        className="w-full px-2 py-1.5 bg-slate-900/60 border border-white/10 rounded-lg text-sm text-white focus:border-purple-500 focus:outline-none disabled:opacity-60"
+                                    >
+                                        <option value="" disabled>选择 Agent</option>
+                                        {currentSession.agents.map(agent => (
+                                            <option key={agent.id} value={agent.id}>{agent.name}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <button
+                                        onClick={() => handleSubmitIntent('low')}
+                                        disabled={intentSubmitting || !canTargetAgent}
+                                        className="py-1.5 bg-slate-700/60 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-1 text-sm"
+                                    >
+                                        <Hand size={14} />
+                                        举手
+                                    </button>
+                                    <button
+                                        onClick={() => handleSubmitIntent('interrupt')}
+                                        disabled={intentSubmitting || !canTargetAgent}
+                                        className="py-1.5 bg-purple-600/80 hover:bg-purple-600 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-1 text-sm"
+                                    >
+                                        <Zap size={14} />
+                                        插话
+                                    </button>
+                                    <button
+                                        onClick={handleModeratorCall}
+                                        disabled={callSubmitting || !canTargetAgent}
+                                        className="col-span-2 py-1.5 bg-slate-700/60 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-1 text-sm"
+                                    >
+                                        <Megaphone size={14} />
+                                        点名发言
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* 介入程度控制 */}
+                            <div className="bg-slate-800/50 rounded-xl p-3 border border-white/5 space-y-2">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2 text-xs font-medium text-slate-400 uppercase tracking-wider">
+                                        <SlidersHorizontal size={12} />
+                                        介入程度
+                                    </div>
+                                    <span className="text-xs text-purple-300">{interventionLevel}</span>
+                                </div>
+                                <input
+                                    type="range"
+                                    min={0}
+                                    max={3}
+                                    step={1}
+                                    value={interventionLevel}
+                                    onChange={e => handleInterventionChange(Number(e.target.value))}
+                                    disabled={controlsDisabled}
+                                    className="w-full accent-purple-500 disabled:opacity-60"
+                                />
+                                <div className="flex items-center justify-between text-xs text-slate-500">
+                                    <span>0 静默</span>
+                                    <span>3 主导</span>
+                                </div>
+                            </div>
+
+                            {/* 大纲生成 */}
+                            <div className="bg-slate-800/50 rounded-xl p-3 border border-white/5 space-y-2">
+                                <button
+                                    onClick={handleGenerateOutline}
+                                    disabled={outlineLoading || controlsDisabled}
+                                    className="w-full py-1.5 bg-purple-600/80 hover:bg-purple-600 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-2 text-sm"
+                                >
+                                    {outlineLoading ? (
+                                        <Loader2 size={14} className="animate-spin" />
+                                    ) : (
+                                        <FileText size={14} />
+                                    )}
+                                    生成大纲
+                                </button>
+                                {outline && (
+                                    <div className="text-xs text-slate-200 whitespace-pre-wrap bg-slate-900/40 rounded-lg p-2 border border-white/5 max-h-48 overflow-auto">
+                                        {outline}
+                                    </div>
+                                )}
+                            </div>
+
                             <div className="pt-4 border-t border-white/10 space-y-2">
                                 {currentSession.status === 'pending' && (
                                     <button
@@ -644,6 +887,18 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                                     title="导出"
                                                 >
                                                     <Download size={14} />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDeleteSession(session.sessionId ?? session.id); }}
+                                                    disabled={deletingSessionId === (session.sessionId ?? session.id)}
+                                                    className="p-1.5 hover:bg-white/10 rounded text-slate-400 hover:text-red-400 disabled:opacity-50"
+                                                    title="删除"
+                                                >
+                                                    {deletingSessionId === (session.sessionId ?? session.id) ? (
+                                                        <Loader2 size={14} className="animate-spin" />
+                                                    ) : (
+                                                        <Trash2 size={14} />
+                                                    )}
                                                 </button>
                                                 <Eye size={14} className="text-purple-400" />
                                             </div>
