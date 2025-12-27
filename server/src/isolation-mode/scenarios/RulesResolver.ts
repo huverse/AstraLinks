@@ -1,7 +1,7 @@
 /**
  * 讨论规则解析器
  *
- * 从场景配置中提取讨论规则，支持新旧两种配置格式
+ * 从场景配置中提取讨论规则
  */
 
 import { ScenarioConfig, DiscussionRules, FlowConfig, PhaseConfig } from '../core/types';
@@ -45,27 +45,23 @@ export function resolveDiscussionRules(
     scenario: ScenarioConfig,
     overrideMaxRounds?: number
 ): DiscussionRules {
-    // 1. 从旧版 rules 字段获取（兼容）
-    const legacyRules = (scenario as any).rules as Partial<DiscussionRules> | undefined;
-
-    // 2. 从新版 flow 配置获取
-    const flowRules = (scenario as any).flow
-        ? extractRulesFromFlow((scenario as any).flow)
+    // 从 flow 配置获取规则
+    const flowRules = scenario.flow
+        ? extractRulesFromFlow(scenario.flow as FlowConfig)
         : {};
 
-    // 3. 合并规则：默认 < 旧版 < 新版 < 覆盖
+    // 合并规则：默认 < flow配置 < 覆盖
     const merged: DiscussionRules = {
         ...DEFAULT_RULES,
-        ...filterUndefined(legacyRules || {}),
         ...filterUndefined(flowRules),
     };
 
-    // 4. 应用覆盖
+    // 应用覆盖
     if (overrideMaxRounds && overrideMaxRounds > 0) {
         merged.maxRounds = overrideMaxRounds;
     }
 
-    // 5. 确保 minRounds <= maxRounds
+    // 确保 minRounds <= maxRounds
     if (merged.maxRounds < merged.minRounds) {
         merged.minRounds = Math.max(1, merged.maxRounds);
     }

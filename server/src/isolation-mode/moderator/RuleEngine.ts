@@ -91,12 +91,31 @@ export class RuleEngine implements IRuleEngine {
      * 检查是否超时
      */
     checkTimeout(state: SessionState): boolean {
-        if (!this.rules?.maxTimePerTurn) {
+        if (!this.rules?.maxTimePerTurn || !state.currentSpeakerStartTime) {
             return false;
         }
 
-        // TODO: 实现超时检查
-        return false;
+        const elapsedSeconds = (Date.now() - state.currentSpeakerStartTime) / 1000;
+        return elapsedSeconds > this.rules.maxTimePerTurn;
+    }
+
+    /**
+     * 获取剩余时间（秒）
+     */
+    getRemainingTime(state: SessionState): number | null {
+        if (!this.rules?.maxTimePerTurn || !state.currentSpeakerStartTime) {
+            return null;
+        }
+
+        const elapsedSeconds = (Date.now() - state.currentSpeakerStartTime) / 1000;
+        return Math.max(0, this.rules.maxTimePerTurn - elapsedSeconds);
+    }
+
+    /**
+     * 获取当前规则
+     */
+    getRules(): DiscussionRules | null {
+        return this.rules;
     }
 
     /**

@@ -172,9 +172,38 @@ export class ModeratorController implements IModeratorController {
 
         if (nextSpeaker) {
             state.currentSpeakerId = nextSpeaker.config.id;
+            state.currentSpeakerStartTime = Date.now();
         }
 
         return nextSpeaker;
+    }
+
+    /**
+     * 检查当前发言者是否超时
+     */
+    checkSpeakerTimeout(sessionId: string): boolean {
+        const state = this.sessions.get(sessionId);
+        const ruleEngine = this.ruleEngines.get(sessionId);
+
+        if (!state || !ruleEngine) {
+            return false;
+        }
+
+        return ruleEngine.checkTimeout(state);
+    }
+
+    /**
+     * 获取发言剩余时间
+     */
+    getSpeakerRemainingTime(sessionId: string): number | null {
+        const state = this.sessions.get(sessionId);
+        const ruleEngine = this.ruleEngines.get(sessionId);
+
+        if (!state || !ruleEngine) {
+            return null;
+        }
+
+        return ruleEngine.getRemainingTime(state);
     }
 
     /**
@@ -191,6 +220,85 @@ export class ModeratorController implements IModeratorController {
                 targetAgentId: agentId
             });
         }
+    }
+
+    /**
+     * 触发指定 Agent 发言
+     */
+    async triggerAgentSpeak(
+        sessionId: string,
+        agentId: string,
+        userContent?: string
+    ): Promise<{ success: boolean; message?: string; error?: string }> {
+        const state = this.sessions.get(sessionId);
+        if (!state) {
+            return { success: false, error: 'Session not found' };
+        }
+
+        if (state.status !== 'active' && state.status !== 'paused') {
+            return { success: false, error: `Session is ${state.status}` };
+        }
+
+        const sessionAgents = this.agents.get(sessionId);
+        if (!sessionAgents) {
+            return { success: false, error: 'No agents in session' };
+        }
+
+        const agent = sessionAgents.get(agentId);
+        if (!agent) {
+            return { success: false, error: 'Agent not found' };
+        }
+
+        try {
+            // 如果用户提供了内容，先发布用户消息事件
+            if (userContent) {
+                await eventLogService.appendEvent({
+                    sessionId,
+                    type: EventType.SPEECH,
+                    speaker: 'user',
+                    content: { message: userContent, isUserInput: true }
+                }).then(event => eventBus.publish(event as any));
+            }
+
+            // 触发 Agent 生成响应
+            const response = await agent.generateResponse();
+
+            // 发布 Agent 发言事件
+            const event = await eventLogService.appendEvent({
+                sessionId,
+                type: EventType.SPEECH,
+                speaker: agentId,
+                content: {
+                    agentId,
+                    agentName: agent.config.name,
+                    message: response.content,
+                    tokens: response.tokens,
+                    triggeredByUser: !!userContent
+                }
+            });
+
+            eventBus.publish(event as any);
+
+            return { success: true, message: response.content };
+        } catch (error: any) {
+            weLogger.error({ sessionId, agentId, error: error.message }, 'trigger_agent_speak_error');
+            return { success: false, error: error.message };
+        }
+    }
+
+    /**
+     * 获取会话中的 Agent
+     */
+    getAgent(sessionId: string, agentId: string): IAgent | undefined {
+        return this.agents.get(sessionId)?.get(agentId);
+    }
+
+    /**
+     * 获取会话中的所有 Agent
+     */
+    getAgents(sessionId: string): IAgent[] {
+        const sessionAgents = this.agents.get(sessionId);
+        return sessionAgents ? Array.from(sessionAgents.values()) : [];
     }
 
     /**

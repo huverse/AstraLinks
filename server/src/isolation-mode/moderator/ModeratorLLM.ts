@@ -114,9 +114,61 @@ export class ModeratorLLM implements IModeratorLLM {
      * 决定是否干预
      */
     async shouldIntervene(events: Event[]): Promise<boolean> {
-        // TODO: 分析讨论内容，决定是否需要干预
-        // 例如：讨论偏题、争论过于激烈、某人发言过多等
-        return false;
+        if (!this.llmProvider || events.length < 3) {
+            return false;
+        }
+
+        // 提取最近的发言
+        const recentEvents = events.slice(-10).filter(e => e.type === EventType.SPEECH);
+        if (recentEvents.length < 2) {
+            return false;
+        }
+
+        // 检查发言分布是否均衡
+        const speakerCounts = new Map<string, number>();
+        for (const event of recentEvents) {
+            const count = speakerCounts.get(event.speaker) || 0;
+            speakerCounts.set(event.speaker, count + 1);
+        }
+
+        // 如果某人发言超过60%，可能需要干预
+        const maxCount = Math.max(...speakerCounts.values());
+        if (maxCount / recentEvents.length > 0.6) {
+            return true;
+        }
+
+        // 使用 LLM 判断是否需要干预
+        const summary = recentEvents
+            .map(e => {
+                const content = typeof e.content === 'string'
+                    ? e.content
+                    : (e.content as any)?.message || JSON.stringify(e.content);
+                return `${e.speaker}: ${content}`;
+            })
+            .join('\n');
+
+        const messages: LLMMessage[] = [
+            {
+                role: 'system',
+                content: `你是一位讨论主持人。分析以下讨论内容，判断是否需要干预。
+需要干预的情况：讨论偏离主题、争论过于激烈、人身攻击、某人垄断发言。
+只回答 "是" 或 "否"。`,
+            },
+            {
+                role: 'user',
+                content: summary,
+            },
+        ];
+
+        try {
+            const result = await this.llmProvider.complete(messages, {
+                maxTokens: 10,
+                temperature: 0.3,
+            });
+            return result.content.includes('是');
+        } catch {
+            return false;
+        }
     }
 
     /**
@@ -127,8 +179,38 @@ export class ModeratorLLM implements IModeratorLLM {
             return '请各位保持讨论的主题聚焦和专业性。';
         }
 
-        // TODO: 实现智能干预生成
-        return '请各位保持讨论的主题聚焦和专业性。';
+        const recentEvents = events.slice(-10).filter(e => e.type === EventType.SPEECH);
+        const summary = recentEvents
+            .map(e => {
+                const content = typeof e.content === 'string'
+                    ? e.content
+                    : (e.content as any)?.message || JSON.stringify(e.content);
+                return `${e.speaker}: ${content}`;
+            })
+            .join('\n');
+
+        const messages: LLMMessage[] = [
+            {
+                role: 'system',
+                content: `你是一位专业的讨论主持人。根据以下讨论内容，生成一段简短的干预发言。
+干预目的：引导讨论回到正轨、平衡发言机会、缓和紧张气氛。
+要求：语气温和但坚定，不超过100字。`,
+            },
+            {
+                role: 'user',
+                content: summary,
+            },
+        ];
+
+        try {
+            const result = await this.llmProvider.complete(messages, {
+                maxTokens: 150,
+                temperature: 0.6,
+            });
+            return result.content;
+        } catch {
+            return '请各位保持讨论的主题聚焦和专业性。';
+        }
     }
 
     /**
@@ -138,10 +220,58 @@ export class ModeratorLLM implements IModeratorLLM {
         score: number;
         feedback: string;
     }> {
-        // TODO: 实现智能评估
+        if (!this.llmProvider || events.length < 3) {
+            return {
+                score: 5,
+                feedback: '讨论内容较少，暂无法评估。',
+            };
+        }
+
+        const speakEvents = events.filter(e => e.type === EventType.SPEECH);
+        const summary = speakEvents
+            .map(e => {
+                const content = typeof e.content === 'string'
+                    ? e.content
+                    : (e.content as any)?.message || JSON.stringify(e.content);
+                return `${e.speaker}: ${content}`;
+            })
+            .join('\n');
+
+        const messages: LLMMessage[] = [
+            {
+                role: 'system',
+                content: `你是一位讨论评估专家。请对以下讨论进行评估。
+评估维度：论点质量、论据支持、逻辑性、互动性、专业性。
+请以JSON格式返回：{"score": 1-10的数字, "feedback": "简短评价"}`,
+            },
+            {
+                role: 'user',
+                content: summary,
+            },
+        ];
+
+        try {
+            const result = await this.llmProvider.complete(messages, {
+                maxTokens: 200,
+                temperature: 0.5,
+            });
+
+            // 尝试解析 JSON
+            const jsonMatch = result.content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                return {
+                    score: Math.min(10, Math.max(1, Number(parsed.score) || 5)),
+                    feedback: String(parsed.feedback || '评估完成'),
+                };
+            }
+        } catch {
+            // 解析失败，返回默认值
+        }
+
         return {
-            score: 7.5,
-            feedback: '讨论总体表现良好，建议增加更多数据支持。',
+            score: 6,
+            feedback: '讨论表现中等，建议增加更多论据支持。',
         };
     }
 }

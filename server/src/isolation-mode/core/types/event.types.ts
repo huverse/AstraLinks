@@ -145,6 +145,10 @@ export interface EventContentPayload {
 
     // ROUND 类型
     round?: number;
+
+    // 用户交互标记
+    isUserInput?: boolean;
+    triggeredByUser?: boolean;
 }
 
 /**

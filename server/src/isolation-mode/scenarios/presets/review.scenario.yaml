@@ -3,28 +3,105 @@
 id: review
 name: 项目评审
 description: 从多个角度评估和审核项目方案
+version: "1.0.0"
 
-type: review
+# 阵营结构
+alignment:
+  type: collaborative
+  factions:
+    - id: reviewers
+      name: 评审团
+      description: 从不同角度评估项目的专家团队
+      color: "#9C27B0"
+      minMembers: 2
+      maxMembers: 5
+  allowNeutral: false
 
-# 必需字段
-alignment: collaborative
-flow: moderated
-moderatorPolicy: active
+# 讨论流程
+flow:
+  phases:
+    - id: presentation
+      type: opening
+      name: 项目介绍
+      description: 主持人介绍待评审项目
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      forceSummary: false
 
+    - id: technical_review
+      type: free_discussion
+      name: 技术评审
+      description: 评估技术可行性和实现方案
+      maxRounds: 3
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      maxTokensPerSpeech: 400
+      maxTimePerSpeech: 90
+      forceSummary: true
+
+    - id: risk_assessment
+      type: focused_conflict
+      name: 风险评估
+      description: 识别和讨论潜在风险
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      endCondition: max_rounds
+      maxTokensPerSpeech: 400
+      forceSummary: true
+
+    - id: conclusion
+      type: closing
+      name: 评审结论
+      description: 综合各方意见，给出评审结论
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      forceSummary: true
+
+  allowSkipPhase: false
+  allowRollback: false
+  globalTimeout: 1200
+
+# 主持人策略
+moderatorPolicy:
+  interventionLevel: 2
+  coldThreshold: 20
+  maxIdleRounds: 1
+  forceSummaryEachPhase: true
+  summaryMaxTokens: 400
+  biasAllowed: false
+  balanceCheck:
+    enabled: true
+    maxSpeakRatio: 0.5
+  contentFilter: false
+  offTopicDetection: true
+
+# 角色预设
 suggestedRoles:
-  - role: analyst
+  - id: tech_reviewer
+    role: analyst
     name: 技术评审员
     description: 评估技术可行性和实现方案
+    factionId: reviewers
     systemPromptTemplate: |
       你是一位资深的技术评审专家。
       你的任务是从技术角度评估项目的可行性、架构设计、技术选型等方面。
       给出专业、客观的技术分析和建议。
     required: true
     maxCount: 2
-    
-  - role: critic
+
+  - id: risk_assessor
+    role: critic
     name: 风险评估员
     description: 识别和评估潜在风险
+    factionId: reviewers
     systemPromptTemplate: |
       你是一位经验丰富的风险评估专家。
       你的任务是识别项目中的潜在风险，包括技术风险、进度风险、成本风险等。
@@ -32,26 +109,17 @@ suggestedRoles:
     required: true
     maxCount: 1
 
-  - role: supporter
+  - id: product_reviewer
+    role: supporter
     name: 产品评审员
     description: 评估用户价值和市场定位
+    factionId: reviewers
     systemPromptTemplate: |
       你是一位产品专家。
       你的任务是从用户价值、市场定位、竞争分析等角度评估项目。
       关注产品是否真正解决用户问题。
     required: false
     maxCount: 1
-
-rules:
-  speakingOrder: moderated
-  maxTokensPerTurn: 400
-  maxTimePerTurn: 90
-  allowInterruption: false
-  allowVoting: true
-  minRounds: 2
-  maxRounds: 8
-
-moderatorStrategy: facilitator
 
 endConditions:
   - type: max-rounds

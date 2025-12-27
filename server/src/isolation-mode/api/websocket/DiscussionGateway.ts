@@ -183,11 +183,50 @@ export function initializeWebSocketGateway(io: SocketIOServer): void {
         });
 
         // 处理发言请求
-        socket.on('speak:request', async (_data: { sessionId: string; content: string }) => {
-            // TODO: 处理发言请求
-            // 1. 验证权限
-            // 2. 触发 Agent 发言
-            // 3. 发布事件
+        socket.on('speak:request', async (
+            data: { sessionId: string; agentId?: string; content?: string },
+            callback?: (response: any) => void
+        ) => {
+            const { sessionId, agentId, content } = data;
+
+            // 验证会话
+            const session = sessionManager.get(sessionId);
+            if (!session) {
+                const error = { success: false, error: 'Session not found' };
+                callback?.(error);
+                socket.emit('speak:response', error);
+                return;
+            }
+
+            // 确定目标 Agent
+            let targetAgentId = agentId;
+            if (!targetAgentId) {
+                // 如果未指定，使用当前发言者或第一个 Agent
+                const state = moderatorController.getSessionState(sessionId);
+                targetAgentId = state?.currentSpeakerId || session.agents[0]?.id;
+            }
+
+            if (!targetAgentId) {
+                const error = { success: false, error: 'No agent specified or available' };
+                callback?.(error);
+                socket.emit('speak:response', error);
+                return;
+            }
+
+            try {
+                const result = await moderatorController.triggerAgentSpeak(
+                    sessionId,
+                    targetAgentId,
+                    content
+                );
+
+                callback?.(result);
+                socket.emit('speak:response', result);
+            } catch (error: any) {
+                const errorResponse = { success: false, error: error.message };
+                callback?.(errorResponse);
+                socket.emit('speak:response', errorResponse);
+            }
         });
 
         // 处理暂停/恢复请求

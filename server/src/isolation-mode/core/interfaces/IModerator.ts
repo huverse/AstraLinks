@@ -119,4 +119,14 @@ export interface IRuleEngine {
      * 检查是否超时
      */
     checkTimeout(state: SessionState): boolean;
+
+    /**
+     * 获取剩余时间（秒）
+     */
+    getRemainingTime(state: SessionState): number | null;
+
+    /**
+     * 获取当前规则
+     */
+    getRules(): DiscussionRules | null;
 }

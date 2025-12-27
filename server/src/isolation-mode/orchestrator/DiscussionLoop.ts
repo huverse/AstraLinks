@@ -117,7 +117,23 @@ export class DiscussionLoop {
                 break;
             }
 
-            // 2. 选择发言者
+            // 2. 检查当前发言者是否超时
+            if (moderatorController.checkSpeakerTimeout(sessionId)) {
+                const currentState = moderatorController.getSessionState(sessionId);
+                if (currentState?.currentSpeakerId) {
+                    await this.publishEvent(sessionId, {
+                        type: EventType.SYSTEM,
+                        content: {
+                            action: 'SPEAKER_TIMEOUT',
+                            message: '发言超时，切换到下一位发言者',
+                            agentId: currentState.currentSpeakerId
+                        }
+                    });
+                    weLogger.info({ sessionId, agentId: currentState.currentSpeakerId }, 'speaker_timeout');
+                }
+            }
+
+            // 3. 选择发言者
             const speaker = await moderatorController.selectNextSpeaker(sessionId);
             if (!speaker) {
                 weLogger.debug({ sessionId }, 'no_speaker_available');
@@ -125,10 +141,10 @@ export class DiscussionLoop {
                 continue;
             }
 
-            // 3. 生成发言
+            // 4. 生成发言
             const message = await speaker.generateResponse();
 
-            // 4. 发布事件
+            // 5. 发布事件
             await this.publishEvent(sessionId, {
                 type: EventType.SPEECH,
                 speaker: speaker.config.id,
@@ -140,11 +156,11 @@ export class DiscussionLoop {
                 }
             });
 
-            // 5. 更新进度
+            // 6. 更新进度
             this.lastProgressTime.set(sessionId, Date.now());
             speakersThisRound++;
 
-            // 6. 检查是否需要推进轮次
+            // 7. 检查是否需要推进轮次
             if (speakersThisRound >= config.maxSpeakersPerRound) {
                 await moderatorController.advanceRound(sessionId);
                 speakersThisRound = 0;
@@ -158,7 +174,7 @@ export class DiscussionLoop {
                 });
             }
 
-            // 7. 等待间隔
+            // 8. 等待间隔
             await this.sleep(config.speakIntervalMs);
         }
 

@@ -3,43 +3,105 @@
 id: debate
 name: 辩论
 description: 正反双方围绕主题进行辩论
+version: "1.0.0"
 
-type: debate
+# 阵营结构
+alignment:
+  type: opposing
+  factions:
+    - id: pro
+      name: 正方
+      description: 支持论点的一方
+      color: "#4CAF50"
+      minMembers: 1
+      maxMembers: 3
+    - id: con
+      name: 反方
+      description: 反对论点的一方
+      color: "#F44336"
+      minMembers: 1
+      maxMembers: 3
+  allowNeutral: false
 
-# 必需字段
-alignment: competitive
-flow: turn-based
-moderatorPolicy: active
+# 讨论流程
+flow:
+  phases:
+    - id: opening
+      type: opening
+      name: 开场陈述
+      description: 各方阐述基本立场
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      forceSummary: false
 
+    - id: free_debate
+      type: free_discussion
+      name: 自由辩论
+      description: 双方自由交锋
+      maxRounds: 6
+      allowInterrupt: false
+      speakingOrder: round-robin
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      maxTimePerSpeech: 120
+      forceSummary: true
+
+    - id: closing
+      type: closing
+      name: 总结陈词
+      description: 双方总结观点
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      factionOrder: [con, pro]
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      forceSummary: true
+
+  allowSkipPhase: false
+  allowRollback: false
+  globalTimeout: 1800
+
+# 主持人策略
+moderatorPolicy:
+  interventionLevel: 2
+  coldThreshold: 30
+  maxIdleRounds: 2
+  forceSummaryEachPhase: true
+  summaryMaxTokens: 300
+  biasAllowed: false
+  balanceCheck:
+    enabled: true
+    maxSpeakRatio: 0.6
+  contentFilter: false
+  offTopicDetection: true
+
+# 角色预设
 suggestedRoles:
-  - role: debater
+  - id: pro_debater
+    role: debater
     name: 正方辩手
     description: 支持论点的辩手
+    factionId: pro
     systemPromptTemplate: |
       你是一位经验丰富的辩论者，代表正方立场。
       你的任务是用逻辑和事实支持你的观点，同时礼貌但有力地反驳对方。
     required: true
     maxCount: 3
-    
-  - role: debater
+
+  - id: con_debater
+    role: debater
     name: 反方辩手
     description: 反对论点的辩手
+    factionId: con
     systemPromptTemplate: |
       你是一位经验丰富的辩论者，代表反方立场。
       你的任务是用逻辑和事实反驳正方观点，同时坚守你的立场。
     required: true
     maxCount: 3
-
-rules:
-  speakingOrder: round-robin
-  maxTokensPerTurn: 500
-  maxTimePerTurn: 120
-  allowInterruption: false
-  allowVoting: true
-  minRounds: 3
-  maxRounds: 10
-
-moderatorStrategy: facilitator
 
 endConditions:
   - type: max-rounds

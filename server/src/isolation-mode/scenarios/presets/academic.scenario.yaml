@@ -3,28 +3,105 @@
 id: academic
 name: 学术研讨
 description: 深入探讨学术问题，进行严谨的学术交流
+version: "1.0.0"
 
-type: academic
+# 阵营结构
+alignment:
+  type: collaborative
+  factions:
+    - id: scholars
+      name: 学术团队
+      description: 共同探讨学术问题的研究者
+      color: "#3F51B5"
+      minMembers: 2
+      maxMembers: 6
+  allowNeutral: true
 
-# 必需字段
-alignment: collaborative
-flow: turn-based
-moderatorPolicy: passive
+# 讨论流程
+flow:
+  phases:
+    - id: introduction
+      type: opening
+      name: 议题引入
+      description: 主持人介绍研讨主题和背景
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      maxTokensPerSpeech: 400
+      forceSummary: false
 
+    - id: presentation
+      type: free_discussion
+      name: 观点陈述
+      description: 各位研究者阐述自己的研究观点
+      maxRounds: 4
+      allowInterrupt: false
+      speakingOrder: round-robin
+      endCondition: max_rounds
+      maxTokensPerSpeech: 600
+      maxTimePerSpeech: 180
+      forceSummary: false
+
+    - id: discussion
+      type: free_discussion
+      name: 深入讨论
+      description: 针对各方观点进行深入交流
+      maxRounds: 8
+      allowInterrupt: false
+      speakingOrder: round-robin
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      forceSummary: true
+
+    - id: synthesis
+      type: closing
+      name: 综合总结
+      description: 整合各方观点，明确共识与分歧
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      maxTokensPerSpeech: 600
+      forceSummary: true
+
+  allowSkipPhase: false
+  allowRollback: false
+  globalTimeout: 2700
+
+# 主持人策略
+moderatorPolicy:
+  interventionLevel: 1
+  coldThreshold: 45
+  maxIdleRounds: 2
+  forceSummaryEachPhase: true
+  summaryMaxTokens: 500
+  biasAllowed: false
+  balanceCheck:
+    enabled: true
+    maxSpeakRatio: 0.4
+  contentFilter: false
+  offTopicDetection: true
+
+# 角色预设
 suggestedRoles:
-  - role: analyst
+  - id: researcher
+    role: analyst
     name: 研究者
     description: 提出和分析研究问题
+    factionId: scholars
     systemPromptTemplate: |
       你是一位严谨的学术研究者。
       你的任务是深入分析研究问题，引用相关文献和研究成果。
       保持学术严谨性，用数据和证据支持观点。
     required: true
     maxCount: 3
-    
-  - role: critic
+
+  - id: critic
+    role: critic
     name: 学术评论员
     description: 进行学术批评和质疑
+    factionId: scholars
     systemPromptTemplate: |
       你是一位专业的学术评论员。
       你的任务是对研究方法、数据分析、结论推导进行严格审视。
@@ -32,26 +109,17 @@ suggestedRoles:
     required: true
     maxCount: 2
 
-  - role: mediator
+  - id: mediator
+    role: mediator
     name: 学术协调人
     description: 协调讨论方向，综合各方观点
+    factionId: scholars
     systemPromptTemplate: |
-      你是一位学术协调人。
+      ���是一位学术协调人。
       你的任务是引导讨论保持学术焦点，综合各方观点。
       帮助达成学术共识或明确分歧点。
     required: false
     maxCount: 1
-
-rules:
-  speakingOrder: round-robin
-  maxTokensPerTurn: 600
-  maxTimePerTurn: 180
-  allowInterruption: false
-  allowVoting: false
-  minRounds: 4
-  maxRounds: 15
-
-moderatorStrategy: facilitator
 
 endConditions:
   - type: max-rounds

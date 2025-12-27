@@ -59,6 +59,8 @@ export interface SessionState {
     currentRound: number;
     /** 当前发言者 Agent ID */
     currentSpeakerId: string | null;
+    /** 当前发言者开始时间 (用于超时检查) */
+    currentSpeakerStartTime?: number;
     /** 各 Agent 状态 */
     agentStates: Map<string, AgentState>;
     /** 事件序号计数器 */

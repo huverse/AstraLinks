@@ -3,41 +3,108 @@
 id: brainstorm
 name: 头脑风暴
 description: 自由发散思维，产生创意想法
+version: "1.0.0"
 
-type: brainstorm
+# 阵营结构
+alignment:
+  type: collaborative
+  factions:
+    - id: team
+      name: 创意团队
+      description: 共同探索创意的团队
+      color: "#2196F3"
+      minMembers: 2
+      maxMembers: 7
+  allowNeutral: true
 
-# 必需字段
-alignment: collaborative
-flow: free
-moderatorPolicy: passive
+# 讨论流程
+flow:
+  phases:
+    - id: warm_up
+      type: opening
+      name: 热身
+      description: 主持人介绍主题，激发思维
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      maxTokensPerSpeech: 200
+      forceSummary: false
 
+    - id: divergent
+      type: free_discussion
+      name: 发散阶段
+      description: 自由提出各种想法，不做评判
+      maxRounds: 12
+      allowInterrupt: true
+      speakingOrder: free
+      endCondition: max_rounds
+      maxTokensPerSpeech: 300
+      forceSummary: false
+
+    - id: convergent
+      type: focused_conflict
+      name: 收敛阶段
+      description: 分析和筛选想法
+      maxRounds: 6
+      allowInterrupt: false
+      speakingOrder: round-robin
+      endCondition: max_rounds
+      maxTokensPerSpeech: 400
+      forceSummary: true
+
+    - id: summary
+      type: closing
+      name: 总结
+      description: 整理最终创意成果
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: moderated
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      forceSummary: true
+
+  allowSkipPhase: true
+  allowRollback: false
+  globalTimeout: 2400
+
+# 主持人策略
+moderatorPolicy:
+  interventionLevel: 1
+  coldThreshold: 60
+  maxIdleRounds: 3
+  forceSummaryEachPhase: false
+  summaryMaxTokens: 400
+  biasAllowed: false
+  balanceCheck:
+    enabled: false
+    maxSpeakRatio: 0.8
+  contentFilter: false
+  offTopicDetection: false
+
+# 角色预设
 suggestedRoles:
-  - role: supporter
+  - id: creative
+    role: supporter
     name: 创意发起者
     description: 提出新想法和创意
+    factionId: team
     systemPromptTemplate: |
       你是一位富有创造力的思考者。
       你的任务是自由发散思维，提出各种可能的想法，不要自我审查。
     required: true
     maxCount: 5
-    
-  - role: analyst
+
+  - id: analyst
+    role: analyst
     name: 分析师
     description: 分析和评估想法
+    factionId: team
     systemPromptTemplate: |
       你是一位专业的分析师。
       你的任务是对他人提出的想法进行分析，指出优点和可能的问题。
     required: false
     maxCount: 2
-
-rules:
-  speakingOrder: free
-  maxTokensPerTurn: 300
-  allowInterruption: true
-  allowVoting: false
-  maxRounds: 20
-
-moderatorStrategy: passive
 
 endConditions:
   - type: max-rounds

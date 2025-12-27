@@ -29,3 +29,8 @@ server/.env
 
 # Build outputs
 admin-panel/dist
+
+# Local reports and AI config
+tempsay/
+.claude/
+CLAUDE.md
