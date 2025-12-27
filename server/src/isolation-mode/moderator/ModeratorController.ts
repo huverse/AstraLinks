@@ -1,14 +1,14 @@
 /**
  * 主持人控制器
- * 
+ *
  * 负责流程调度，不涉及 LLM 调用
- * P0 修复: 结构化日志、事件发布、错误处理
  */
 
 import { v4 as uuidv4 } from 'uuid';
 import { SessionState, SessionStatus, EventType } from '../core/types';
 import { IModeratorController, IAgent, IRuleEngine } from '../core/interfaces';
 import { eventLogService, eventBus } from '../event-log';
+import { getDiscussionLoopLauncher } from '../orchestrator/DiscussionLoopLauncher';
 import { weLogger } from '../../services/world-engine-logger';
 
 /**
@@ -58,33 +58,21 @@ export class ModeratorController implements IModeratorController {
         state.startedAt = Date.now();
         state.currentRound = 1;
 
-        // 发布 session:start 事件
         await this.publishSystemEvent(sessionId, 'SESSION_START', {
             message: '讨论开始',
             round: 1
         });
 
-        // 异步启动讨论循环 (不阻塞)
-        try {
-            const { discussionLoop } = await import('../orchestrator/DiscussionLoop');
-            discussionLoop.start(sessionId).catch((err) => {
-                weLogger.error({
-                    sessionId,
-                    error: err.message,
-                    stack: err.stack
-                }, 'discussion_loop_error');
-
-                // 标记 session 为异常中止
-                this.abortSession(sessionId, `DiscussionLoop error: ${err.message}`);
-            });
-        } catch (importError: any) {
+        // 使用注册的启动器启动讨论循环
+        const launcher = getDiscussionLoopLauncher();
+        launcher.start(sessionId).catch((err) => {
             weLogger.error({
                 sessionId,
-                error: importError.message
-            }, 'failed_to_import_discussion_loop');
-
-            this.abortSession(sessionId, `Failed to start: ${importError.message}`);
-        }
+                error: err.message,
+                stack: err.stack
+            }, 'discussion_loop_error');
+            this.abortSession(sessionId, `DiscussionLoop error: ${err.message}`);
+        });
     }
 
     /**

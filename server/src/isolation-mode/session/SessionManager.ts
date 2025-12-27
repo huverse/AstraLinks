@@ -3,12 +3,13 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { SessionConfig, SessionState, SessionSummary, DiscussionRules, ScenarioConfig } from '../core/types';
+import { SessionConfig, SessionState, SessionSummary, ScenarioConfig } from '../core/types';
 import { SessionError } from '../core/errors';
 import { agentFactory } from '../agents';
 import { moderatorController, RuleEngine } from '../moderator';
 import { eventLogService, eventBus } from '../event-log';
 import { scenarioLoader } from '../scenarios';
+import { resolveDiscussionRules } from '../scenarios/RulesResolver';
 import { createLlmAdapterFromUserConfig, getDefaultLlmAdapter } from '../llm';
 
 /**
@@ -16,63 +17,6 @@ import { createLlmAdapterFromUserConfig, getDefaultLlmAdapter } from '../llm';
  */
 export class SessionManager {
     private sessions: Map<string, SessionConfig> = new Map();
-
-    /**
-     * 从场景配置解析讨论规则（兼容旧版 presets）
-     */
-    private resolveDiscussionRules(
-        scenario: ScenarioConfig,
-        overrideMaxRounds?: number
-    ): DiscussionRules {
-        const defaults: DiscussionRules = {
-            speakingOrder: 'round-robin',
-            maxTokensPerTurn: 300,
-            maxTimePerTurn: 120,
-            allowInterruption: false,
-            allowVoting: false,
-            minRounds: 1,
-            maxRounds: 10,
-        };
-
-        const legacyRules = (scenario as any).rules as Partial<DiscussionRules> | undefined;
-        let resolved: DiscussionRules = {
-            ...defaults,
-            ...(legacyRules || {})
-        };
-
-        const flow = (scenario as any).flow;
-        if (flow && typeof flow === 'object' && Array.isArray(flow.phases) && flow.phases.length > 0) {
-            const firstPhase = flow.phases[0] as any;
-            const totalRounds = flow.phases.reduce((sum: number, phase: any) => {
-                return sum + (typeof phase.maxRounds === 'number' ? phase.maxRounds : 0);
-            }, 0);
-
-            resolved = {
-                ...resolved,
-                speakingOrder: firstPhase.speakingOrder || resolved.speakingOrder,
-                allowInterruption: typeof firstPhase.allowInterrupt === 'boolean'
-                    ? firstPhase.allowInterrupt
-                    : resolved.allowInterruption,
-                maxTokensPerTurn: typeof firstPhase.maxTokensPerSpeech === 'number'
-                    ? firstPhase.maxTokensPerSpeech
-                    : resolved.maxTokensPerTurn,
-                maxTimePerTurn: typeof firstPhase.maxTimePerSpeech === 'number'
-                    ? firstPhase.maxTimePerSpeech
-                    : resolved.maxTimePerTurn,
-                maxRounds: totalRounds > 0 ? totalRounds : resolved.maxRounds,
-            };
-        }
-
-        if (overrideMaxRounds && overrideMaxRounds > 0) {
-            resolved.maxRounds = overrideMaxRounds;
-        }
-
-        if (resolved.maxRounds < resolved.minRounds) {
-            resolved.minRounds = Math.max(1, resolved.maxRounds);
-        }
-
-        return resolved;
-    }
 
     /**
      * 创建会话
@@ -85,7 +29,7 @@ export class SessionManager {
 
         // 加载并验证场景
         const scenario = await scenarioLoader.load(params.scenario.id);
-        const rules = this.resolveDiscussionRules(scenario, params.maxRounds);
+        const rules = resolveDiscussionRules(scenario, params.maxRounds);
 
         const config: SessionConfig = {
             ...params,

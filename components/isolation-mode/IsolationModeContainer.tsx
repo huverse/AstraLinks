@@ -1,180 +1,29 @@
 /**
  * 隔离模式容器组件
- * 
+ *
  * 多 Agent 结构化讨论的主界面
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-    FlaskConical, Users, MessageSquare, Play, Pause, Square,
-    Settings, History, ChevronLeft, Plus, RefreshCw, Cpu, Wifi, WifiOff, AlertCircle, Loader2
+    FlaskConical, Users, Play, Pause, Square,
+    History, ChevronLeft, Plus, RefreshCw, Wifi, WifiOff, Loader2
 } from 'lucide-react';
 import { API_BASE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
 import { encryptLlmConfig, LlmConfigData } from '../../utils/isolationCrypto';
-import { Participant, ProviderType } from '../../types';
-import { isolationSocket, WorldEvent, StateUpdate } from '../../services/isolationSocket';
+import { Participant } from '../../types';
+import { useIsolationSession } from '../../hooks/useIsolationSession';
 import { isolationLogger } from '../../utils/logger';
-
-// ============================================
-// 类型定义
-// ============================================
-
-interface Agent {
-    id: string;
-    name: string;
-    role: string;
-    status: 'idle' | 'thinking' | 'speaking';
-    speakCount: number;
-}
-
-interface DiscussionEvent {
-    id: string;
-    type: string;
-    sourceId: string;
-    timestamp: number;
-    sequence: number;
-    payload?: {
-        content?: string;
-        message?: string;
-    };
-}
-
-interface Session {
-    id: string;
-    title: string;
-    topic: string;
-    status: 'pending' | 'active' | 'paused' | 'completed';
-    currentRound: number;
-    agents: Agent[];
-    events: DiscussionEvent[];
-}
-
-interface Scenario {
-    id: string;
-    name: string;
-    description: string;
-    type: string;
-}
-
-const DEFAULT_SCENARIOS: Scenario[] = [
-    { id: 'debate', name: '辩论', description: '正反双方围绕主题辩论', type: 'debate' },
-    { id: 'brainstorm', name: '头脑风暴', description: '自由发散思维，产生创意', type: 'brainstorm' },
-    { id: 'review', name: '项目评审', description: '多角度评估项目方案', type: 'review' },
-    { id: 'academic', name: '学术研讨', description: '深入探讨学术问题', type: 'academic' },
-];
+import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS } from './types';
+import { AgentCard } from './AgentCard';
+import { EventTimeline } from './EventTimeline';
+import { ScenarioSelector } from './ScenarioSelector';
 
 interface IsolationModeContainerProps {
     onExit: () => void;
-    participants?: Participant[]; // 从 Galaxyous 配置中心传递的 AI 配置
+    participants?: Participant[];
 }
-
-// ============================================
-// 子组件
-// ============================================
-
-// Agent 卡片
-const AgentCard: React.FC<{ agent: Agent; isActive?: boolean }> = ({ agent, isActive }) => {
-    const statusColors = {
-        idle: 'bg-slate-600',
-        thinking: 'bg-yellow-500 animate-pulse',
-        speaking: 'bg-green-500 animate-pulse',
-    };
-
-    return (
-        <div className={`
-            p-4 rounded-xl border transition-all
-            ${isActive
-                ? 'border-purple-500 bg-purple-500/10'
-                : 'border-white/10 bg-slate-800/50 hover:bg-slate-800'}
-        `}>
-            <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white font-bold">
-                    {agent.name.charAt(0)}
-                </div>
-                <div className="flex-1 min-w-0">
-                    <div className="font-medium text-white truncate">{agent.name}</div>
-                    <div className="text-xs text-slate-400">{agent.role}</div>
-                </div>
-                <div className={`w-2 h-2 rounded-full ${statusColors[agent.status]}`} />
-            </div>
-            <div className="mt-3 text-xs text-slate-500">
-                发言 {agent.speakCount} 次
-            </div>
-        </div>
-    );
-};
-
-// 事件时间线
-const EventTimeline: React.FC<{ events: DiscussionEvent[] }> = ({ events }) => {
-    return (
-        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
-            {events.length === 0 ? (
-                <div className="text-center py-12 text-slate-500">
-                    <MessageSquare className="mx-auto mb-2 opacity-50" size={32} />
-                    <p>等待讨论开始...</p>
-                </div>
-            ) : (
-                events.map(event => {
-                    const isSpeech = event.type === 'agent:speak' || event.type === 'SPEECH';
-                    return (
-                    <div
-                        key={event.id}
-                        className={`p-4 rounded-xl ${isSpeech
-                            ? 'bg-slate-800/50 border border-white/5'
-                            : 'bg-purple-500/10 border border-purple-500/20'
-                            }`}
-                    >
-                        <div className="flex items-center gap-2 mb-2 text-xs text-slate-400">
-                            <span className="font-medium text-purple-400">
-                                {event.sourceId === 'moderator' ? '🎙️ 主持人' : `👤 ${event.sourceId}`}
-                            </span>
-                            <span>•</span>
-                            <span>#{event.sequence}</span>
-                            <span>•</span>
-                            <span>{new Date(event.timestamp).toLocaleTimeString()}</span>
-                        </div>
-                        <div className="text-sm text-slate-200">
-                            {event.payload?.content || event.payload?.message || ''}
-                        </div>
-                    </div>
-                );
-                })
-            )}
-        </div>
-    );
-};
-
-// 场景选择器
-const ScenarioSelector: React.FC<{
-    scenarios: Scenario[];
-    selected: string | null;
-    onSelect: (id: string) => void;
-}> = ({ scenarios, selected, onSelect }) => {
-    return (
-        <div className="grid grid-cols-2 gap-3">
-            {scenarios.map(scenario => (
-                <button
-                    key={scenario.id}
-                    onClick={() => onSelect(scenario.id)}
-                    className={`
-                        p-4 rounded-xl text-left transition-all
-                        ${selected === scenario.id
-                            ? 'bg-purple-500/20 border-2 border-purple-500'
-                            : 'bg-slate-800/50 border border-white/10 hover:border-purple-500/50'}
-                    `}
-                >
-                    <div className="font-medium text-white">{scenario.name}</div>
-                    <div className="text-xs text-slate-400 mt-1">{scenario.description}</div>
-                </button>
-            ))}
-        </div>
-    );
-};
-
-// ============================================
-// 主组件
-// ============================================
 
 const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit, participants = [] }) => {
     const { token } = useAuth();
@@ -191,12 +40,47 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [currentSession, setCurrentSession] = useState<Session | null>(null);
     const [topic, setTopic] = useState('');
 
-    // Socket 连接状态
-    const [socketConnected, setSocketConnected] = useState(false);
-    const socketInitialized = useRef(false);
-
-    // 加载会话历史
+    // 会话历史
     const [sessions, setSessions] = useState<Session[]>([]);
+
+    // Socket 连接管理 (使用 Hook)
+    const {
+        connected: socketConnected,
+        reconnecting,
+        reconnectAttempts,
+        joinSession: socketJoinSession,
+    } = useIsolationSession({
+        token,
+        onWorldEvent: (event) => {
+            setCurrentSession(prev => {
+                if (!prev || event.sessionId !== prev.id) return prev;
+                const newEvent: DiscussionEvent = {
+                    id: event.eventId,
+                    type: event.type,
+                    sourceId: (event.payload as Record<string, unknown>)?.speaker as string || 'system',
+                    timestamp: Date.now(),
+                    sequence: event.tick,
+                    payload: event.payload as { content?: string; message?: string }
+                };
+                return { ...prev, events: [...prev.events, newEvent] };
+            });
+        },
+        onStateUpdate: (state) => {
+            setCurrentSession(prev => {
+                if (!prev || state.sessionId !== prev.id) return prev;
+                if (state.isTerminated) {
+                    return { ...prev, status: 'completed' };
+                }
+                return prev;
+            });
+        },
+        onSimulationEnded: (sessionId) => {
+            setCurrentSession(prev => {
+                if (!prev || sessionId !== prev.id) return prev;
+                return { ...prev, status: 'completed' };
+            });
+        },
+    });
 
     const loadSessions = useCallback(async () => {
         if (!token) return;
@@ -245,78 +129,6 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         };
     }, []);
 
-    // Socket 连接管理 - 只在 token 变化时重新连接
-    const [reconnectInfo, setReconnectInfo] = useState({ attempts: 0, isReconnecting: false });
-
-    useEffect(() => {
-        if (!token || socketInitialized.current) return;
-
-        socketInitialized.current = true;
-
-        // 设置 token getter
-        isolationSocket.setTokenGetter(() => token);
-
-        // 连接 Socket
-        isolationSocket.connect({
-            onConnect: () => {
-                setSocketConnected(true);
-                setReconnectInfo({ attempts: 0, isReconnecting: false });
-                isolationLogger.info('WebSocket connected');
-            },
-            onDisconnect: (reason) => {
-                setSocketConnected(false);
-                isolationLogger.warn('WebSocket disconnected', { reason });
-            },
-            onReconnecting: (attempt, delay) => {
-                setReconnectInfo({ attempts: attempt, isReconnecting: true });
-                isolationLogger.info('Reconnecting', { attempt, delay });
-            },
-            onWorldEvent: (event) => {
-                // 收到实时事件，更新当前会话的事件列表
-                setCurrentSession(prev => {
-                    if (!prev || event.sessionId !== prev.id) return prev;
-                    const newEvent = {
-                        id: event.eventId,
-                        type: event.type,
-                        sourceId: (event.payload as Record<string, unknown>)?.speaker as string || 'system',
-                        timestamp: Date.now(),
-                        sequence: event.tick,
-                        payload: event.payload as { content?: string; message?: string }
-                    };
-                    return {
-                        ...prev,
-                        events: [...prev.events, newEvent]
-                    };
-                });
-            },
-            onStateUpdate: (state) => {
-                // 收到状态更新
-                setCurrentSession(prev => {
-                    if (!prev || state.sessionId !== prev.id) return prev;
-                    if (state.isTerminated) {
-                        return { ...prev, status: 'completed' };
-                    }
-                    return prev;
-                });
-            },
-            onSimulationEnded: ({ sessionId }) => {
-                setCurrentSession(prev => {
-                    if (!prev || sessionId !== prev.id) return prev;
-                    return { ...prev, status: 'completed' };
-                });
-            },
-            onError: (err) => {
-                isolationLogger.error('Socket error', { error: err.message });
-                setError(`连接错误: ${err.message}`);
-            }
-        });
-
-        return () => {
-            isolationSocket.disconnect();
-            socketInitialized.current = false;
-        };
-    }, [token]); // 只依赖 token，避免 currentSession 变化触发重连
-
     // 创建新讨论
     const handleCreateSession = async () => {
         if (!selectedScenario || !topic.trim()) {
@@ -329,7 +141,6 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
 
         try {
             const scenarioInfo = scenarios.find(s => s.id === selectedScenario);
-            // 从 participants 获取启用的 AI 配置 (Galaxyous 配置中心)
             let encryptedLlmConfig = undefined;
             const enabledParticipant = participants.find(p => p.config.enabled && p.config.apiKey);
 
@@ -362,7 +173,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                         { id: 'agent-1', name: '正方', role: 'debater', systemPrompt: '你是正方辩手' },
                         { id: 'agent-2', name: '反方', role: 'debater', systemPrompt: '你是反方辩手' },
                     ],
-                    llmConfig: encryptedLlmConfig, // 加密的用户 AI 配置
+                    llmConfig: encryptedLlmConfig,
                 }),
             });
 
@@ -372,7 +183,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
 
             const data = await response.json();
             const sessionId = data.data.id || data.data.sessionId;
-            const joinResult = await isolationSocket.joinSession(sessionId);
+            const joinResult = await socketJoinSession(sessionId);
             if (!joinResult.success) {
                 isolationLogger.warn('Failed to join session via socket', { sessionId, error: joinResult.error });
             }
@@ -441,10 +252,10 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                             <FlaskConical className="text-purple-400" size={24} />
                             隔离模式
                             {/* Socket 连接状态 */}
-                            {reconnectInfo.isReconnecting ? (
+                            {reconnecting ? (
                                 <span className="flex items-center gap-1 text-yellow-400">
                                     <Loader2 size={16} className="animate-spin" />
-                                    <span className="text-xs">重连中 ({reconnectInfo.attempts})</span>
+                                    <span className="text-xs">重连中 ({reconnectAttempts})</span>
                                 </span>
                             ) : socketConnected ? (
                                 <Wifi size={16} className="text-green-400" />

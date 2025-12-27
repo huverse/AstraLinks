@@ -1,6 +1,6 @@
 /**
  * LLM Adapter Factory
- * 
+ *
  * 根据配置创建合适的 LLM Adapter
  * 支持: 环境变量配置 / 用户自定义配置 (Galaxyous 配置中心)
  */
@@ -15,49 +15,83 @@ import { decryptLlmConfig, isValidEncryptedConfig } from '../utils/crypto';
 import { isolationLogger } from '../../services/world-engine-logger';
 
 // ============================================
+// Provider 类型定义与规范化
+// ============================================
+
+/** 支持的 LLM Provider 类型 */
+export type LlmProviderType = 'gemini' | 'openai-compatible' | 'disabled';
+
+/** Provider 别名映射表 */
+const PROVIDER_ALIASES: Record<string, LlmProviderType> = {
+    'gemini': 'gemini',
+    'openai': 'openai-compatible',
+    'openai-compatible': 'openai-compatible',
+    'openai_compatible': 'openai-compatible',
+    'openai-compat': 'openai-compatible',
+    'openai_compat': 'openai-compatible',
+    'GEMINI': 'gemini',
+    'OPENAI_COMPATIBLE': 'openai-compatible',
+};
+
+/**
+ * 规范化 provider 名称
+ */
+function normalizeProvider(provider: string | undefined): LlmProviderType {
+    if (!provider) return 'gemini';
+    return PROVIDER_ALIASES[provider] ?? 'disabled';
+}
+
+/** Adapter 配置 */
+interface AdapterConfig {
+    model?: string;
+    apiKey?: string;
+    baseUrl?: string;
+    timeout?: number;
+    maxRetries?: number;
+}
+
+const DEFAULT_ADAPTER_OPTIONS = { timeout: 30000, maxRetries: 2 };
+
+/**
+ * 根据 provider 类型创建 Adapter
+ */
+function createAdapterByType(type: LlmProviderType, config: AdapterConfig): ILlmAdapter {
+    const opts = { ...DEFAULT_ADAPTER_OPTIONS, ...config };
+
+    switch (type) {
+        case 'gemini':
+            return new GeminiAdapter(opts);
+        case 'openai-compatible':
+            return new OpenAICompatibleAdapter(opts);
+        default:
+            return disabledAdapter;
+    }
+}
+
+// ============================================
 // 从环境变量创建 (默认)
 // ============================================
 
 /**
  * 创建 LLM Adapter (从环境变量)
- * 
- * 根据 WE_LLM_ENABLED 和 WE_LLM_PROVIDER 返回合适的 adapter
  */
 export function createLlmAdapter(): ILlmAdapter {
-    // 检查 feature flag
     if (!worldEngineConfig.llm.enabled) {
         return disabledAdapter;
     }
 
-    const provider = worldEngineConfig.llm.provider?.toLowerCase() || 'gemini';
+    const providerType = normalizeProvider(worldEngineConfig.llm.provider);
 
-    switch (provider) {
-        case 'gemini':
-            return new GeminiAdapter({
-                model: worldEngineConfig.llm.model,
-                apiKey: worldEngineConfig.llm.key,
-                baseUrl: worldEngineConfig.llm.baseUrl,
-                timeout: 30000,
-                maxRetries: 2
-            });
-
-        case 'openai':
-        case 'openai-compatible':
-        case 'openai_compatible':
-        case 'openai-compat':
-        case 'openai_compat':
-            return new OpenAICompatibleAdapter({
-                model: worldEngineConfig.llm.model,
-                apiKey: worldEngineConfig.llm.key,
-                baseUrl: worldEngineConfig.llm.baseUrl,
-                timeout: 30000,
-                maxRetries: 2
-            });
-
-        default:
-            isolationLogger.warn({ provider }, 'unknown_llm_provider_using_disabled');
-            return disabledAdapter;
+    if (providerType === 'disabled') {
+        isolationLogger.warn({ provider: worldEngineConfig.llm.provider }, 'unknown_llm_provider');
+        return disabledAdapter;
     }
+
+    return createAdapterByType(providerType, {
+        model: worldEngineConfig.llm.model,
+        apiKey: worldEngineConfig.llm.key,
+        baseUrl: worldEngineConfig.llm.baseUrl,
+    });
 }
 
 // ============================================
@@ -66,55 +100,34 @@ export function createLlmAdapter(): ILlmAdapter {
 
 /**
  * 从用户加密配置创建 LLM Adapter
- * 
- * @param encryptedConfig 加密的用户配置 (从前端传递)
- * @returns ILlmAdapter 实例
  */
 export function createLlmAdapterFromUserConfig(encryptedConfig?: EncryptedLlmConfig): ILlmAdapter {
-    // 如果没有配置，返回禁用适配器
     if (!encryptedConfig) {
         isolationLogger.debug('no_user_llm_config_provided');
         return disabledAdapter;
     }
 
-    // 验证配置格式
     if (!isValidEncryptedConfig(encryptedConfig)) {
         isolationLogger.warn('invalid_encrypted_llm_config_format');
         return disabledAdapter;
     }
 
     try {
-        // 解密配置
         const config = decryptLlmConfig(encryptedConfig);
+        const providerType = normalizeProvider(config.provider);
 
-        isolationLogger.info({
-            provider: config.provider,
-            model: config.modelName
-        }, 'creating_adapter_from_user_config');
+        isolationLogger.info({ provider: providerType, model: config.modelName }, 'creating_adapter_from_user_config');
 
-        switch (config.provider) {
-            case 'GEMINI':
-                return new GeminiAdapter({
-                    apiKey: config.apiKey,
-                    baseUrl: config.baseUrl,
-                    model: config.modelName,
-                    timeout: 30000,
-                    maxRetries: 2
-                });
-
-            case 'OPENAI_COMPATIBLE':
-                return new OpenAICompatibleAdapter({
-                    apiKey: config.apiKey,
-                    baseUrl: config.baseUrl || 'https://api.openai.com/v1',
-                    model: config.modelName,
-                    timeout: 30000,
-                    maxRetries: 2
-                });
-
-            default:
-                isolationLogger.warn({ provider: config.provider }, 'unsupported_user_llm_provider');
-                return disabledAdapter;
+        if (providerType === 'disabled') {
+            isolationLogger.warn({ provider: config.provider }, 'unsupported_user_llm_provider');
+            return disabledAdapter;
         }
+
+        return createAdapterByType(providerType, {
+            apiKey: config.apiKey,
+            baseUrl: config.baseUrl || (providerType === 'openai-compatible' ? 'https://api.openai.com/v1' : undefined),
+            model: config.modelName,
+        });
     } catch (error: any) {
         isolationLogger.error({ error: error.message }, 'failed_to_decrypt_llm_config');
         return disabledAdapter;
