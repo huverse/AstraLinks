@@ -89,6 +89,34 @@ router.post('/:id/start', async (req: Request, res: Response) => {
 });
 
 /**
+ * POST /api/isolation/sessions/:id/pause
+ * 暂停会话
+ */
+router.post('/:id/pause', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        await sessionManager.pause(id);
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+/**
+ * POST /api/isolation/sessions/:id/resume
+ * 恢复会话
+ */
+router.post('/:id/resume', async (req: Request, res: Response) => {
+    try {
+        const { id } = req.params;
+        await sessionManager.resume(id);
+        res.json({ success: true });
+    } catch (error: any) {
+        res.status(400).json({ success: false, error: error.message });
+    }
+});
+
+/**
  * POST /api/isolation/sessions/:id/end
  * 结束会话
  */

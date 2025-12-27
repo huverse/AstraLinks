@@ -144,6 +144,30 @@ export class SessionManager {
     }
 
     /**
+     * 暂停会话
+     */
+    async pause(sessionId: string): Promise<void> {
+        const config = this.sessions.get(sessionId);
+        if (!config) {
+            throw new SessionError('Session not found', sessionId);
+        }
+
+        await moderatorController.pauseSession(sessionId);
+    }
+
+    /**
+     * 恢复会话
+     */
+    async resume(sessionId: string): Promise<void> {
+        const config = this.sessions.get(sessionId);
+        if (!config) {
+            throw new SessionError('Session not found', sessionId);
+        }
+
+        await moderatorController.resumeSession(sessionId);
+    }
+
+    /**
      * 结束会话
      */
     async end(sessionId: string, reason: string = 'Manual end'): Promise<void> {
