@@ -2,12 +2,13 @@
  * Agent 配置面板
  *
  * 允许用户自定义 Agent 并为每个 Agent 选择不同的 LLM
+ * 支持从 Galaxyous 配置中心选择，或直接输入自定义配置
  */
 
 import React, { useState } from 'react';
-import { Plus, Trash2, Settings, User, Cpu, ChevronDown, ChevronUp } from 'lucide-react';
+import { Plus, Trash2, User, Cpu, ChevronDown, ChevronUp, Key } from 'lucide-react';
 import { Participant } from '../../types';
-import { Agent, AgentLlmConfig } from './types';
+import { Agent, AgentLlmConfig, CustomLlmConfig } from './types';
 
 interface AgentConfigPanelProps {
     agents: Agent[];
@@ -64,17 +65,45 @@ export const AgentConfigPanel: React.FC<AgentConfigPanelProps> = ({
         onAgentsChange(agents.map(a => a.id === id ? { ...a, ...updates } : a));
     };
 
-    const handleLlmConfigChange = (agentId: string, participantId: string | 'session') => {
-        const config: AgentLlmConfig = participantId === 'session'
-            ? { useSessionConfig: true, configSource: 'session' }
-            : { useSessionConfig: false, galaxyousConfigId: participantId, configSource: 'galaxyous' };
+    const handleLlmConfigChange = (agentId: string, value: string) => {
+        let config: AgentLlmConfig;
+        if (value === 'session') {
+            config = { useSessionConfig: true, configSource: 'session' };
+        } else if (value === 'custom') {
+            config = {
+                useSessionConfig: false,
+                configSource: 'custom',
+                customConfig: { provider: 'openai', apiKey: '', baseUrl: '', modelName: '' }
+            };
+        } else {
+            config = { useSessionConfig: false, galaxyousConfigId: value, configSource: 'galaxyous' };
+        }
         handleUpdateAgent(agentId, { agentLlmConfig: config });
+    };
+
+    const handleCustomConfigChange = (agentId: string, field: keyof CustomLlmConfig, value: string | number | undefined) => {
+        const agent = agents.find(a => a.id === agentId);
+        if (!agent?.agentLlmConfig?.customConfig) return;
+        const updatedCustomConfig = { ...agent.agentLlmConfig.customConfig, [field]: value };
+        handleUpdateAgent(agentId, {
+            agentLlmConfig: { ...agent.agentLlmConfig, customConfig: updatedCustomConfig }
+        });
     };
 
     const getParticipantName = (config?: AgentLlmConfig) => {
         if (!config || config.useSessionConfig) return '使用默认配置';
+        if (config.configSource === 'custom' && config.customConfig) {
+            const { provider, modelName } = config.customConfig;
+            return modelName ? `自定义 (${provider}/${modelName})` : '自定义配置';
+        }
         const p = participants.find(p => p.id === config.galaxyousConfigId);
         return p ? `${p.name} (${p.config.modelName})` : '使用默认配置';
+    };
+
+    const getLlmSelectValue = (config?: AgentLlmConfig) => {
+        if (!config || config.useSessionConfig) return 'session';
+        if (config.configSource === 'custom') return 'custom';
+        return config.galaxyousConfigId || 'session';
     };
 
     return (
@@ -185,26 +214,104 @@ export const AgentConfigPanel: React.FC<AgentConfigPanelProps> = ({
                                 <div>
                                     <label className="block text-xs text-slate-400 mb-1 flex items-center gap-1">
                                         <Cpu size={12} />
-                                        LLM 模型 (从 Galaxyous 配置中心选择)
+                                        LLM 模型
                                     </label>
                                     <select
-                                        value={agent.agentLlmConfig?.useSessionConfig !== false ? 'session' : agent.agentLlmConfig?.galaxyousConfigId || 'session'}
+                                        value={getLlmSelectValue(agent.agentLlmConfig)}
                                         onChange={(e) => handleLlmConfigChange(agent.id, e.target.value)}
                                         className="w-full px-3 py-1.5 bg-slate-700/50 border border-white/10 rounded text-sm text-white"
                                     >
                                         <option value="session">使用默认配置</option>
-                                        {enabledParticipants.map(p => (
-                                            <option key={p.id} value={p.id}>
-                                                {p.name} ({p.config.modelName})
-                                            </option>
-                                        ))}
+                                        <option value="custom">✨ 自定义配置</option>
+                                        {enabledParticipants.length > 0 && (
+                                            <optgroup label="Galaxyous 配置中心">
+                                                {enabledParticipants.map(p => (
+                                                    <option key={p.id} value={p.id}>
+                                                        {p.name} ({p.config.modelName})
+                                                    </option>
+                                                ))}
+                                            </optgroup>
+                                        )}
                                     </select>
-                                    {enabledParticipants.length === 0 && (
-                                        <p className="text-xs text-yellow-400 mt-1">
-                                            请先在 Galaxyous 配置中心添加并启用 LLM 配置
-                                        </p>
-                                    )}
                                 </div>
+
+                                {/* 自定义 LLM 配置输入 */}
+                                {agent.agentLlmConfig?.configSource === 'custom' && (
+                                    <div className="space-y-2 p-3 bg-slate-900/50 rounded-lg border border-purple-500/20">
+                                        <div className="flex items-center gap-1 text-xs text-purple-300 mb-2">
+                                            <Key size={12} />
+                                            自定义 LLM 配置
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="block text-xs text-slate-500 mb-1">Provider</label>
+                                                <input
+                                                    type="text"
+                                                    value={agent.agentLlmConfig.customConfig?.provider || ''}
+                                                    onChange={(e) => handleCustomConfigChange(agent.id, 'provider', e.target.value)}
+                                                    placeholder="openai / claude / deepseek"
+                                                    className="w-full px-2 py-1 bg-slate-800 border border-white/10 rounded text-xs text-white"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs text-slate-500 mb-1">Model Name</label>
+                                                <input
+                                                    type="text"
+                                                    value={agent.agentLlmConfig.customConfig?.modelName || ''}
+                                                    onChange={(e) => handleCustomConfigChange(agent.id, 'modelName', e.target.value)}
+                                                    placeholder="gpt-4o / claude-3-opus"
+                                                    className="w-full px-2 py-1 bg-slate-800 border border-white/10 rounded text-xs text-white"
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-slate-500 mb-1">Base URL</label>
+                                            <input
+                                                type="text"
+                                                value={agent.agentLlmConfig.customConfig?.baseUrl || ''}
+                                                onChange={(e) => handleCustomConfigChange(agent.id, 'baseUrl', e.target.value)}
+                                                placeholder="https://api.openai.com/v1"
+                                                className="w-full px-2 py-1 bg-slate-800 border border-white/10 rounded text-xs text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-slate-500 mb-1">API Key</label>
+                                            <input
+                                                type="password"
+                                                value={agent.agentLlmConfig.customConfig?.apiKey || ''}
+                                                onChange={(e) => handleCustomConfigChange(agent.id, 'apiKey', e.target.value)}
+                                                placeholder="sk-..."
+                                                className="w-full px-2 py-1 bg-slate-800 border border-white/10 rounded text-xs text-white"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-xs text-slate-500 mb-1">Temperature (可选)</label>
+                                            <input
+                                                type="number"
+                                                min="0"
+                                                max="2"
+                                                step="0.1"
+                                                value={agent.agentLlmConfig.customConfig?.temperature ?? ''}
+                                                onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    handleCustomConfigChange(agent.id, 'temperature', val === '' ? undefined : parseFloat(val));
+                                                }}
+                                                placeholder="0.7"
+                                                className="w-full px-2 py-1 bg-slate-800 border border-white/10 rounded text-xs text-white"
+                                            />
+                                        </div>
+                                        <p className="text-xs text-slate-500 mt-1">
+                                            支持任何 OpenAI 兼容 API (Claude, DeepSeek, Ollama, vLLM 等)
+                                        </p>
+                                        {agent.agentLlmConfig.customConfig && (
+                                            (!agent.agentLlmConfig.customConfig.modelName || !agent.agentLlmConfig.customConfig.apiKey) && (
+                                                <p className="text-xs text-yellow-400 mt-1">
+                                                    ⚠️ 请填写 Model Name 和 API Key (本地模型可填任意值)
+                                                </p>
+                                            )
+                                        )}
+                                    </div>
+                                )}
 
                                 {/* 系统提示词 */}
                                 <div>

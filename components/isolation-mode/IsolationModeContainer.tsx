@@ -181,22 +181,43 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                 };
 
                 // 如果 Agent 有独立的 LLM 配置
-                if (agent.agentLlmConfig && !agent.agentLlmConfig.useSessionConfig && agent.agentLlmConfig.galaxyousConfigId) {
-                    const agentParticipant = participants.find(p => p.id === agent.agentLlmConfig?.galaxyousConfigId);
-                    if (agentParticipant && agentParticipant.config.apiKey) {
-                        const agentLlmConfigData: LlmConfigData = {
-                            provider: agentParticipant.provider,
-                            apiKey: agentParticipant.config.apiKey,
-                            baseUrl: agentParticipant.config.baseUrl,
-                            modelName: agentParticipant.config.modelName,
-                            temperature: agentParticipant.config.temperature
-                        };
-                        agentPayload.agentLlmConfig = {
-                            useSessionConfig: false,
-                            llmConfig: await encryptLlmConfig(agentLlmConfigData),
-                            configSource: 'galaxyous',
-                            galaxyousConfigId: agent.agentLlmConfig.galaxyousConfigId,
-                        };
+                if (agent.agentLlmConfig && !agent.agentLlmConfig.useSessionConfig) {
+                    // 自定义配置 (用户直接输入)
+                    if (agent.agentLlmConfig.configSource === 'custom' && agent.agentLlmConfig.customConfig) {
+                        const { provider, apiKey, baseUrl, modelName, temperature } = agent.agentLlmConfig.customConfig;
+                        if (apiKey && modelName) {
+                            const agentLlmConfigData: LlmConfigData = {
+                                provider: provider || 'openai',
+                                apiKey,
+                                baseUrl,
+                                modelName,
+                                temperature
+                            };
+                            agentPayload.agentLlmConfig = {
+                                useSessionConfig: false,
+                                llmConfig: await encryptLlmConfig(agentLlmConfigData),
+                                configSource: 'custom',
+                            };
+                        }
+                    }
+                    // Galaxyous 配置中心
+                    else if (agent.agentLlmConfig.galaxyousConfigId) {
+                        const agentParticipant = participants.find(p => p.id === agent.agentLlmConfig?.galaxyousConfigId);
+                        if (agentParticipant && agentParticipant.config.apiKey) {
+                            const agentLlmConfigData: LlmConfigData = {
+                                provider: agentParticipant.provider,
+                                apiKey: agentParticipant.config.apiKey,
+                                baseUrl: agentParticipant.config.baseUrl,
+                                modelName: agentParticipant.config.modelName,
+                                temperature: agentParticipant.config.temperature
+                            };
+                            agentPayload.agentLlmConfig = {
+                                useSessionConfig: false,
+                                llmConfig: await encryptLlmConfig(agentLlmConfigData),
+                                configSource: 'galaxyous',
+                                galaxyousConfigId: agent.agentLlmConfig.galaxyousConfigId,
+                            };
+                        }
                     }
                 }
 

@@ -92,7 +92,7 @@ export async function encrypt(plaintext: string): Promise<EncryptedData> {
 // ============================================
 
 export interface LlmConfigData {
-    provider: 'GEMINI' | 'OPENAI_COMPATIBLE';
+    provider: string;  // 支持任意 provider 字符串
     apiKey: string;
     baseUrl?: string;
     modelName: string;

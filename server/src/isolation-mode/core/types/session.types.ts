@@ -14,9 +14,15 @@ export type SessionStatus =
 
 /**
  * 加密的 LLM 配置 (从 Galaxyous 配置中心同步)
+ *
+ * 支持的 Provider:
+ * - GEMINI: Google Gemini API
+ * - OPENAI_COMPATIBLE: OpenAI 及所有兼容 API (Claude, DeepSeek, Ollama, vLLM 等)
+ * - ANTHROPIC: Anthropic Claude API (原生)
+ * - CUSTOM: 完全自定义配置
  */
 export interface EncryptedLlmConfig {
-    provider: 'GEMINI' | 'OPENAI_COMPATIBLE';
+    provider: 'GEMINI' | 'OPENAI_COMPATIBLE' | 'ANTHROPIC' | 'CUSTOM' | string;
     encryptedApiKey: {
         ciphertext: string;
         iv: string;
@@ -25,6 +31,8 @@ export interface EncryptedLlmConfig {
     baseUrl?: string;
     modelName: string;
     temperature?: number;
+    /** 额外的自定义参数 */
+    customParams?: Record<string, unknown>;
 }
 
 export interface SessionConfig {

@@ -3,6 +3,18 @@
  */
 
 /**
+ * 自定义 LLM 配置
+ * 允许用户直接输入 API 参数
+ */
+export interface CustomLlmConfig {
+    provider: string;
+    apiKey: string;
+    baseUrl: string;
+    modelName: string;
+    temperature?: number;
+}
+
+/**
  * Agent LLM 配置
  * 允许每个 Agent 使用不同的模型
  */
@@ -13,6 +25,8 @@ export interface AgentLlmConfig {
     galaxyousConfigId?: string;
     /** 配置来源标识 */
     configSource?: 'session' | 'custom' | 'galaxyous';
+    /** 自定义 LLM 配置 (当 configSource = 'custom' 时) */
+    customConfig?: CustomLlmConfig;
 }
 
 export interface Agent {

@@ -18,27 +18,69 @@ import { isolationLogger } from '../../services/world-engine-logger';
 // Provider 类型定义与规范化
 // ============================================
 
-/** 支持的 LLM Provider 类型 */
+/**
+ * 支持的 LLM Provider 类型
+ *
+ * - gemini: Google Gemini API
+ * - openai-compatible: OpenAI 及所有兼容 API (Claude via proxy, DeepSeek, Ollama, vLLM 等)
+ * - disabled: 禁用
+ *
+ * 注意: 所有非 Gemini 的 provider 都会被路由到 openai-compatible
+ * 因为大多数 LLM API 都兼容 OpenAI 的 /chat/completions 格式
+ */
 export type LlmProviderType = 'gemini' | 'openai-compatible' | 'disabled';
 
-/** Provider 别名映射表 */
+/**
+ * Provider 别名映射表
+ * 支持各种常见的 provider 名称，统一映射到内部类型
+ */
 const PROVIDER_ALIASES: Record<string, LlmProviderType> = {
+    // Gemini
     'gemini': 'gemini',
+    'GEMINI': 'gemini',
+    'google': 'gemini',
+    'GOOGLE': 'gemini',
+
+    // OpenAI 及兼容 API
     'openai': 'openai-compatible',
     'openai-compatible': 'openai-compatible',
     'openai_compatible': 'openai-compatible',
     'openai-compat': 'openai-compatible',
     'openai_compat': 'openai-compatible',
-    'GEMINI': 'gemini',
     'OPENAI_COMPATIBLE': 'openai-compatible',
+    'OPENAI': 'openai-compatible',
+
+    // Claude/Anthropic (通过 OpenAI 兼容代理)
+    'claude': 'openai-compatible',
+    'CLAUDE': 'openai-compatible',
+    'anthropic': 'openai-compatible',
+    'ANTHROPIC': 'openai-compatible',
+
+    // DeepSeek
+    'deepseek': 'openai-compatible',
+    'DEEPSEEK': 'openai-compatible',
+
+    // 本地模型
+    'ollama': 'openai-compatible',
+    'OLLAMA': 'openai-compatible',
+    'vllm': 'openai-compatible',
+    'VLLM': 'openai-compatible',
+    'local': 'openai-compatible',
+    'LOCAL': 'openai-compatible',
+
+    // 自定义 (默认使用 OpenAI 兼容格式)
+    'custom': 'openai-compatible',
+    'CUSTOM': 'openai-compatible',
 };
 
 /**
  * 规范化 provider 名称
+ * 未知的 provider 默认使用 openai-compatible (因为大多数 API 都兼容)
  */
 function normalizeProvider(provider: string | undefined): LlmProviderType {
     if (!provider) return 'gemini';
-    return PROVIDER_ALIASES[provider] ?? 'disabled';
+    // 对于未知的 provider，默认使用 openai-compatible
+    return PROVIDER_ALIASES[provider] ?? 'openai-compatible';
 }
 
 /** Adapter 配置 */
