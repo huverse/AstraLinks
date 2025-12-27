@@ -149,6 +149,9 @@ export interface EventContentPayload {
     // 用户交互标记
     isUserInput?: boolean;
     triggeredByUser?: boolean;
+
+    // 意图队列标记
+    fromIntent?: boolean;
 }
 
 /**

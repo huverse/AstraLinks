@@ -5,7 +5,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { SessionState, SessionStatus, EventType } from '../core/types';
+import { SessionState, SessionStatus, EventType, Intent, IntentUrgencyLevel, DiscussionOutline } from '../core/types';
 import { IModeratorController, IAgent, IRuleEngine } from '../core/interfaces';
 import { eventLogService, eventBus } from '../event-log';
 import { getDiscussionLoopLauncher } from '../orchestrator/DiscussionLoopLauncher';
@@ -18,6 +18,9 @@ export class ModeratorController implements IModeratorController {
     private sessions: Map<string, SessionState> = new Map();
     private agents: Map<string, Map<string, IAgent>> = new Map();
     private ruleEngines: Map<string, IRuleEngine> = new Map();
+    private pendingIntents: Map<string, Intent[]> = new Map();
+    private outlines: Map<string, DiscussionOutline> = new Map();
+    private interventionLevels: Map<string, number> = new Map();
 
     /**
      * 设置规则引擎
@@ -353,6 +356,230 @@ export class ModeratorController implements IModeratorController {
      */
     getSessionState(sessionId: string): SessionState | undefined {
         return this.sessions.get(sessionId);
+    }
+
+    // ============================================
+    // 举手/插话机制
+    // ============================================
+
+    /**
+     * 提交发言意图（举手/插话）
+     */
+    async submitIntent(sessionId: string, intent: Omit<Intent, 'timestamp'>): Promise<{
+        success: boolean;
+        queued: boolean;
+        position?: number;
+        error?: string;
+    }> {
+        const state = this.sessions.get(sessionId);
+        if (!state) {
+            return { success: false, queued: false, error: 'Session not found' };
+        }
+
+        if (state.status !== 'active') {
+            return { success: false, queued: false, error: 'Session is not active' };
+        }
+
+        const fullIntent: Intent = {
+            ...intent,
+            timestamp: Date.now(),
+        };
+
+        // 获取或创建意图队列
+        let intents = this.pendingIntents.get(sessionId);
+        if (!intents) {
+            intents = [];
+            this.pendingIntents.set(sessionId, intents);
+        }
+
+        // 检查是否是高优先级插话
+        const urgencyLevel = intent.urgencyLevel || IntentUrgencyLevel.RAISE_HAND;
+        const interventionLevel = this.interventionLevels.get(sessionId) || 2;
+
+        // 如果是直接插话且允许打断
+        if (urgencyLevel >= IntentUrgencyLevel.INTERRUPT && interventionLevel < 3) {
+            // 高优先级，插入队列前面
+            intents.unshift(fullIntent);
+
+            // 发布插话事件
+            await this.publishSystemEvent(sessionId, 'AGENT_INTERRUPT', {
+                message: `${intent.agentId} 请求插话`,
+                agentId: intent.agentId,
+                urgencyLevel,
+                intentType: intent.type,
+            });
+
+            weLogger.info({ sessionId, agentId: intent.agentId, urgencyLevel }, 'agent_interrupt');
+            return { success: true, queued: true, position: 1 };
+        }
+
+        // 普通举手，按优先级插入
+        const insertIndex = intents.findIndex(i =>
+            (i.urgencyLevel || 1) < urgencyLevel
+        );
+
+        if (insertIndex === -1) {
+            intents.push(fullIntent);
+        } else {
+            intents.splice(insertIndex, 0, fullIntent);
+        }
+
+        // 发布举手事件
+        await this.publishSystemEvent(sessionId, 'AGENT_RAISE_HAND', {
+            message: `${intent.agentId} 举手请求发言`,
+            agentId: intent.agentId,
+            urgencyLevel,
+            intentType: intent.type,
+            targetAgentId: intent.targetAgentId,
+        });
+
+        const position = intents.indexOf(fullIntent) + 1;
+        weLogger.debug({ sessionId, agentId: intent.agentId, position }, 'agent_raise_hand');
+
+        return { success: true, queued: true, position };
+    }
+
+    /**
+     * 获取待处理的发言意图
+     */
+    getPendingIntents(sessionId: string): Intent[] {
+        return this.pendingIntents.get(sessionId) || [];
+    }
+
+    /**
+     * 处理下一个发言意图
+     */
+    async processNextIntent(sessionId: string): Promise<Intent | null> {
+        const intents = this.pendingIntents.get(sessionId);
+        if (!intents || intents.length === 0) {
+            return null;
+        }
+
+        return intents.shift() || null;
+    }
+
+    /**
+     * 清除某个 Agent 的所有意图
+     */
+    clearAgentIntents(sessionId: string, agentId: string): void {
+        const intents = this.pendingIntents.get(sessionId);
+        if (intents) {
+            const filtered = intents.filter(i => i.agentId !== agentId);
+            this.pendingIntents.set(sessionId, filtered);
+        }
+    }
+
+    // ============================================
+    // 主持人点名功能
+    // ============================================
+
+    /**
+     * 主持人点名指定 Agent 发言
+     */
+    async callAgent(sessionId: string, agentId: string, reason?: string): Promise<{
+        success: boolean;
+        error?: string;
+    }> {
+        const state = this.sessions.get(sessionId);
+        if (!state) {
+            return { success: false, error: 'Session not found' };
+        }
+
+        const agent = this.agents.get(sessionId)?.get(agentId);
+        if (!agent) {
+            return { success: false, error: 'Agent not found' };
+        }
+
+        // 设置当前发言者
+        state.currentSpeakerId = agentId;
+        state.currentSpeakerStartTime = Date.now();
+
+        // 发布点名事件
+        await this.publishSystemEvent(sessionId, 'MODERATOR_CALL', {
+            message: reason || `主持人点名 ${agent.config.name} 发言`,
+            agentId,
+            agentName: agent.config.name,
+        });
+
+        weLogger.info({ sessionId, agentId, reason }, 'moderator_call_agent');
+
+        return { success: true };
+    }
+
+    /**
+     * 主持人要求某 Agent 回应另一个 Agent
+     */
+    async requestResponse(
+        sessionId: string,
+        responderId: string,
+        targetId: string,
+        topic?: string
+    ): Promise<{ success: boolean; error?: string }> {
+        const state = this.sessions.get(sessionId);
+        if (!state) {
+            return { success: false, error: 'Session not found' };
+        }
+
+        const responder = this.agents.get(sessionId)?.get(responderId);
+        const target = this.agents.get(sessionId)?.get(targetId);
+
+        if (!responder || !target) {
+            return { success: false, error: 'Agent not found' };
+        }
+
+        // 设置当前发言者
+        state.currentSpeakerId = responderId;
+        state.currentSpeakerStartTime = Date.now();
+
+        // 发布请求回应事件
+        await this.publishSystemEvent(sessionId, 'MODERATOR_REQUEST_RESPONSE', {
+            message: `主持人请 ${responder.config.name} 回应 ${target.config.name}${topic ? `关于"${topic}"的观点` : ''}`,
+            responderId,
+            responderName: responder.config.name,
+            targetId,
+            targetName: target.config.name,
+            topic,
+        });
+
+        weLogger.info({ sessionId, responderId, targetId, topic }, 'moderator_request_response');
+
+        return { success: true };
+    }
+
+    // ============================================
+    // 讨论大纲管理
+    // ============================================
+
+    /**
+     * 设置讨论大纲
+     */
+    setOutline(sessionId: string, outline: DiscussionOutline): void {
+        this.outlines.set(sessionId, outline);
+    }
+
+    /**
+     * 获取讨论大纲
+     */
+    getOutline(sessionId: string): DiscussionOutline | undefined {
+        return this.outlines.get(sessionId);
+    }
+
+    // ============================================
+    // 介入程度控制
+    // ============================================
+
+    /**
+     * 设置介入程度 (0-3)
+     */
+    setInterventionLevel(sessionId: string, level: number): void {
+        this.interventionLevels.set(sessionId, Math.max(0, Math.min(3, level)));
+    }
+
+    /**
+     * 获取介入程度
+     */
+    getInterventionLevel(sessionId: string): number {
+        return this.interventionLevels.get(sessionId) ?? 2;
     }
 
     /**

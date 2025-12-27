@@ -76,19 +76,40 @@ export enum ModeratorAction {
 // ============================================
 
 /**
+ * 发言意愿等级
+ * 从低到高：举手 < 请求回应 < 强烈请求 < 直接插话
+ */
+export enum IntentUrgencyLevel {
+    /** 举手 - 表示想发言，等待主持人安排 */
+    RAISE_HAND = 1,
+    /** 请求回应 - 想回应某人的观点 */
+    REQUEST_RESPOND = 2,
+    /** 强烈请求 - 有重要观点要表达 */
+    STRONG_REQUEST = 3,
+    /** 直接插话 - 紧急情况，需要立即发言 */
+    INTERRUPT = 4,
+    /** 抢话 - 最高优先级，打断当前发言 */
+    OVERRIDE = 5,
+}
+
+/**
  * Agent 发言意图
  */
 export interface Intent {
     /** 提交意图的 Agent ID */
     agentId: string;
     /** 意图类型 */
-    type: 'speak' | 'interrupt' | 'question' | 'respond';
+    type: 'speak' | 'interrupt' | 'question' | 'respond' | 'challenge' | 'support';
     /** 主题/方向（可选） */
     topic?: string;
     /** 紧急程度 (1-5) */
     urgency: number;
-    /** 目标 Agent（如果是回应） */
+    /** 意愿等级 */
+    urgencyLevel?: IntentUrgencyLevel;
+    /** 目标 Agent（如果是回应/挑战/支持） */
     targetAgentId?: string;
+    /** 预期发言内容摘要（可选，用于主持人判断） */
+    preview?: string;
     /** 提交时间戳 */
     timestamp: number;
 }
@@ -207,3 +228,152 @@ export interface DiscussionHealth {
     /** 发言失衡程度 (0-1) */
     imbalanceScore: number;
 }
+
+// ============================================
+// 讨论大纲类型
+// ============================================
+
+/**
+ * 讨论大纲项
+ */
+export interface OutlineItem {
+    /** 序号 */
+    order: number;
+    /** 话题 */
+    topic: string;
+    /** 描述 */
+    description: string;
+    /** 预期冲突点 */
+    conflictPoints?: string[];
+    /** 建议发言者（Agent ID 或阵营） */
+    suggestedSpeakers?: string[];
+    /** 预期轮次 */
+    expectedRounds?: number;
+}
+
+/**
+ * 讨论大纲
+ */
+export interface DiscussionOutline {
+    /** 主题 */
+    topic: string;
+    /** 目标 */
+    objective: string;
+    /** 大纲项列表 */
+    items: OutlineItem[];
+    /** 预埋的冲突点 */
+    conflictDesign?: string[];
+    /** 预期总轮次 */
+    expectedTotalRounds: number;
+    /** 生成时间 */
+    generatedAt: number;
+}
+
+// ============================================
+// 评委系统类型
+// ============================================
+
+/**
+ * 评分维度
+ */
+export interface ScoringDimension {
+    /** 维度 ID */
+    id: string;
+    /** 维度名称 */
+    name: string;
+    /** 描述 */
+    description: string;
+    /** 权重 (0-1) */
+    weight: number;
+    /** 最高分 */
+    maxScore: number;
+}
+
+/**
+ * 评委配置
+ */
+export interface JudgeConfig {
+    /** 评委 ID */
+    id: string;
+    /** 评委名称 */
+    name: string;
+    /** 使用的 LLM Provider */
+    llmProviderId?: string;
+    /** 评分风格 */
+    style?: 'strict' | 'lenient' | 'balanced';
+    /** 权重 (多评委时) */
+    weight: number;
+}
+
+/**
+ * 单个评委的评分
+ */
+export interface JudgeScore {
+    /** 评委 ID */
+    judgeId: string;
+    /** 被评分的 Agent ID */
+    agentId: string;
+    /** 各维度得分 */
+    dimensionScores: Record<string, number>;
+    /** 总分 */
+    totalScore: number;
+    /** 评语 */
+    comment: string;
+    /** 评分时间 */
+    scoredAt: number;
+}
+
+/**
+ * 评分结果汇总
+ */
+export interface ScoringResult {
+    /** 会话 ID */
+    sessionId: string;
+    /** 评分维度 */
+    dimensions: ScoringDimension[];
+    /** 各评委评分 */
+    judgeScores: JudgeScore[];
+    /** 加权汇总分数 (agentId -> score) */
+    aggregatedScores: Record<string, number>;
+    /** 排名 */
+    ranking: Array<{ agentId: string; rank: number; score: number }>;
+    /** 最终评语 */
+    finalComment: string;
+    /** 生成时间 */
+    generatedAt: number;
+}
+
+// ============================================
+// 介入程度类型
+// ============================================
+
+/**
+ * 介入程度描述
+ */
+export const INTERVENTION_LEVEL_DESCRIPTIONS: Record<number, {
+    name: string;
+    description: string;
+    behaviors: string[];
+}> = {
+    0: {
+        name: '纯旁观',
+        description: '主持人只在开场和结束时发言',
+        behaviors: ['开场介绍', '结束总结', '不主动干预'],
+    },
+    1: {
+        name: '轻度引导',
+        description: '冷场时适度引导，不主动制造冲突',
+        behaviors: ['冷场提醒', '话题引导', '时间提醒'],
+    },
+    2: {
+        name: '中度干预',
+        description: '主动平衡发言、引导话题、制造冲突点',
+        behaviors: ['平衡发言', '点名回应', '引导冲突', '阶段总结'],
+    },
+    3: {
+        name: '强势主持',
+        description: '全程引导，采访式推动，严格控制节奏',
+        behaviors: ['主动提问', '打断跑题', '强制回应', '节奏控制'],
+    },
+};
+

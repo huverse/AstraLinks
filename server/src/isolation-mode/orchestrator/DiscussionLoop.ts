@@ -1,12 +1,12 @@
 /**
  * Discussion Loop
- * 
+ *
  * 驱动讨论自动推进的核心循环
  * 负责: 发言者选择 → AI 生成 → 事件发布 → 轮次推进 → 结束检测
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { EventType, Event } from '../core/types';
+import { EventType, Event, Intent } from '../core/types';
 import { IAgent } from '../core/interfaces';
 import { eventLogService, eventBus } from '../event-log';
 import { moderatorController } from '../moderator';
@@ -26,13 +26,16 @@ interface DiscussionLoopConfig {
     maxRounds: number;
     /** 无进展超时 (ms) */
     noProgressTimeoutMs: number;
+    /** 是否启用意图队列 */
+    useIntentQueue: boolean;
 }
 
 const DEFAULT_CONFIG: DiscussionLoopConfig = {
     maxSpeakersPerRound: 5,
     speakIntervalMs: 1000,
     maxRounds: 10,
-    noProgressTimeoutMs: 60000
+    noProgressTimeoutMs: 60000,
+    useIntentQueue: true
 };
 
 // ============================================
@@ -133,8 +136,32 @@ export class DiscussionLoop {
                 }
             }
 
-            // 3. 选择发言者
-            const speaker = await moderatorController.selectNextSpeaker(sessionId);
+            // 3. 选择发言者（优先处理意图队列）
+            let speaker: IAgent | null = null;
+            let intentProcessed = false;
+
+            if (config.useIntentQueue) {
+                const intent = await moderatorController.processNextIntent(sessionId);
+                if (intent) {
+                    speaker = moderatorController.getAgent(sessionId, intent.agentId) || null;
+                    intentProcessed = true;
+
+                    if (speaker) {
+                        weLogger.debug({
+                            sessionId,
+                            agentId: intent.agentId,
+                            intentType: intent.type,
+                            urgencyLevel: intent.urgencyLevel
+                        }, 'processing_intent');
+                    }
+                }
+            }
+
+            // 如果没有意图或意图对应的Agent不存在，使用默认选择
+            if (!speaker) {
+                speaker = await moderatorController.selectNextSpeaker(sessionId);
+            }
+
             if (!speaker) {
                 weLogger.debug({ sessionId }, 'no_speaker_available');
                 await this.sleep(config.speakIntervalMs);
@@ -152,7 +179,8 @@ export class DiscussionLoop {
                     agentId: speaker.config.id,
                     agentName: speaker.config.name,
                     message: message.content,
-                    tokens: message.tokens
+                    tokens: message.tokens,
+                    fromIntent: intentProcessed
                 }
             });
 

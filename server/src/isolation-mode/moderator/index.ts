@@ -17,6 +17,12 @@ export { ModeratorLLM, moderatorLLM } from './ModeratorLLM';
 // 规则引擎
 export { RuleEngine, ruleEngine } from './RuleEngine';
 
+// 大纲生成器
+export { OutlineGenerator, outlineGenerator } from './OutlineGenerator';
+
+// 评委系统
+export { JudgeSystem, judgeSystem } from './JudgeSystem';
+
 // 重导出类型
 export {
     Phase,
@@ -24,8 +30,16 @@ export {
     ModeratorState,
     ModeratorDecision,
     Intent,
+    IntentUrgencyLevel,
     DiscussionHealth,
     PhaseTransition,
+    OutlineItem,
+    DiscussionOutline,
+    ScoringDimension,
+    JudgeConfig,
+    JudgeScore,
+    ScoringResult,
+    INTERVENTION_LEVEL_DESCRIPTIONS,
 } from '../core/types/moderator.types';
 
 // Moderator LLM 类型

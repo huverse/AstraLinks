@@ -7,8 +7,14 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { eventBus, eventLogService } from '../../event-log';
 import { sessionManager } from '../../session';
-import { moderatorController } from '../../moderator';
-import { Event, EventType } from '../../core/types';
+import {
+    moderatorController,
+    outlineGenerator,
+    judgeSystem,
+    IntentUrgencyLevel,
+    INTERVENTION_LEVEL_DESCRIPTIONS,
+} from '../../moderator';
+import { Event, EventType, Intent } from '../../core/types';
 import { isolationLogger } from '../../../services/world-engine-logger';
 
 interface JoinSessionRequest {
@@ -247,6 +253,196 @@ export function initializeWebSocketGateway(io: SocketIOServer): void {
                 }
             } catch (error: any) {
                 socket.emit('error', { message: error.message });
+            }
+        });
+
+        // 举手/插话意图提交
+        socket.on('intent:submit', async (
+            data: {
+                sessionId: string;
+                agentId: string;
+                type: Intent['type'];
+                urgencyLevel?: IntentUrgencyLevel;
+                targetAgentId?: string;
+                topic?: string;
+                preview?: string;
+            },
+            callback?: (response: any) => void
+        ) => {
+            const { sessionId, agentId, type, urgencyLevel, targetAgentId, topic, preview } = data;
+
+            try {
+                const result = await moderatorController.submitIntent(sessionId, {
+                    agentId,
+                    type,
+                    urgency: urgencyLevel || IntentUrgencyLevel.RAISE_HAND,
+                    urgencyLevel,
+                    targetAgentId,
+                    topic,
+                    preview,
+                });
+
+                callback?.(result);
+                socket.emit('intent:response', result);
+
+                // 广播给房间内其他用户
+                if (result.success) {
+                    socket.to(`session:${sessionId}`).emit('intent:submitted', {
+                        agentId,
+                        type,
+                        urgencyLevel,
+                        position: result.position,
+                    });
+                }
+            } catch (error: any) {
+                const errorResponse = { success: false, error: error.message };
+                callback?.(errorResponse);
+                socket.emit('intent:response', errorResponse);
+            }
+        });
+
+        // 获取待处理意图列表
+        socket.on('intent:list', (data: { sessionId: string }, callback?: (response: any) => void) => {
+            const intents = moderatorController.getPendingIntents(data.sessionId);
+            const response = { success: true, intents };
+            callback?.(response);
+            socket.emit('intent:list:response', response);
+        });
+
+        // 主持人点名
+        socket.on('moderator:call', async (
+            data: { sessionId: string; agentId: string; reason?: string },
+            callback?: (response: any) => void
+        ) => {
+            const { sessionId, agentId, reason } = data;
+
+            try {
+                const result = await moderatorController.callAgent(sessionId, agentId, reason);
+                callback?.(result);
+                socket.emit('moderator:call:response', result);
+
+                if (result.success) {
+                    socket.to(`session:${sessionId}`).emit('moderator:called', { agentId, reason });
+                }
+            } catch (error: any) {
+                const errorResponse = { success: false, error: error.message };
+                callback?.(errorResponse);
+                socket.emit('moderator:call:response', errorResponse);
+            }
+        });
+
+        // 主持人请求回应
+        socket.on('moderator:request-response', async (
+            data: { sessionId: string; responderId: string; targetId: string; topic?: string },
+            callback?: (response: any) => void
+        ) => {
+            const { sessionId, responderId, targetId, topic } = data;
+
+            try {
+                const result = await moderatorController.requestResponse(sessionId, responderId, targetId, topic);
+                callback?.(result);
+                socket.emit('moderator:request-response:response', result);
+            } catch (error: any) {
+                const errorResponse = { success: false, error: error.message };
+                callback?.(errorResponse);
+                socket.emit('moderator:request-response:response', errorResponse);
+            }
+        });
+
+        // 设置介入程度
+        socket.on('intervention:set', (
+            data: { sessionId: string; level: number },
+            callback?: (response: any) => void
+        ) => {
+            const { sessionId, level } = data;
+
+            try {
+                moderatorController.setInterventionLevel(sessionId, level);
+                const description = INTERVENTION_LEVEL_DESCRIPTIONS[level];
+                const response = { success: true, level, description };
+                callback?.(response);
+                socket.emit('intervention:set:response', response);
+                socket.to(`session:${sessionId}`).emit('intervention:changed', { level, description });
+            } catch (error: any) {
+                const errorResponse = { success: false, error: error.message };
+                callback?.(errorResponse);
+                socket.emit('intervention:set:response', errorResponse);
+            }
+        });
+
+        // 获取介入程度
+        socket.on('intervention:get', (data: { sessionId: string }, callback?: (response: any) => void) => {
+            const level = moderatorController.getInterventionLevel(data.sessionId);
+            const description = INTERVENTION_LEVEL_DESCRIPTIONS[level];
+            const response = { success: true, level, description };
+            callback?.(response);
+            socket.emit('intervention:get:response', response);
+        });
+
+        // 生成讨论大纲
+        socket.on('outline:generate', async (
+            data: {
+                sessionId: string;
+                topic: string;
+                objective: 'explore' | 'debate' | 'consensus';
+                agentNames: string[];
+                factions?: Array<{ id: string; name: string }>;
+                maxRounds?: number;
+            },
+            callback?: (response: any) => void
+        ) => {
+            try {
+                const outline = await outlineGenerator.generate(data);
+                moderatorController.setOutline(data.sessionId, outline);
+                const response = { success: true, outline };
+                callback?.(response);
+                socket.emit('outline:generated', response);
+            } catch (error: any) {
+                const errorResponse = { success: false, error: error.message };
+                callback?.(errorResponse);
+                socket.emit('outline:generated', errorResponse);
+            }
+        });
+
+        // 获取讨论大纲
+        socket.on('outline:get', (data: { sessionId: string }, callback?: (response: any) => void) => {
+            const outline = moderatorController.getOutline(data.sessionId);
+            const response = outline
+                ? { success: true, outline }
+                : { success: false, error: 'No outline found' };
+            callback?.(response);
+            socket.emit('outline:get:response', response);
+        });
+
+        // 触发评分
+        socket.on('judge:score', async (
+            data: {
+                sessionId: string;
+                topic: string;
+                agentIds: string[];
+                judges: Array<{ id: string; name: string; style?: 'strict' | 'lenient' | 'balanced'; weight: number }>;
+            },
+            callback?: (response: any) => void
+        ) => {
+            const { sessionId, topic, agentIds, judges } = data;
+
+            try {
+                const events = await eventLogService.getRecentEvents(sessionId, 500);
+                const result = await judgeSystem.score({
+                    sessionId,
+                    topic,
+                    events,
+                    agentIds,
+                    judges,
+                });
+                const response = { success: true, result };
+                callback?.(response);
+                socket.emit('judge:scored', response);
+                socket.to(`session:${sessionId}`).emit('judge:scored', response);
+            } catch (error: any) {
+                const errorResponse = { success: false, error: error.message };
+                callback?.(errorResponse);
+                socket.emit('judge:scored', errorResponse);
             }
         });
 

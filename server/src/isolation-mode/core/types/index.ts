@@ -44,8 +44,16 @@ export {
     ModeratorState,
     ModeratorDecision,
     Intent,
+    IntentUrgencyLevel,
     DiscussionHealth,
     PhaseTransition,
+    OutlineItem,
+    DiscussionOutline,
+    ScoringDimension,
+    JudgeConfig,
+    JudgeScore,
+    ScoringResult,
+    INTERVENTION_LEVEL_DESCRIPTIONS,
 } from './moderator.types';
 
 // Agent 执行器类型
