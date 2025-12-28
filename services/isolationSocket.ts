@@ -598,6 +598,32 @@ class IsolationSocketService {
             }, resolve);
         });
     }
+
+    /**
+     * 生成讨论总结
+     */
+    generateSummary(topic: string, summaryType: 'phase_end' | 'mid_phase' | 'final' = 'final'): Promise<{
+        success: boolean;
+        summary?: {
+            summaryText: string;
+            consensusHighlights: string[];
+            divergenceHighlights: string[];
+            nextStepsSuggestion?: string;
+        };
+        error?: string;
+    }> {
+        return new Promise((resolve) => {
+            if (!this.socket?.connected || !this.currentSessionId) {
+                resolve({ success: false, error: 'Not connected or no session' });
+                return;
+            }
+            this.socket.emit('summary:generate', {
+                sessionId: this.currentSessionId,
+                topic,
+                summaryType
+            }, resolve);
+        });
+    }
 }
 
 // 单例导出

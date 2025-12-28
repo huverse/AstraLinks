@@ -4,7 +4,7 @@
  * 多 Agent 结构化讨论的主界面
  */
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     FlaskConical, Users, Play, Pause, Square,
     History, ChevronLeft, Plus, RefreshCw, Wifi, WifiOff, Loader2,
@@ -18,7 +18,7 @@ import { Participant } from '../../types';
 import { useIsolationSession } from '../../hooks/useIsolationSession';
 import { isolationSocket } from '../../services/isolationSocket';
 import { isolationLogger } from '../../utils/logger';
-import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS, ScoringResult, SpeakIntent, SessionStats, DiscussionTemplate } from './types';
+import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS, ScoringResult, SpeakIntent, DiscussionTemplate } from './types';
 import { AgentCard } from './AgentCard';
 import { EventTimeline } from './EventTimeline';
 import { ScenarioSelector } from './ScenarioSelector';
@@ -655,31 +655,6 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             setSummaryLoading(false);
         }
     };
-
-    // 计算统计数据
-    const sessionStats = useMemo((): SessionStats => {
-        if (!currentSession) {
-            return { totalSpeeches: 0, currentRound: 0, startTime: 0, agentStats: {} };
-        }
-        const agentStats: Record<string, { speakCount: number; totalLength: number }> = {};
-        currentSession.agents.forEach(agent => {
-            agentStats[agent.id] = { speakCount: agent.speakCount, totalLength: 0 };
-        });
-        currentSession.events.forEach(event => {
-            if ((event.type === 'agent:speak' || event.type === 'SPEECH') && event.payload?.content) {
-                const agentId = event.sourceId;
-                if (agentStats[agentId]) {
-                    agentStats[agentId].totalLength += (event.payload.content as string).length;
-                }
-            }
-        });
-        return {
-            totalSpeeches: currentSession.agents.reduce((sum, a) => sum + a.speakCount, 0),
-            currentRound: currentSession.currentRound,
-            startTime: currentSession.createdAt ? new Date(currentSession.createdAt).getTime() : Date.now(),
-            agentStats,
-        };
-    }, [currentSession]);
 
     // 应用模板
     const handleApplyTemplate = (template: DiscussionTemplate) => {

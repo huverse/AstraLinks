@@ -3,7 +3,7 @@
  */
 
 // 世界状态
-export {
+export type {
     LogicWorldState,
     Proposition,
     Hypothesis,
@@ -19,8 +19,8 @@ export {
     ExtendParams,
     AcceptParams,
     LogicEventType,
-    createInitialLogicWorldState
 } from './LogicWorldState';
+export { createInitialLogicWorldState } from './LogicWorldState';
 
 // 子组件
 export {

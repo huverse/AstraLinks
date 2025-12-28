@@ -78,8 +78,8 @@ router.post('/upload', async (req: Request, res: Response) => {
             return;
         }
 
-        // Encrypt API keys before storing
-        const encryptedConfig = encryptConfigApiKeys(Array.isArray(config_data) ? config_data : [config_data]);
+        // Encrypt API keys before storing (handles both arrays and flat objects)
+        const encryptedConfig = encryptConfigApiKeys(config_data);
 
         // Check if config with same name exists
         const [existing] = await pool.execute<RowDataPacket[]>(

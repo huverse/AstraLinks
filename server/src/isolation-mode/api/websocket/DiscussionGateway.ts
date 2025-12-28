@@ -446,6 +446,59 @@ export function initializeWebSocketGateway(io: SocketIOServer): void {
             }
         });
 
+        // 生成讨论总结
+        socket.on('summary:generate', async (
+            data: {
+                sessionId: string;
+                topic: string;
+                summaryType: 'phase_end' | 'mid_phase' | 'final';
+            },
+            callback?: (response: any) => void
+        ) => {
+            const { sessionId, topic, summaryType } = data;
+
+            try {
+                const { getModeratorLLMService } = await import('../../moderator');
+                const moderatorLLMService = getModeratorLLMService();
+
+                if (!moderatorLLMService) {
+                    throw new Error('ModeratorLLMService not initialized');
+                }
+
+                // 获取讨论事件
+                const events = await eventLogService.getRecentEvents(sessionId, 300);
+                const speechEvents = events.filter((e: any) =>
+                    e.type === 'SPEECH' || e.type === 'agent:speak'
+                );
+
+                // 压缩事件为要点
+                const condensedEvents = speechEvents.slice(-20).map((e: any) => ({
+                    speaker: e.sourceId || e.agentId || 'unknown',
+                    keyPoint: typeof e.payload?.content === 'string'
+                        ? e.payload.content.slice(0, 100)
+                        : 'N/A'
+                }));
+
+                const result = await moderatorLLMService.generateSummary({
+                    topic,
+                    summaryType,
+                    phase: { id: 'discussion', name: '讨论', type: 'free_discussion' },
+                    condensedEvents,
+                    consensusPoints: [],
+                    divergencePoints: []
+                });
+
+                const response = { success: true, summary: result };
+                callback?.(response);
+                socket.emit('summary:generated', response);
+                socket.to(`session:${sessionId}`).emit('summary:generated', response);
+            } catch (error: any) {
+                const errorResponse = { success: false, error: error.message };
+                callback?.(errorResponse);
+                socket.emit('summary:generated', errorResponse);
+            }
+        });
+
         socket.on('disconnect', () => {
             cleanupSubscription();
             isolationLogger.info({ socketId: socket.id }, 'isolation_socket_disconnected');

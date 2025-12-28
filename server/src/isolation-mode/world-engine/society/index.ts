@@ -3,7 +3,7 @@
  */
 
 // 世界状态
-export {
+export type {
     SocietyWorldState,
     AgentSocialState,
     SocialRole,
@@ -16,6 +16,8 @@ export {
     HelpParams,
     ConflictParams,
     SocietyEventType,
+} from './SocietyWorldState';
+export {
     INITIAL_RESOURCES,
     INITIAL_MOOD,
     ZERO_RESOURCE_EXIT_THRESHOLD,

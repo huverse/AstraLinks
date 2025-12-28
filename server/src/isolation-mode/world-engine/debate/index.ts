@@ -3,15 +3,15 @@
  */
 
 // 世界状态
-export {
+export type {
     DebateWorldState,
     DebatePhaseState,
     DebateActionType,
     SpeakParams,
     VoteParams,
     DebateEventType,
-    createInitialDebateWorldState
 } from './DebateWorldState';
+export { createInitialDebateWorldState } from './DebateWorldState';
 
 // 子组件
 export {

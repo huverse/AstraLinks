@@ -457,12 +457,21 @@ export class LiveSessionManager {
     private isConnected: boolean = false;
     private currentStream: MediaStream | null = null;
     private ws: WebSocket | null = null;
+    private videoElement: HTMLVideoElement | null = null;
+    private videoCanvas: HTMLCanvasElement | null = null;
+    private videoInterval: number | null = null;
 
     private nextStartTime: number = 0;
 
     public onVolumeChange: ((vol: number) => void) | null = null;
+    public mode: 'audio' | 'video' = 'audio';
 
-    constructor(private apiKey: string, private baseUrl?: string, private modelName?: string, private voiceName: string = 'Kore') { }
+    constructor(
+        private apiKey: string,
+        private baseUrl?: string,
+        private modelName?: string,
+        private voiceName: string = 'Kore'
+    ) { }
 
     async connect() {
         if (this.isConnected) return;
@@ -475,6 +484,7 @@ export class LiveSessionManager {
         if (this.modelName) wsUrl.searchParams.set('model', this.modelName);
         if (this.voiceName) wsUrl.searchParams.set('voiceName', this.voiceName);
         if (this.baseUrl) wsUrl.searchParams.set('baseUrl', this.baseUrl);
+        wsUrl.searchParams.set('mode', this.mode);
 
         this.audioContext = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
 
@@ -494,6 +504,10 @@ export class LiveSessionManager {
                     this.isConnected = true;
                     this.nextStartTime = 0;
                     this.startMicrophone();
+                    // 如果是视频模式，也启动摄像头
+                    if (this.mode === 'video') {
+                        this.startCamera();
+                    }
                 } else if (msg.type === 'message') {
                     const audioData = msg.data?.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
                     if (audioData) {
@@ -568,6 +582,57 @@ export class LiveSessionManager {
         }
     }
 
+    // 启动摄像头捕获
+    private async startCamera() {
+        try {
+            const videoStream = await navigator.mediaDevices.getUserMedia({
+                video: { width: 640, height: 480, frameRate: 1 } // 1 fps 节省带宽
+            });
+
+            // 创建视频元素
+            this.videoElement = document.createElement('video');
+            this.videoElement.srcObject = videoStream;
+            this.videoElement.autoplay = true;
+            this.videoElement.muted = true;
+            this.videoElement.playsInline = true;
+            await this.videoElement.play();
+
+            // 创建 canvas 用于捕获帧
+            this.videoCanvas = document.createElement('canvas');
+            this.videoCanvas.width = 640;
+            this.videoCanvas.height = 480;
+
+            // 每 2 秒发送一帧
+            this.videoInterval = window.setInterval(() => {
+                if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+                if (!this.videoElement || !this.videoCanvas) return;
+
+                const ctx = this.videoCanvas.getContext('2d');
+                if (!ctx) return;
+
+                ctx.drawImage(this.videoElement, 0, 0, 640, 480);
+                const dataUrl = this.videoCanvas.toDataURL('image/jpeg', 0.5);
+                const base64 = dataUrl.split(',')[1];
+
+                this.ws.send(JSON.stringify({
+                    type: 'video',
+                    mimeType: 'image/jpeg',
+                    data: base64
+                }));
+            }, 2000);
+
+            console.log("Camera started for video mode");
+        } catch (e) {
+            console.error("Camera Access Failed", e);
+            // 视频失败不阻止音频工作
+        }
+    }
+
+    // 获取视频元素用于 UI 预览
+    public getVideoElement(): HTMLVideoElement | null {
+        return this.videoElement;
+    }
+
     private float32ToBase64(float32Array: Float32Array): string {
         const int16Array = new Int16Array(float32Array.length);
         for (let i = 0; i < float32Array.length; i++) {
@@ -636,6 +701,21 @@ export class LiveSessionManager {
         if (this.audioContext) {
             this.audioContext.close();
             this.audioContext = null;
+        }
+        // 清理视频资源
+        if (this.videoInterval) {
+            clearInterval(this.videoInterval);
+            this.videoInterval = null;
+        }
+        if (this.videoElement) {
+            const stream = this.videoElement.srcObject as MediaStream;
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+            }
+            this.videoElement = null;
+        }
+        if (this.videoCanvas) {
+            this.videoCanvas = null;
         }
         this.nextStartTime = 0;
     }

@@ -5,10 +5,10 @@ import { GoogleGenAI, Modality } from '@google/genai';
 
 /**
  * Gemini Live API WebSocket Proxy
- * 
+ *
  * This allows Chinese users to use Gemini Live API through the US server.
- * 
- * Client connects to: ws://server/gemini-live?apiKey=xxx&model=xxx&voiceName=xxx
+ *
+ * Client connects to: ws://server/gemini-live?apiKey=xxx&model=xxx&voiceName=xxx&mode=audio|video
  * Server connects to: Google Gemini Live API
  * Messages are proxied bidirectionally.
  */
@@ -17,6 +17,7 @@ interface LiveProxySession {
     clientWs: WsWebSocket;
     geminiClient: any;
     isConnected: boolean;
+    mode: 'audio' | 'video';
 }
 
 const activeSessions = new Map<WsWebSocket, LiveProxySession>();
@@ -36,6 +37,7 @@ export function initGeminiLiveProxy(httpServer: HttpServer): void {
         const model = url.searchParams.get('model') || 'gemini-2.5-flash-native-audio-preview-09-2025';
         const voiceName = url.searchParams.get('voiceName') || 'Kore';
         const baseUrl = url.searchParams.get('baseUrl') || undefined;
+        const mode = (url.searchParams.get('mode') || 'audio') as 'audio' | 'video';
 
         if (!apiKey) {
             clientWs.send(JSON.stringify({ error: 'API Key is required' }));
@@ -51,11 +53,18 @@ export function initGeminiLiveProxy(httpServer: HttpServer): void {
             }
             const ai = new GoogleGenAI(options);
 
+            // Configure response modalities based on mode
+            const responseModalities = mode === 'video'
+                ? [Modality.AUDIO]
+                : [Modality.AUDIO];
+
+            console.log(`🎤 Gemini Live: Mode=${mode}, Model=${model}`);
+
             // Connect to Gemini Live API
             const geminiClient = await ai.live.connect({
                 model,
                 config: {
-                    responseModalities: [Modality.AUDIO],
+                    responseModalities,
                     speechConfig: {
                         voiceConfig: { prebuiltVoiceConfig: { voiceName } }
                     }
@@ -91,7 +100,8 @@ export function initGeminiLiveProxy(httpServer: HttpServer): void {
             const session: LiveProxySession = {
                 clientWs,
                 geminiClient,
-                isConnected: true
+                isConnected: true,
+                mode
             };
             activeSessions.set(clientWs, session);
 
@@ -105,6 +115,14 @@ export function initGeminiLiveProxy(httpServer: HttpServer): void {
                         geminiClient.sendRealtimeInput({
                             media: {
                                 mimeType: msg.mimeType || 'audio/pcm;rate=16000',
+                                data: msg.data
+                            }
+                        });
+                    } else if (msg.type === 'video') {
+                        // Forward video frame to Gemini (for video mode)
+                        geminiClient.sendRealtimeInput({
+                            media: {
+                                mimeType: msg.mimeType || 'image/jpeg',
                                 data: msg.data
                             }
                         });

@@ -522,8 +522,8 @@ ${input.durationMinutes} 分钟
 
 let moderatorLLMServiceInstance: ModeratorLLMService | null = null;
 
-export function getModeratorLLMService(llmProvider: ILLMProvider): ModeratorLLMService {
-    if (!moderatorLLMServiceInstance) {
+export function getModeratorLLMService(llmProvider?: ILLMProvider): ModeratorLLMService | null {
+    if (!moderatorLLMServiceInstance && llmProvider) {
         moderatorLLMServiceInstance = new ModeratorLLMService(llmProvider);
     }
     return moderatorLLMServiceInstance;

@@ -14,7 +14,7 @@ export { AgentContext } from './AgentContext';
 export * from './presets';
 
 // 重导出类型
-export {
+export type {
     AgentPersona,
     SpeakingStyle,
     AgentPrivateContext,

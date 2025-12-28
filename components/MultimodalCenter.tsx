@@ -1,7 +1,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Participant, ProviderType } from '../types';
-import { X, Image as ImageIcon, Video, Mic, MessageSquare, Loader2, Wand2, Download, Upload, Play, Film, Type, Music, Sparkles, CheckCircle2, Terminal, History, RefreshCcw, Settings2, ChevronDown, ChevronUp, StopCircle, Wifi, Volume2, ThermometerSun, Zap, Hash, Shield, Layers, Sliders, Settings, Plus, Trash2, FileJson, ArrowDownToLine, ArrowUpFromLine, ExternalLink, Globe, Cloud, CloudUpload, Code } from 'lucide-react';
+import { X, Image as ImageIcon, Video, Mic, MessageSquare, Loader2, Wand2, Download, Upload, Play, Film, Type, Music, Sparkles, CheckCircle2, Terminal, History, RefreshCcw, Settings2, ChevronDown, ChevronUp, StopCircle, Wifi, Volume2, ThermometerSun, Zap, Hash, Shield, Layers, Sliders, Settings, Plus, Trash2, FileJson, ArrowDownToLine, ArrowUpFromLine, ExternalLink, Globe, Cloud, CloudUpload, Code, Eye, EyeOff, AlertCircle, Check } from 'lucide-react';
 import { generateImage, generateVideo, generateSpeech, transcribeAudio, analyzeMedia, editImage, URI_PREFIX, LiveSessionManager } from '../services/aiService';
 import CloudSync from './CloudSync';
 
@@ -113,6 +113,7 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
     const [showSettingsModal, setShowSettingsModal] = useState(false);
     const [showCloudSync, setShowCloudSync] = useState(false);
     const [newModelInput, setNewModelInput] = useState('');
+    const [showApiKey, setShowApiKey] = useState(false);
 
     const [tabsState, setTabsState] = useState<Record<Exclude<TabId, 'HISTORY'>, TabState>>({
         IMAGE: { ...initialTabData },
@@ -133,6 +134,8 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
     const [liveManager, setLiveManager] = useState<LiveSessionManager | null>(null);
     const [liveVolume, setLiveVolume] = useState(0);
     const [isLiveConnected, setIsLiveConnected] = useState(false);
+    const [liveMode, setLiveMode] = useState<'audio' | 'video'>('audio');
+    const videoPreviewRef = useRef<HTMLDivElement>(null);
 
     // AI Config Assistant states
     const [showAiAssistant, setShowAiAssistant] = useState(false);
@@ -217,11 +220,25 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
                 currentTab.customModel || 'gemini-2.5-flash-native-audio-preview-09-2025',
                 currentTab.voiceName
             );
+            manager.mode = liveMode;
             manager.onVolumeChange = (vol) => setLiveVolume(vol * 5);
             await manager.connect();
             setLiveManager(manager);
             setIsLiveConnected(true);
             updateTab('LIVE', { isProcessing: false });
+
+            // If video mode, attach video element to preview container
+            if (liveMode === 'video' && videoPreviewRef.current) {
+                const videoEl = manager.getVideoElement();
+                if (videoEl) {
+                    videoEl.style.width = '100%';
+                    videoEl.style.height = '100%';
+                    videoEl.style.objectFit = 'cover';
+                    videoEl.style.borderRadius = '50%';
+                    videoPreviewRef.current.innerHTML = '';
+                    videoPreviewRef.current.appendChild(videoEl);
+                }
+            }
         } catch (e: any) {
             updateTab('LIVE', { isProcessing: false, error: "Live Connection Failed: " + e.message });
             setIsLiveConnected(false);
@@ -232,6 +249,9 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
         if (liveManager) {
             liveManager.disconnect();
             setLiveManager(null);
+        }
+        if (videoPreviewRef.current) {
+            videoPreviewRef.current.innerHTML = '';
         }
         setIsLiveConnected(false);
         setLiveVolume(0);
@@ -569,148 +589,191 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
         if (e.target) e.target.value = '';
     };
 
-    const renderSettingsModal = () => (
-        <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
-            <div className="bg-[#1c1c1e] w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
-                <div className="p-6 border-b border-white/10 flex justify-between items-center bg-gradient-to-r from-blue-900/20 to-purple-900/20">
-                    <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                        <Settings size={20} className="text-blue-400" /> 全局多模态设置
-                    </h2>
-                    <button onClick={() => setShowSettingsModal(false)} className="p-2 hover:bg-white/10 rounded-full text-slate-400"><X size={20} /></button>
-                </div>
-                <div className="p-6 overflow-y-auto space-y-6">
+    const renderSettingsModal = () => {
+        const isApiKeyValid = globalConfig.apiKey.length >= 8;
+        const presetModels = globalConfig.provider === ProviderType.GEMINI
+            ? ['gemini-2.0-flash-exp', 'gemini-2.0-flash-exp-image-generation', 'gemini-1.5-pro', 'gemini-1.5-flash', 'imagen-3.0-generate-001']
+            : ['dall-e-3', 'gpt-4o', 'gpt-4o-mini', 'gpt-image-1', 'whisper-1'];
 
-                    <div className="flex flex-wrap gap-3">
-                        <button
-                            onClick={handleExportConfig}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-slate-300 transition-colors"
-                        >
-                            <ArrowDownToLine size={16} className="text-blue-400" /> 导出 (JSON)
-                        </button>
-                        <button
-                            onClick={() => configImportRef.current?.click()}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-slate-300 transition-colors"
-                        >
-                            <ArrowUpFromLine size={16} className="text-purple-400" /> 导入
-                        </button>
-                        <input type="file" ref={configImportRef} className="hidden" accept=".json" onChange={handleImportConfig} />
+        return (
+            <div className="fixed inset-0 z-[110] bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in">
+                <div className="bg-[#1c1c1e] w-full max-w-lg rounded-3xl border border-white/10 shadow-2xl animate-slide-up flex flex-col max-h-[90vh]">
+                    <div className="p-6 border-b border-white/10 flex justify-between items-center bg-gradient-to-r from-blue-900/20 to-purple-900/20">
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                            <Settings size={20} className="text-blue-400" /> 全局多模态设置
+                        </h2>
+                        <button onClick={() => setShowSettingsModal(false)} className="p-2 hover:bg-white/10 rounded-full text-slate-400"><X size={20} /></button>
                     </div>
-                    <div className="flex gap-3">
-                        <button
-                            onClick={() => setShowCloudSync(true)}
-                            className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/30 rounded-xl text-sm font-bold text-white transition-colors"
-                        >
-                            <Cloud size={16} /> 云端同步
-                        </button>
-                    </div>
+                    <div className="p-6 overflow-y-auto space-y-6">
 
-                    {/* Provider Selector */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">服务提供商 (Provider)</label>
-                        <div className="grid grid-cols-2 gap-2 bg-black/40 p-1 rounded-xl border border-white/10">
+                        <div className="flex flex-wrap gap-3">
                             <button
-                                onClick={() => setGlobalConfig(prev => ({ ...prev, provider: ProviderType.GEMINI }))}
-                                className={`py-2 rounded-lg text-sm font-bold transition-all ${globalConfig.provider === ProviderType.GEMINI ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                onClick={handleExportConfig}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-slate-300 transition-colors"
                             >
-                                Google Gemini
+                                <ArrowDownToLine size={16} className="text-blue-400" /> 导出 (JSON)
                             </button>
                             <button
-                                onClick={() => setGlobalConfig(prev => ({ ...prev, provider: ProviderType.OPENAI_COMPATIBLE }))}
-                                className={`py-2 rounded-lg text-sm font-bold transition-all ${globalConfig.provider === ProviderType.OPENAI_COMPATIBLE ? 'bg-green-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                onClick={() => configImportRef.current?.click()}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-bold text-slate-300 transition-colors"
                             >
-                                OpenAI / Compatible
+                                <ArrowUpFromLine size={16} className="text-purple-400" /> 导入
+                            </button>
+                            <input type="file" ref={configImportRef} className="hidden" accept=".json" onChange={handleImportConfig} />
+                        </div>
+                        <div className="flex gap-3">
+                            <button
+                                onClick={() => setShowCloudSync(true)}
+                                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500/20 to-purple-500/20 hover:from-blue-500/30 hover:to-purple-500/30 border border-blue-500/30 rounded-xl text-sm font-bold text-white transition-colors"
+                            >
+                                <Cloud size={16} /> 云端同步
                             </button>
                         </div>
-                    </div>
 
-                    {/* API Key */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">
-                            {globalConfig.provider === ProviderType.GEMINI ? 'Google Gemini API Key' : 'OpenAI Compatible API Key'}
-                        </label>
-                        <input
-                            type="password"
-                            value={globalConfig.apiKey}
-                            onChange={(e) => setGlobalConfig(prev => ({ ...prev, apiKey: e.target.value }))}
-                            placeholder="sk-..."
-                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none font-mono"
-                        />
-                    </div>
+                        {/* Provider Selector */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">服务提供商 (Provider)</label>
+                            <div className="grid grid-cols-2 gap-2 bg-black/40 p-1 rounded-xl border border-white/10">
+                                <button
+                                    onClick={() => setGlobalConfig(prev => ({ ...prev, provider: ProviderType.GEMINI }))}
+                                    className={`py-2 rounded-lg text-sm font-bold transition-all ${globalConfig.provider === ProviderType.GEMINI ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                >
+                                    Google Gemini
+                                </button>
+                                <button
+                                    onClick={() => setGlobalConfig(prev => ({ ...prev, provider: ProviderType.OPENAI_COMPATIBLE }))}
+                                    className={`py-2 rounded-lg text-sm font-bold transition-all ${globalConfig.provider === ProviderType.OPENAI_COMPATIBLE ? 'bg-green-600 text-white shadow-lg' : 'text-slate-400 hover:text-white'}`}
+                                >
+                                    OpenAI / Compatible
+                                </button>
+                            </div>
+                        </div>
 
-                    {/* Base URL */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Base URL (Optional)</label>
-                        <input
-                            type="url"
-                            value={globalConfig.baseUrl}
-                            onChange={(e) => setGlobalConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
-                            placeholder={globalConfig.provider === ProviderType.GEMINI ? "https://generativelanguage.googleapis.com" : "https://api.openai.com/v1"}
-                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none font-mono"
-                        />
-                        <p className="text-[10px] text-slate-500">
-                            {globalConfig.provider === ProviderType.GEMINI
-                                ? "默认为空 (使用 Google 官方 API)。"
-                                : "默认为 https://api.openai.com/v1。"}
-                        </p>
-                    </div>
+                        {/* API Key */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                {globalConfig.provider === ProviderType.GEMINI ? 'Google Gemini API Key' : 'OpenAI Compatible API Key'}
+                                {isApiKeyValid && <Check size={12} className="text-green-400" />}
+                            </label>
+                            <div className="relative">
+                                <input
+                                    type={showApiKey ? "text" : "password"}
+                                    value={globalConfig.apiKey}
+                                    onChange={(e) => setGlobalConfig(prev => ({ ...prev, apiKey: e.target.value }))}
+                                    placeholder="sk-..."
+                                    className={`w-full bg-black/40 border rounded-xl px-4 py-3 pr-12 text-white focus:border-blue-500 outline-none font-mono ${isApiKeyValid ? 'border-green-500/50' : globalConfig.apiKey ? 'border-yellow-500/50' : 'border-white/10'}`}
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setShowApiKey(!showApiKey)}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white p-1"
+                                >
+                                    {showApiKey ? <EyeOff size={18} /> : <Eye size={18} />}
+                                </button>
+                            </div>
+                            {!globalConfig.apiKey && (
+                                <p className="text-[10px] text-yellow-500 flex items-center gap-1">
+                                    <AlertCircle size={10} /> 请输入 API Key 以使用多模态功能
+                                </p>
+                            )}
+                        </div>
 
-                    {/* Default Model Name */}
-                    <div className="space-y-2">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">默认模型 ID (Default Model)</label>
-                        <input
-                            type="text"
-                            value={globalConfig.modelName}
-                            onChange={(e) => setGlobalConfig(prev => ({ ...prev, modelName: e.target.value }))}
-                            placeholder={globalConfig.provider === ProviderType.GEMINI ? "gemini-3-pro-image-preview" : "dall-e-3"}
-                            className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none font-mono"
-                        />
-                        <p className="text-[10px] text-slate-500">
-                            为空时使用系统默认推荐模型。
-                        </p>
-                    </div>
-
-                    <div className="h-px bg-white/10"></div>
-
-                    {/* Custom Models */}
-                    <div className="space-y-3">
-                        <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                            <Layers size={12} /> 常用模型快捷列表
-                        </label>
-                        <div className="flex gap-2">
+                        {/* Base URL */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">Base URL (Optional)</label>
                             <input
-                                value={newModelInput}
-                                onChange={(e) => setNewModelInput(e.target.value)}
-                                placeholder="Add model ID (e.g. flux-1)"
-                                className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm outline-none"
+                                type="url"
+                                value={globalConfig.baseUrl}
+                                onChange={(e) => setGlobalConfig(prev => ({ ...prev, baseUrl: e.target.value }))}
+                                placeholder={globalConfig.provider === ProviderType.GEMINI ? "https://generativelanguage.googleapis.com" : "https://api.openai.com/v1"}
+                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none font-mono"
                             />
-                            <button
-                                onClick={() => {
-                                    if (newModelInput.trim()) {
-                                        setGlobalConfig(prev => ({ ...prev, customModels: [...prev.customModels, newModelInput.trim()] }));
-                                        setNewModelInput('');
-                                    }
-                                }}
-                                className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-xl font-bold text-xs"
-                            >
-                                <Plus size={16} />
-                            </button>
+                            <p className="text-[10px] text-slate-500">
+                                {globalConfig.provider === ProviderType.GEMINI
+                                    ? "默认为空 (使用 Google 官方 API)。可填入代理服务器地址。"
+                                    : "默认为 https://api.openai.com/v1。可填入兼容 API 地址。"}
+                            </p>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                            {globalConfig.customModels.map((m, idx) => (
-                                <div key={idx} className="flex items-center gap-2 bg-purple-900/30 border border-purple-500/30 px-3 py-1.5 rounded-lg text-xs text-purple-200">
-                                    {m}
-                                    <button onClick={() => setGlobalConfig(prev => ({ ...prev, customModels: prev.customModels.filter(cm => cm !== m) }))} className="hover:text-white"><X size={12} /></button>
-                                </div>
-                            ))}
+
+                        {/* Default Model with Preset Suggestions */}
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider block">默认模型 ID (Default Model)</label>
+                            <input
+                                type="text"
+                                value={globalConfig.modelName}
+                                onChange={(e) => setGlobalConfig(prev => ({ ...prev, modelName: e.target.value }))}
+                                placeholder={globalConfig.provider === ProviderType.GEMINI ? "gemini-2.0-flash-exp" : "dall-e-3"}
+                                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-white focus:border-blue-500 outline-none font-mono"
+                            />
+                            <div className="flex flex-wrap gap-1.5">
+                                {presetModels.map((model) => (
+                                    <button
+                                        key={model}
+                                        onClick={() => setGlobalConfig(prev => ({ ...prev, modelName: model }))}
+                                        className={`px-2 py-1 text-[10px] rounded-md border transition-colors ${
+                                            globalConfig.modelName === model
+                                                ? 'bg-blue-600 border-blue-500 text-white'
+                                                : 'bg-black/20 border-white/10 text-slate-400 hover:text-white hover:border-white/30'
+                                        }`}
+                                    >
+                                        {model}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="h-px bg-white/10"></div>
+
+                        {/* Custom Models */}
+                        <div className="space-y-3">
+                            <label className="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                <Layers size={12} /> 常用模型快捷列表
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    value={newModelInput}
+                                    onChange={(e) => setNewModelInput(e.target.value)}
+                                    placeholder="Add model ID (e.g. flux-1)"
+                                    className="flex-1 bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-white text-sm outline-none"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter' && newModelInput.trim()) {
+                                            setGlobalConfig(prev => ({ ...prev, customModels: [...prev.customModels, newModelInput.trim()] }));
+                                            setNewModelInput('');
+                                        }
+                                    }}
+                                />
+                                <button
+                                    onClick={() => {
+                                        if (newModelInput.trim()) {
+                                            setGlobalConfig(prev => ({ ...prev, customModels: [...prev.customModels, newModelInput.trim()] }));
+                                            setNewModelInput('');
+                                        }
+                                    }}
+                                    className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded-xl font-bold text-xs"
+                                >
+                                    <Plus size={16} />
+                                </button>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {globalConfig.customModels.map((m, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 bg-purple-900/30 border border-purple-500/30 px-3 py-1.5 rounded-lg text-xs text-purple-200">
+                                        {m}
+                                        <button onClick={() => setGlobalConfig(prev => ({ ...prev, customModels: prev.customModels.filter(cm => cm !== m) }))} className="hover:text-white"><X size={12} /></button>
+                                    </div>
+                                ))}
+                                {globalConfig.customModels.length === 0 && (
+                                    <p className="text-[10px] text-slate-500">添加常用模型以便快速切换</p>
+                                )}
+                            </div>
                         </div>
                     </div>
-                </div>
-                <div className="p-6 pt-0">
-                    <button onClick={() => setShowSettingsModal(false)} className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors">保存并关闭</button>
+                    <div className="p-6 pt-0">
+                        <button onClick={() => setShowSettingsModal(false)} className="w-full py-3 bg-white text-black font-bold rounded-xl hover:bg-slate-200 transition-colors">保存并关闭</button>
+                    </div>
                 </div>
             </div>
-        </div>
-    );
+        );
+    };
 
     const renderTabContent = () => {
         const isRawUri = (currentTab.result?.data || '').startsWith(URI_PREFIX);
@@ -718,27 +781,66 @@ const MultimodalCenter: React.FC<MultimodalCenterProps> = ({ isOpen, onClose, pa
         if (activeTab === 'LIVE') {
             return (
                 <div className="flex flex-col items-center justify-center h-full text-center max-w-md animate-fade-in relative">
+                    {/* Mode Toggle - only show when not connected */}
+                    {!isLiveConnected && !currentTab.isProcessing && (
+                        <div className="mb-6 flex gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
+                            <button
+                                onClick={() => setLiveMode('audio')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${liveMode === 'audio' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                <Mic size={16} /> 语音
+                            </button>
+                            <button
+                                onClick={() => setLiveMode('video')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${liveMode === 'video' ? 'bg-purple-600 text-white' : 'text-slate-400 hover:text-white'}`}
+                            >
+                                <Video size={16} /> 视频
+                            </button>
+                        </div>
+                    )}
+
                     {isLiveConnected ? (
                         <div className="relative w-48 h-48 mb-8 flex items-center justify-center">
                             <div className="absolute inset-0 bg-blue-500 rounded-full opacity-20" style={{ transform: `scale(${1 + liveVolume})`, transition: 'transform 0.1s' }}></div>
                             <div className="absolute inset-4 bg-purple-500 rounded-full opacity-20" style={{ transform: `scale(${1 + liveVolume * 0.8})`, transition: 'transform 0.1s' }}></div>
-                            <div className="relative w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl animate-pulse">
-                                <Wifi size={48} className="text-white" />
-                            </div>
+                            {liveMode === 'video' ? (
+                                <div
+                                    ref={videoPreviewRef}
+                                    className="relative w-32 h-32 rounded-full overflow-hidden bg-slate-800 shadow-2xl border-4 border-purple-500/50"
+                                >
+                                    {/* Video element will be injected here */}
+                                </div>
+                            ) : (
+                                <div className="relative w-32 h-32 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-2xl animate-pulse">
+                                    <Wifi size={48} className="text-white" />
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="w-32 h-32 rounded-full bg-slate-800 flex items-center justify-center mb-6 border border-white/10 shadow-xl">
-                            <Mic size={48} className="text-slate-500" />
+                            {liveMode === 'video' ? (
+                                <Video size={48} className="text-slate-500" />
+                            ) : (
+                                <Mic size={48} className="text-slate-500" />
+                            )}
                         </div>
                     )}
-                    <h2 className="text-2xl font-bold mb-2 text-white">{isLiveConnected ? "正在通话 (Live)" : "Gemini Live"}</h2>
+                    <h2 className="text-2xl font-bold mb-2 text-white">
+                        {isLiveConnected
+                            ? (liveMode === 'video' ? "视频通话中" : "语音通话中")
+                            : (liveMode === 'video' ? "Gemini 视频通话" : "Gemini 语音通话")}
+                    </h2>
                     <p className="text-slate-400 mb-8 leading-relaxed">
-                        {isLiveConnected ? "正在实时收听与回复..." : "点击连接以开启实时语音对话。\n需确保麦克风权限已开启。Live API 仅支持 Gemini。"}
+                        {isLiveConnected
+                            ? (liveMode === 'video' ? "摄像头已开启，正在实时分析..." : "正在实时收听与回复...")
+                            : (liveMode === 'video'
+                                ? "开启视频通话，AI 将实时分析摄像头画面。\n需确保摄像头权限已开启。"
+                                : "点击连接以开启实时语音对话。\n需确保麦克风权限已开启。Live API 仅支持 Gemini。")}
                     </p>
                     <button
                         onClick={handleAction}
                         disabled={currentTab.isProcessing}
-                        className={`px-10 py-5 rounded-full font-bold shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 ${isLiveConnected ? 'bg-red-600 text-white hover:bg-red-700' : 'bg-white text-black hover:bg-slate-200'}`}
+                        className={`px-10 py-5 rounded-full font-bold shadow-xl hover:scale-105 transition-all flex items-center gap-2 disabled:opacity-50 ${isLiveConnected ? 'bg-red-600 text-white hover:bg-red-700' : (liveMode === 'video' ? 'bg-purple-600 text-white hover:bg-purple-500' : 'bg-white text-black hover:bg-slate-200')}`}
                     >
                         {currentTab.isProcessing ? (
                             <Loader2 className="animate-spin" />

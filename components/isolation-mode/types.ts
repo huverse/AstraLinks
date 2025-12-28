@@ -68,6 +68,10 @@ export interface Session {
     currentRound: number;
     agents: Agent[];
     events: DiscussionEvent[];
+    /** 创建时间 */
+    createdAt?: string;
+    /** 开始时间 */
+    startedAt?: string;
     /** 讨论总结 */
     summary?: string;
     /** 评分结果 */

@@ -38,7 +38,7 @@ interface ConfigTemplate {
     download_count: number;
     created_at: string;
     created_by_username: string;
-    template_type?: 'participant' | 'multimodal';
+    template_type?: 'participant' | 'multimodal' | 'isolation';
 }
 
 interface ModelTier {
@@ -89,7 +89,7 @@ export default function ConfigTemplates() {
     const [modelTiers, setModelTiers] = useState<ModelTier[]>([]);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'templates' | 'tiers'>('templates');
-    const [templateTypeFilter, setTemplateTypeFilter] = useState<'participant' | 'multimodal'>('participant');
+    const [templateTypeFilter, setTemplateTypeFilter] = useState<'participant' | 'multimodal' | 'isolation'>('participant');
     const [showEditor, setShowEditor] = useState(false);
     const [editingItem, setEditingItem] = useState<ConfigTemplate | null>(null);
 
@@ -99,7 +99,7 @@ export default function ConfigTemplates() {
     const [formTier, setFormTier] = useState<'free' | 'pro' | 'ultra'>('free');
     const [formTokenLimit, setFormTokenLimit] = useState(0);
     const [formIsActive, setFormIsActive] = useState(true);
-    const [formTemplateType, setFormTemplateType] = useState<'participant' | 'multimodal'>('participant');
+    const [formTemplateType, setFormTemplateType] = useState<'participant' | 'multimodal' | 'isolation'>('participant');
     const [formParticipants, setFormParticipants] = useState<ParticipantForm[]>([]);
     const [expandedParticipant, setExpandedParticipant] = useState<number | null>(null);
 
@@ -111,6 +111,22 @@ export default function ConfigTemplates() {
         modelName: '',
         customModels: [] as string[]
     });
+
+    // Isolation form state
+    const [formIsolation, setFormIsolation] = useState({
+        scenarioId: 'debate',
+        agents: [] as Array<{
+            id: string;
+            name: string;
+            role: string;
+            stance?: 'for' | 'against' | 'neutral';
+            systemPrompt?: string;
+            personality?: string;
+        }>,
+        topic: '',
+        maxRounds: 5
+    });
+    const [expandedAgent, setExpandedAgent] = useState<number | null>(null);
 
     // Model tier form
     const [tierForm, setTierForm] = useState<{
@@ -190,7 +206,9 @@ export default function ConfigTemplates() {
         setFormTemplateType(templateTypeFilter);
         setFormParticipants([]);
         setFormMultimodal({ provider: 'GEMINI', apiKey: '', baseUrl: '', modelName: '', customModels: [] });
+        setFormIsolation({ scenarioId: 'debate', agents: [], topic: '', maxRounds: 5 });
         setExpandedParticipant(null);
+        setExpandedAgent(null);
         setEditingItem(null);
     };
 
@@ -215,6 +233,25 @@ export default function ConfigTemplates() {
                     customModels: config?.customModels || []
                 });
                 setFormParticipants([]);
+                setFormIsolation({ scenarioId: 'debate', agents: [], topic: '', maxRounds: 5 });
+            } else if (item.template_type === 'isolation') {
+                // Load isolation config
+                const config = item.config_data as any;
+                setFormIsolation({
+                    scenarioId: config?.scenarioId || 'debate',
+                    agents: (config?.agents || []).map((a: any, idx: number) => ({
+                        id: a.id || `agent-${idx}`,
+                        name: a.name || '',
+                        role: a.role || '',
+                        stance: a.stance || 'neutral',
+                        systemPrompt: a.systemPrompt || '',
+                        personality: a.personality || ''
+                    })),
+                    topic: config?.topic || '',
+                    maxRounds: config?.maxRounds || 5
+                });
+                setFormParticipants([]);
+                setFormMultimodal({ provider: 'GEMINI', apiKey: '', baseUrl: '', modelName: '', customModels: [] });
             } else {
                 // Load participant configs
                 const configData = Array.isArray(item.config_data) ? item.config_data : [];
@@ -230,6 +267,7 @@ export default function ConfigTemplates() {
                     systemInstruction: p.config?.systemInstruction || ''
                 })));
                 setFormMultimodal({ provider: 'GEMINI', apiKey: '', baseUrl: '', modelName: '', customModels: [] });
+                setFormIsolation({ scenarioId: 'debate', agents: [], topic: '', maxRounds: 5 });
             }
         } else {
             resetForm();
@@ -268,6 +306,10 @@ export default function ConfigTemplates() {
             alert('请输入 API Key');
             return;
         }
+        if (formTemplateType === 'isolation' && formIsolation.agents.length === 0) {
+            alert('请至少添加一个 Agent');
+            return;
+        }
 
         try {
             // Build config_data based on template type
@@ -289,6 +331,21 @@ export default function ConfigTemplates() {
                         systemInstruction: p.systemInstruction
                     }
                 }));
+            } else if (formTemplateType === 'isolation') {
+                // Isolation config format
+                configData = {
+                    scenarioId: formIsolation.scenarioId,
+                    agents: formIsolation.agents.map(a => ({
+                        id: a.id,
+                        name: a.name,
+                        role: a.role,
+                        stance: a.stance,
+                        systemPrompt: a.systemPrompt,
+                        personality: a.personality
+                    })),
+                    topic: formIsolation.topic,
+                    maxRounds: formIsolation.maxRounds
+                };
             } else {
                 // Multimodal config format
                 configData = formMultimodal;
@@ -515,13 +572,22 @@ export default function ConfigTemplates() {
                         >
                             🎨 多模态配置
                         </button>
+                        <button
+                            onClick={() => setTemplateTypeFilter('isolation')}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${templateTypeFilter === 'isolation'
+                                ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800'
+                                : 'bg-gray-50 dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-600'
+                                }`}
+                        >
+                            🎭 隔离模式
+                        </button>
                     </div>
                     <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
                         {loading ? (
                             <div className="text-center py-20 text-gray-500 dark:text-gray-400">加载中...</div>
                         ) : templates.filter(t => (t.template_type || 'participant') === templateTypeFilter).length === 0 ? (
                             <div className="text-center py-20 text-gray-500 dark:text-gray-400">
-                                暂无{templateTypeFilter === 'participant' ? '对话' : '多模态'}配置模板
+                                暂无{templateTypeFilter === 'participant' ? '对话' : templateTypeFilter === 'multimodal' ? '多模态' : '隔离模式'}配置模板
                             </div>
                         ) : (
                             <div className="divide-y divide-gray-200 dark:divide-slate-700">
@@ -713,7 +779,8 @@ export default function ConfigTemplates() {
                                 />
                             </div>
 
-                            {/* Participants */}
+                            {/* Participants - 对话配置 */}
+                            {formTemplateType === 'participant' && (
                             <div>
                                 <div className="flex justify-between items-center mb-3">
                                     <label className="text-sm font-medium text-gray-700 dark:text-gray-300">模型配置 ({formParticipants.length})</label>
@@ -856,6 +923,193 @@ export default function ConfigTemplates() {
                                     )}
                                 </div>
                             </div>
+                            )}
+
+                            {/* Isolation - 隔离模式配置 */}
+                            {formTemplateType === 'isolation' && (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">场景</label>
+                                        <select
+                                            value={formIsolation.scenarioId}
+                                            onChange={e => setFormIsolation({ ...formIsolation, scenarioId: e.target.value })}
+                                            className="w-full px-3 py-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"
+                                        >
+                                            <option value="debate">辩论</option>
+                                            <option value="brainstorm">头脑风暴</option>
+                                            <option value="review">项目评审</option>
+                                            <option value="academic">学术研讨</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">最大轮数</label>
+                                        <input
+                                            type="number"
+                                            min={1}
+                                            max={20}
+                                            value={formIsolation.maxRounds}
+                                            onChange={e => setFormIsolation({ ...formIsolation, maxRounds: parseInt(e.target.value) || 5 })}
+                                            className="w-full px-3 py-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">默认议题</label>
+                                    <input
+                                        type="text"
+                                        value={formIsolation.topic}
+                                        onChange={e => setFormIsolation({ ...formIsolation, topic: e.target.value })}
+                                        className="w-full px-3 py-2 border dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700"
+                                        placeholder="讨论的议题"
+                                    />
+                                </div>
+
+                                <div>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Agent 配置 ({formIsolation.agents.length})</label>
+                                        <button
+                                            onClick={() => {
+                                                const newAgent = {
+                                                    id: `agent-${Date.now()}`,
+                                                    name: '',
+                                                    role: '',
+                                                    stance: 'neutral' as const,
+                                                    systemPrompt: '',
+                                                    personality: ''
+                                                };
+                                                setFormIsolation({ ...formIsolation, agents: [...formIsolation.agents, newAgent] });
+                                                setExpandedAgent(formIsolation.agents.length);
+                                            }}
+                                            className="flex items-center gap-1 text-sm text-emerald-600 hover:text-emerald-700"
+                                        >
+                                            <Plus size={16} />
+                                            添加 Agent
+                                        </button>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        {formIsolation.agents.map((agent, idx) => (
+                                            <div key={agent.id} className="border dark:border-slate-600 rounded-lg overflow-hidden">
+                                                <div
+                                                    className="flex items-center gap-3 px-4 py-3 bg-emerald-50 dark:bg-emerald-900/20 cursor-pointer"
+                                                    onClick={() => setExpandedAgent(expandedAgent === idx ? null : idx)}
+                                                >
+                                                    <GripVertical size={16} className="text-gray-400" />
+                                                    <span className="flex-1 font-medium">{agent.name || `Agent ${idx + 1}`}</span>
+                                                    <span className="text-xs text-gray-500 dark:text-gray-400">{agent.role}</span>
+                                                    <span className={`text-xs px-2 py-0.5 rounded ${agent.stance === 'for' ? 'bg-green-100 text-green-700' : agent.stance === 'against' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'}`}>
+                                                        {agent.stance === 'for' ? '正方' : agent.stance === 'against' ? '反方' : '中立'}
+                                                    </span>
+                                                    {expandedAgent === idx ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                                                </div>
+
+                                                {expandedAgent === idx && (
+                                                    <div className="p-4 space-y-3">
+                                                        <div className="grid grid-cols-2 gap-3">
+                                                            <div>
+                                                                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">名称</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={agent.name}
+                                                                    onChange={e => {
+                                                                        const newAgents = [...formIsolation.agents];
+                                                                        newAgents[idx] = { ...agent, name: e.target.value };
+                                                                        setFormIsolation({ ...formIsolation, agents: newAgents });
+                                                                    }}
+                                                                    className="w-full px-2 py-1.5 border dark:border-slate-600 rounded text-sm bg-white dark:bg-slate-700"
+                                                                    placeholder="Agent 名称"
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">角色</label>
+                                                                <input
+                                                                    type="text"
+                                                                    value={agent.role}
+                                                                    onChange={e => {
+                                                                        const newAgents = [...formIsolation.agents];
+                                                                        newAgents[idx] = { ...agent, role: e.target.value };
+                                                                        setFormIsolation({ ...formIsolation, agents: newAgents });
+                                                                    }}
+                                                                    className="w-full px-2 py-1.5 border dark:border-slate-600 rounded text-sm bg-white dark:bg-slate-700"
+                                                                    placeholder="辩手、评审员等"
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">立场</label>
+                                                            <select
+                                                                value={agent.stance}
+                                                                onChange={e => {
+                                                                    const newAgents = [...formIsolation.agents];
+                                                                    newAgents[idx] = { ...agent, stance: e.target.value as any };
+                                                                    setFormIsolation({ ...formIsolation, agents: newAgents });
+                                                                }}
+                                                                className="w-full px-2 py-1.5 border dark:border-slate-600 rounded text-sm bg-white dark:bg-slate-700"
+                                                            >
+                                                                <option value="for">正方 (支持)</option>
+                                                                <option value="against">反方 (反对)</option>
+                                                                <option value="neutral">中立</option>
+                                                            </select>
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">人格描述</label>
+                                                            <textarea
+                                                                value={agent.personality || ''}
+                                                                onChange={e => {
+                                                                    const newAgents = [...formIsolation.agents];
+                                                                    newAgents[idx] = { ...agent, personality: e.target.value };
+                                                                    setFormIsolation({ ...formIsolation, agents: newAgents });
+                                                                }}
+                                                                rows={2}
+                                                                className="w-full px-2 py-1.5 border dark:border-slate-600 rounded text-sm bg-white dark:bg-slate-700 resize-none"
+                                                                placeholder="Agent 的性格特点、说话风格等"
+                                                            />
+                                                        </div>
+
+                                                        <div>
+                                                            <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">系统提示词</label>
+                                                            <textarea
+                                                                value={agent.systemPrompt || ''}
+                                                                onChange={e => {
+                                                                    const newAgents = [...formIsolation.agents];
+                                                                    newAgents[idx] = { ...agent, systemPrompt: e.target.value };
+                                                                    setFormIsolation({ ...formIsolation, agents: newAgents });
+                                                                }}
+                                                                rows={3}
+                                                                className="w-full px-2 py-1.5 border dark:border-slate-600 rounded text-sm bg-white dark:bg-slate-700 resize-none"
+                                                                placeholder="定制 Agent 行为的系统提示词"
+                                                            />
+                                                        </div>
+
+                                                        <div className="flex justify-end pt-2">
+                                                            <button
+                                                                onClick={() => {
+                                                                    const newAgents = formIsolation.agents.filter((_, i) => i !== idx);
+                                                                    setFormIsolation({ ...formIsolation, agents: newAgents });
+                                                                }}
+                                                                className="text-sm text-red-500 hover:text-red-700"
+                                                            >
+                                                                删除此 Agent
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        ))}
+
+                                        {formIsolation.agents.length === 0 && (
+                                            <div className="text-center py-8 text-gray-400 dark:text-gray-500 border-2 border-dashed dark:border-slate-600 rounded-lg">
+                                                点击"添加 Agent"开始配置
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                            )}
 
                             {/* Options */}
                             <div className="grid grid-cols-2 gap-4">

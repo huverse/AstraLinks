@@ -24,13 +24,12 @@ export { OutlineGenerator, outlineGenerator } from './OutlineGenerator';
 export { JudgeSystem, judgeSystem } from './JudgeSystem';
 
 // 重导出类型
-export {
+export type {
     Phase,
     ModeratorAction,
     ModeratorState,
     ModeratorDecision,
     Intent,
-    IntentUrgencyLevel,
     DiscussionHealth,
     PhaseTransition,
     OutlineItem,
@@ -39,11 +38,11 @@ export {
     JudgeConfig,
     JudgeScore,
     ScoringResult,
-    INTERVENTION_LEVEL_DESCRIPTIONS,
 } from '../core/types/moderator.types';
+export { IntentUrgencyLevel, INTERVENTION_LEVEL_DESCRIPTIONS } from '../core/types/moderator.types';
 
 // Moderator LLM 类型
-export {
+export type {
     OutlineInput,
     OutlineOutput,
     QuestionInput,

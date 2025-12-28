@@ -3,13 +3,15 @@
  */
 
 // 世界状态
-export {
+export type {
     GameWorldState,
     GameAgentState,
     CardType,
     GameActionType,
     PlayCardParams,
     GameEventType,
+} from './GameWorldState';
+export {
     ATTACK_DAMAGE,
     HEAL_AMOUNT,
     DEFAULT_HAND,

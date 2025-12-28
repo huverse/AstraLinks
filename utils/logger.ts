@@ -113,4 +113,5 @@ export const logger = new Logger();
 export const isolationLogger = logger.child('Isolation');
 
 // 导出供自定义配置
-export { Logger, LoggerConfig, LogMeta, LogLevel };
+export { Logger };
+export type { LoggerConfig, LogMeta, LogLevel };

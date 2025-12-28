@@ -9,7 +9,7 @@ export { ScenarioConfigLoader, scenarioConfigLoader } from './ScenarioConfigLoad
 export { ScenarioLoader, scenarioLoader } from './ScenarioLoader';
 
 // 重导出类型
-export {
+export type {
     ScenarioSchema,
     AlignmentConfig,
     AlignmentType,

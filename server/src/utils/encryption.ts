@@ -63,43 +63,85 @@ export function isEncrypted(text: string): boolean {
 }
 
 /**
- * Encrypt all API keys in a config array
+ * Encrypt API keys in config payload
+ * Supports:
+ * - Participant arrays with nested config.apiKey
+ * - Flat multimodal config with direct apiKey
  */
-export function encryptConfigApiKeys(config: any[]): any[] {
-    if (!Array.isArray(config)) return config;
+export function encryptConfigApiKeys(config: any): any {
+    // Handle arrays recursively
+    if (Array.isArray(config)) {
+        return config.map(item => encryptConfigApiKeys(item));
+    }
 
-    return config.map(participant => {
-        if (participant.config?.apiKey && !isEncrypted(participant.config.apiKey)) {
-            return {
-                ...participant,
-                config: {
-                    ...participant.config,
-                    apiKey: encryptApiKey(participant.config.apiKey)
-                }
-            };
-        }
-        return participant;
-    });
+    // Non-object passthrough
+    if (!config || typeof config !== 'object') {
+        return config;
+    }
+
+    let result = { ...config };
+
+    // Handle nested config.apiKey (participant structure)
+    if (result.config?.apiKey && !isEncrypted(result.config.apiKey)) {
+        result = {
+            ...result,
+            config: {
+                ...result.config,
+                apiKey: encryptApiKey(result.config.apiKey)
+            }
+        };
+    }
+
+    // Handle flat apiKey (multimodal config structure)
+    if (result.apiKey && !isEncrypted(result.apiKey)) {
+        result = {
+            ...result,
+            apiKey: encryptApiKey(result.apiKey)
+        };
+    }
+
+    return result;
 }
 
 /**
- * Decrypt all API keys in a config array
+ * Decrypt API keys in config payload
+ * Supports:
+ * - Participant arrays with nested config.apiKey
+ * - Flat multimodal config with direct apiKey
  */
-export function decryptConfigApiKeys(config: any[]): any[] {
-    if (!Array.isArray(config)) return config;
+export function decryptConfigApiKeys(config: any): any {
+    // Handle arrays recursively
+    if (Array.isArray(config)) {
+        return config.map(item => decryptConfigApiKeys(item));
+    }
 
-    return config.map(participant => {
-        if (participant.config?.apiKey && isEncrypted(participant.config.apiKey)) {
-            return {
-                ...participant,
-                config: {
-                    ...participant.config,
-                    apiKey: decryptApiKey(participant.config.apiKey)
-                }
-            };
-        }
-        return participant;
-    });
+    // Non-object passthrough
+    if (!config || typeof config !== 'object') {
+        return config;
+    }
+
+    let result = { ...config };
+
+    // Handle nested config.apiKey (participant structure)
+    if (result.config?.apiKey && isEncrypted(result.config.apiKey)) {
+        result = {
+            ...result,
+            config: {
+                ...result.config,
+                apiKey: decryptApiKey(result.config.apiKey)
+            }
+        };
+    }
+
+    // Handle flat apiKey (multimodal config structure)
+    if (result.apiKey && isEncrypted(result.apiKey)) {
+        result = {
+            ...result,
+            apiKey: decryptApiKey(result.apiKey)
+        };
+    }
+
+    return result;
 }
 
 /**
