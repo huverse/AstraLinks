@@ -4,6 +4,7 @@
 
 import { Router, Request, Response } from 'express';
 import { sessionManager } from '../../session';
+import { eventLogService } from '../../event-log';
 
 const router = Router();
 
@@ -77,9 +78,38 @@ router.get('/:id', async (req: Request, res: Response) => {
             return;
         }
 
+        const rawLimit = parseInt(req.query.limit as string, 10);
+        const limit = Number.isFinite(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 100;
+        const events = await eventLogService.getRecentEvents(id, limit);
+        const eventCount = await eventLogService.getEventCount(id);
+        const mappedEvents = events.map((event) => ({
+            id: event.eventId,
+            type: event.type,
+            sourceId: event.speaker || 'system',
+            timestamp: new Date(event.timestamp).getTime(),
+            sequence: event.sequence,
+            payload: typeof event.content === 'string'
+                ? { message: event.content }
+                : (event.content || {}),
+        }));
+
         res.json({
             success: true,
             data: {
+                id,
+                sessionId: id,
+                title: config.title,
+                topic: config.topic,
+                scenario: config.scenario,
+                scenarioName: config.scenario?.name,
+                agents: config.agents,
+                status: state?.status || 'pending',
+                currentRound: state?.currentRound || 0,
+                createdAt: config.createdAt,
+                startedAt: state?.startedAt,
+                endedAt: state?.endedAt,
+                eventCount,
+                events: mappedEvents,
                 config,
                 state,
             },

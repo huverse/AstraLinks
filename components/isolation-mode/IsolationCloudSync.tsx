@@ -58,7 +58,8 @@ export const IsolationCloudSync: React.FC<IsolationCloudSyncProps> = ({
             });
             if (response.ok) {
                 const data = await response.json();
-                setConfigs(data.data || []);
+                const list = Array.isArray(data?.configs) ? data.configs : data?.data;
+                setConfigs(list || []);
             }
         } catch (e) {
             console.error('Failed to load configs', e);
@@ -128,7 +129,10 @@ export const IsolationCloudSync: React.FC<IsolationCloudSyncProps> = ({
             });
             if (response.ok) {
                 const data = await response.json();
-                const configData = data.data?.config_data;
+                const rawConfigData = data?.config_data ?? data?.data?.config_data;
+                const configData = typeof rawConfigData === 'string'
+                    ? JSON.parse(rawConfigData)
+                    : rawConfigData;
                 if (configData) {
                     onLoadConfig({
                         scenarioId: configData.scenarioId || 'debate',

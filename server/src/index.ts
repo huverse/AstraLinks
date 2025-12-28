@@ -42,6 +42,8 @@ import { initScheduler } from './services/scheduler';
 import { initWorldEngineSocket } from './isolation-mode/websocket';
 import { initializeWebSocketGateway } from './isolation-mode/api/websocket/DiscussionGateway';
 import { sessionRoutes as isolationSessionRoutes, agentRoutes as isolationAgentRoutes, eventRoutes as isolationEventRoutes, scenarioRoutes as isolationScenarioRoutes } from './isolation-mode/api/routes';
+import { discussionLoop } from './isolation-mode/orchestrator/DiscussionLoop';
+import { registerDiscussionLoopLauncher } from './isolation-mode/orchestrator/DiscussionLoopLauncher';
 import { validateConfig, isProductionLike } from './config/world-engine.config';
 import { appLogger, logStartup } from './services/world-engine-logger';
 import { warnEnvDuplicates, warnInsecureTlsSetting } from './config/env.guard';
@@ -49,6 +51,7 @@ import { warnEnvDuplicates, warnInsecureTlsSetting } from './config/env.guard';
 dotenv.config();
 warnEnvDuplicates();
 warnInsecureTlsSetting();
+registerDiscussionLoopLauncher(discussionLoop);
 
 const app = express();
 const httpServer = createServer(app);

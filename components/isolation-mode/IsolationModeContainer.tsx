@@ -86,6 +86,31 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [showAdvancedPanels, setShowAdvancedPanels] = useState(true);
     const [geminiApiKey, setGeminiApiKey] = useState<string>('');
 
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        const savedKey = window.localStorage.getItem('isolationGeminiApiKey');
+        if (savedKey) {
+            setGeminiApiKey(savedKey);
+        }
+    }, []);
+
+    useEffect(() => {
+        if (geminiApiKey || participants.length === 0) return;
+        const geminiParticipant = participants.find(p => p.provider === 'GEMINI' && p.config.apiKey);
+        if (geminiParticipant) {
+            setGeminiApiKey(geminiParticipant.config.apiKey);
+        }
+    }, [participants, geminiApiKey]);
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        if (geminiApiKey) {
+            window.localStorage.setItem('isolationGeminiApiKey', geminiApiKey);
+        } else {
+            window.localStorage.removeItem('isolationGeminiApiKey');
+        }
+    }, [geminiApiKey]);
+
     // 自动清除错误
     useEffect(() => {
         if (error) {
@@ -183,6 +208,56 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         return () => { active = false; };
     }, [currentSession?.id, socketConnected]);
 
+    const normalizeEvent = useCallback((event: any): DiscussionEvent => {
+        const payload = event?.payload ?? (typeof event?.content === 'string'
+            ? { message: event.content }
+            : (event?.content || {}));
+
+        return {
+            id: event?.id || event?.eventId || String(event?.sequence ?? event?.tick ?? Date.now()),
+            type: event?.type || 'SYSTEM',
+            sourceId: event?.sourceId || event?.speaker || (payload?.speaker as string) || 'system',
+            timestamp: typeof event?.timestamp === 'number'
+                ? event.timestamp
+                : new Date(event?.timestamp || Date.now()).getTime(),
+            sequence: event?.sequence ?? event?.tick ?? 0,
+            payload,
+        };
+    }, []);
+
+    const normalizeHistorySession = useCallback((raw: any) => {
+        if (!raw) return raw;
+        const merged = raw?.config ? { ...raw.config, ...raw } : raw;
+        const agents = (merged.agents || raw?.config?.agents || []).map((agent: any) => ({
+            ...agent,
+            status: agent.status || 'idle',
+            speakCount: typeof agent.speakCount === 'number' ? agent.speakCount : 0,
+        }));
+        const events = Array.isArray(merged.events)
+            ? merged.events.map(normalizeEvent)
+            : [];
+
+        return {
+            ...merged,
+            id: merged.id || merged.sessionId || raw.id || raw.sessionId,
+            sessionId: merged.sessionId || merged.id || raw.sessionId || raw.id,
+            title: merged.title || raw?.config?.title || merged.topic || '讨论',
+            topic: merged.topic || raw?.config?.topic || '',
+            scenario: merged.scenario || raw?.config?.scenario,
+            scenarioName: merged.scenarioName || merged.scenario?.name || raw?.config?.scenario?.name,
+            agents,
+            events,
+            status: merged.status || raw?.state?.status || 'pending',
+            currentRound: merged.currentRound || raw?.state?.currentRound || 0,
+            createdAt: merged.createdAt || raw?.config?.createdAt,
+            startedAt: merged.startedAt || raw?.state?.startedAt,
+            endedAt: merged.endedAt || raw?.state?.endedAt,
+            eventCount: merged.eventCount || events.length,
+            config: raw?.config || merged.config,
+            state: raw?.state || merged.state,
+        };
+    }, [normalizeEvent]);
+
     const loadSessions = useCallback(async () => {
         if (!token) return;
         try {
@@ -209,7 +284,24 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             });
             if (response.ok) {
                 const data = await response.json();
-                setSelectedHistorySession(data.data);
+                let detail = normalizeHistorySession(data?.data ?? data);
+
+                if (detail && (!detail.events || detail.events.length === 0)) {
+                    const eventsResponse = await fetch(`${API_BASE}/api/isolation/events/${sessionId}?limit=100`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                    });
+                    if (eventsResponse.ok) {
+                        const eventsData = await eventsResponse.json();
+                        const rawEvents = Array.isArray(eventsData?.data) ? eventsData.data : [];
+                        detail = {
+                            ...detail,
+                            events: rawEvents.map(normalizeEvent),
+                            eventCount: detail.eventCount || rawEvents.length
+                        };
+                    }
+                }
+
+                setSelectedHistorySession(detail);
                 setView('history-detail');
             } else {
                 setError('加载会话详情失败');
@@ -220,7 +312,52 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         } finally {
             setHistoryLoading(false);
         }
-    }, [token]);
+    }, [token, normalizeEvent, normalizeHistorySession]);
+
+    const handleResumeSession = useCallback(async () => {
+        if (!selectedHistorySession) return;
+        const sessionId = selectedHistorySession.sessionId || selectedHistorySession.id;
+        if (!sessionId) {
+            setError('无法定位会话 ID');
+            return;
+        }
+
+        setHistoryLoading(true);
+        try {
+            const joinResult = await socketJoinSession(sessionId);
+            if (!joinResult.success) {
+                setError(joinResult.error || '接续会话失败');
+                return;
+            }
+
+            const detail = normalizeHistorySession(selectedHistorySession);
+            const agents = (detail.agents || []).map((agent: any) => ({
+                ...agent,
+                status: agent.status || 'idle',
+                speakCount: typeof agent.speakCount === 'number' ? agent.speakCount : 0,
+            }));
+
+            setCurrentSession({
+                id: detail.sessionId || detail.id || sessionId,
+                title: detail.title || detail.topic || '讨论',
+                topic: detail.topic || '',
+                status: detail.status || 'pending',
+                currentRound: detail.currentRound || 0,
+                agents,
+                events: detail.events || [],
+                createdAt: detail.createdAt,
+                startedAt: detail.startedAt,
+                summary: detail.summary,
+                scoringResult: detail.scoringResult,
+            });
+            setView('discussion');
+        } catch (e) {
+            console.error('Failed to resume session', e);
+            setError('接续会话失败');
+        } finally {
+            setHistoryLoading(false);
+        }
+    }, [selectedHistorySession, socketJoinSession, normalizeHistorySession]);
 
     // 导出会话记录
     const exportSession = (session: any) => {
@@ -1106,6 +1243,23 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 disabled={currentSession.status !== 'completed'}
                             />
 
+                            <div className="bg-slate-800/50 rounded-xl p-3 border border-white/5 space-y-2">
+                                <h4 className="text-xs font-medium text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                    <SlidersHorizontal size={12} />
+                                    语音配置
+                                </h4>
+                                <input
+                                    type="password"
+                                    value={geminiApiKey}
+                                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                                    placeholder="Gemini API Key"
+                                    className="w-full px-2 py-1.5 bg-slate-900/60 border border-white/10 rounded-lg text-sm text-white placeholder:text-slate-500 focus:border-purple-500 focus:outline-none"
+                                />
+                                <div className="text-[10px] text-slate-500">
+                                    仅保存在本地浏览器，用于语音模式连接
+                                </div>
+                            </div>
+
                             {/* 语音控制 */}
                             <VoicePanel
                                 apiKey={geminiApiKey}
@@ -1218,6 +1372,20 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                     ))}
                                 </div>
                             </div>
+
+                            <button
+                                onClick={handleResumeSession}
+                                disabled={
+                                    historyLoading ||
+                                    !socketConnected ||
+                                    selectedHistorySession.status === 'completed' ||
+                                    selectedHistorySession.status === 'aborted'
+                                }
+                                className="w-full py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-2"
+                            >
+                                <Play size={16} />
+                                接续会话
+                            </button>
 
                             <button
                                 onClick={() => exportSession(selectedHistorySession)}
