@@ -43,6 +43,8 @@ export interface Agent {
     stance?: 'for' | 'against' | 'neutral';
     /** Agent 独立 LLM 配置 */
     agentLlmConfig?: AgentLlmConfig;
+    /** 总发言时长(ms) */
+    totalSpeakTime?: number;
 }
 
 export interface DiscussionEvent {
@@ -54,6 +56,7 @@ export interface DiscussionEvent {
     payload?: {
         content?: string;
         message?: string;
+        [key: string]: unknown;
     };
 }
 
@@ -65,6 +68,10 @@ export interface Session {
     currentRound: number;
     agents: Agent[];
     events: DiscussionEvent[];
+    /** 讨论总结 */
+    summary?: string;
+    /** 评分结果 */
+    scoringResult?: ScoringResult;
 }
 
 export interface Scenario {
@@ -80,3 +87,111 @@ export const DEFAULT_SCENARIOS: Scenario[] = [
     { id: 'review', name: '项目评审', description: '多角度评估项目方案', type: 'review' },
     { id: 'academic', name: '学术研讨', description: '深入探讨学术问题', type: 'academic' },
 ];
+
+// ============================================
+// 评委系统类型
+// ============================================
+
+/** 评分维度 */
+export interface ScoringDimension {
+    id: string;
+    name: string;
+    description: string;
+    weight: number;
+    maxScore: number;
+}
+
+/** 单个评委对单个Agent的评分 */
+export interface JudgeScore {
+    judgeId: string;
+    agentId: string;
+    dimensionScores: Record<string, number>;
+    totalScore: number;
+    comment: string;
+    scoredAt: number;
+}
+
+/** 评分结果 */
+export interface ScoringResult {
+    sessionId: string;
+    dimensions: ScoringDimension[];
+    judgeScores: JudgeScore[];
+    aggregatedScores: Record<string, number>;
+    ranking: Array<{ agentId: string; rank: number; score: number }>;
+    finalComment: string;
+    generatedAt: number;
+}
+
+// ============================================
+// 意图系统类型
+// ============================================
+
+/** 意图紧急程度 */
+export type IntentUrgency = 'low' | 'medium' | 'high' | 'critical' | 'interrupt';
+
+/** 发言意图 */
+export interface SpeakIntent {
+    id: string;
+    agentId: string;
+    urgency: IntentUrgency;
+    reason?: string;
+    submittedAt: number;
+    status: 'pending' | 'approved' | 'rejected' | 'expired';
+}
+
+// ============================================
+// 统计类型
+// ============================================
+
+/** 会话统计 */
+export interface SessionStats {
+    totalSpeechCount: number;
+    totalDuration: number;
+    roundCount: number;
+    agentStats: Record<string, AgentStats>;
+}
+
+/** Agent统计 */
+export interface AgentStats {
+    speechCount: number;
+    totalDuration: number;
+    avgDuration: number;
+    lastSpeakTime?: number;
+}
+
+// ============================================
+// 观点追踪类型
+// ============================================
+
+/** 立场记录 */
+export interface StanceRecord {
+    agentId: string;
+    round: number;
+    stance: 'for' | 'against' | 'neutral';
+    confidence: number;
+    timestamp: number;
+}
+
+// ============================================
+// 讨论模板类型
+// ============================================
+
+/** 讨论模板 */
+export interface DiscussionTemplate {
+    id: string;
+    name: string;
+    description: string;
+    scenarioId: string;
+    agents: Omit<Agent, 'status' | 'speakCount'>[];
+    maxRounds?: number;
+    roundTimeLimit?: number;
+    tierRequired?: 'free' | 'pro' | 'ultra';
+    downloadCount?: number;
+    isActive?: boolean;
+}
+
+// ============================================
+// 导出格式类型
+// ============================================
+
+export type ExportFormat = 'markdown' | 'json' | 'pdf' | 'word';

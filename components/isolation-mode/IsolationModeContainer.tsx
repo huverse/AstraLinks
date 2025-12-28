@@ -4,11 +4,12 @@
  * 多 Agent 结构化讨论的主界面
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
     FlaskConical, Users, Play, Pause, Square,
     History, ChevronLeft, Plus, RefreshCw, Wifi, WifiOff, Loader2,
-    X, Eye, Download, Hand, Zap, Megaphone, SlidersHorizontal, FileText, Trash2
+    X, Eye, Download, Hand, Zap, Megaphone, SlidersHorizontal, FileText, Trash2,
+    ChevronDown, ChevronUp, Keyboard, Settings2
 } from 'lucide-react';
 import { API_BASE } from '../../utils/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -17,11 +18,21 @@ import { Participant } from '../../types';
 import { useIsolationSession } from '../../hooks/useIsolationSession';
 import { isolationSocket } from '../../services/isolationSocket';
 import { isolationLogger } from '../../utils/logger';
-import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS } from './types';
+import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS, ScoringResult, SpeakIntent, SessionStats, DiscussionTemplate } from './types';
 import { AgentCard } from './AgentCard';
 import { EventTimeline } from './EventTimeline';
 import { ScenarioSelector } from './ScenarioSelector';
 import { AgentConfigPanel } from './AgentConfigPanel';
+import { JudgePanel } from './JudgePanel';
+import { IntentQueuePanel } from './IntentQueuePanel';
+import { StatsPanel } from './StatsPanel';
+import { SummaryPanel } from './SummaryPanel';
+import { ExportMenu } from './ExportMenu';
+import { TemplatePanel } from './TemplatePanel';
+import { StanceTracker } from './StanceTracker';
+import { VoicePanel } from './VoicePanel';
+import { IsolationCloudSync } from './IsolationCloudSync';
+import { useIsolationHotkeys, HotkeyHelp } from '../../hooks/useIsolationHotkeys';
 
 interface IsolationModeContainerProps {
     onExit: () => void;
@@ -62,6 +73,18 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [selectedHistorySession, setSelectedHistorySession] = useState<any>(null);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+
+    // 新功能状态
+    const [scoringResult, setScoringResult] = useState<ScoringResult | null>(null);
+    const [scoringLoading, setScoringLoading] = useState(false);
+    const [intents, setIntents] = useState<SpeakIntent[]>([]);
+    const [intentsLoading, setIntentsLoading] = useState(false);
+    const [summary, setSummary] = useState('');
+    const [summaryLoading, setSummaryLoading] = useState(false);
+    const [showHotkeyHelp, setShowHotkeyHelp] = useState(false);
+    const [expandedPanel, setExpandedPanel] = useState<string | null>('stats');
+    const [showAdvancedPanels, setShowAdvancedPanels] = useState(true);
+    const [geminiApiKey, setGeminiApiKey] = useState<string>('');
 
     // 自动清除错误
     useEffect(() => {
@@ -554,6 +577,152 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         }
     };
 
+    // 触发评委评分
+    const handleTriggerScoring = async () => {
+        if (!currentSession) return;
+        setScoringLoading(true);
+        try {
+            const result = await isolationSocket.triggerJudgeScore();
+            if (result.success && result.scores) {
+                // 将scores转换为ScoringResult格式
+                setScoringResult(result.scores as ScoringResult);
+            } else {
+                setError(result.error || '评分失败');
+            }
+        } catch {
+            setError('评分失败');
+        } finally {
+            setScoringLoading(false);
+        }
+    };
+
+    // 加载意图队列
+    const loadIntents = useCallback(async () => {
+        if (!currentSession || !socketConnected) return;
+        setIntentsLoading(true);
+        try {
+            const result = await isolationSocket.listIntents();
+            if (result.success && result.intents) {
+                setIntents(result.intents as SpeakIntent[]);
+            }
+        } catch {
+            // 静默失败
+        } finally {
+            setIntentsLoading(false);
+        }
+    }, [currentSession, socketConnected]);
+
+    // 处理意图 (暂时通过HTTP API)
+    const handleProcessIntent = async (intentId: string, action: 'approve' | 'reject') => {
+        if (!token || !currentSession) return;
+        try {
+            const response = await fetch(`${API_BASE}/api/isolation/sessions/${currentSession.id}/intents/${intentId}`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify({ action }),
+            });
+            if (response.ok) {
+                loadIntents();
+            } else {
+                setError('处理意图失败');
+            }
+        } catch {
+            setError('处理意图失败');
+        }
+    };
+
+    // 生成讨论总结 (通过HTTP API)
+    const handleGenerateSummary = async () => {
+        if (!currentSession || !token) return;
+        setSummaryLoading(true);
+        try {
+            const response = await fetch(`${API_BASE}/api/isolation/sessions/${currentSession.id}/summary`, {
+                method: 'POST',
+                headers: { Authorization: `Bearer ${token}` },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setSummary(data.data?.summary || '暂无总结');
+            } else {
+                setError('生成总结失败');
+            }
+        } catch {
+            setError('生成总结失败');
+        } finally {
+            setSummaryLoading(false);
+        }
+    };
+
+    // 计算统计数据
+    const sessionStats = useMemo((): SessionStats => {
+        if (!currentSession) {
+            return { totalSpeeches: 0, currentRound: 0, startTime: 0, agentStats: {} };
+        }
+        const agentStats: Record<string, { speakCount: number; totalLength: number }> = {};
+        currentSession.agents.forEach(agent => {
+            agentStats[agent.id] = { speakCount: agent.speakCount, totalLength: 0 };
+        });
+        currentSession.events.forEach(event => {
+            if ((event.type === 'agent:speak' || event.type === 'SPEECH') && event.payload?.content) {
+                const agentId = event.sourceId;
+                if (agentStats[agentId]) {
+                    agentStats[agentId].totalLength += (event.payload.content as string).length;
+                }
+            }
+        });
+        return {
+            totalSpeeches: currentSession.agents.reduce((sum, a) => sum + a.speakCount, 0),
+            currentRound: currentSession.currentRound,
+            startTime: currentSession.createdAt ? new Date(currentSession.createdAt).getTime() : Date.now(),
+            agentStats,
+        };
+    }, [currentSession]);
+
+    // 应用模板
+    const handleApplyTemplate = (template: DiscussionTemplate) => {
+        setSelectedScenario(template.scenarioId);
+        setConfiguredAgents(template.agents.map((a, idx) => ({
+            ...a,
+            id: a.id || `agent-${idx + 1}`,
+            status: 'idle' as const,
+            speakCount: 0,
+            agentLlmConfig: { useSessionConfig: true, configSource: 'session' as const },
+        })));
+    };
+
+    // 加载云端配置
+    const handleLoadCloudConfig = (config: { scenarioId: string; agents: Agent[]; topic?: string }) => {
+        setSelectedScenario(config.scenarioId);
+        setConfiguredAgents(config.agents.map(a => ({
+            ...a,
+            status: 'idle' as const,
+            speakCount: 0,
+            agentLlmConfig: a.agentLlmConfig || { useSessionConfig: true, configSource: 'session' as const },
+        })));
+        if (config.topic) {
+            setTopic(config.topic);
+        }
+    };
+
+    // 键盘快捷键
+    useIsolationHotkeys({
+        onStart: handleStartDiscussion,
+        onPause: handlePauseDiscussion,
+        onResume: handleResumeDiscussion,
+        onEnd: handleEndDiscussion,
+        onRaiseHand: () => handleSubmitIntent('low'),
+        onInterrupt: () => handleSubmitIntent('interrupt'),
+        onTogglePanel: (panel) => {
+            setExpandedPanel(prev => prev === panel ? null : panel);
+        },
+    }, {
+        enabled: view === 'discussion' && !!currentSession,
+        sessionStatus: currentSession?.status,
+    });
+
     const controlsDisabled = !socketConnected || !currentSession || currentSession.status !== 'active';
     const canTargetAgent = !controlsDisabled && !!selectedAgentId;
 
@@ -601,6 +770,21 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* 导出菜单 - 仅在讨论视图或历史详情显示 */}
+                    {(view === 'discussion' || view === 'history-detail') && (
+                        <ExportMenu
+                            session={view === 'discussion' ? currentSession : selectedHistorySession}
+                            scoringResult={scoringResult}
+                        />
+                    )}
+                    {/* 快捷键帮助 */}
+                    <button
+                        onClick={() => setShowHotkeyHelp(true)}
+                        className="p-2 hover:bg-white/10 rounded-lg text-slate-400 hover:text-white transition-colors"
+                        title="键盘快捷键"
+                    >
+                        <Keyboard size={16} />
+                    </button>
                     <button
                         onClick={() => setView('setup')}
                         className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${view === 'setup' ? 'bg-purple-500/20 text-purple-400' : 'text-slate-400 hover:text-white'
@@ -620,69 +804,97 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                 </div>
             </header>
 
+            {/* 快捷键帮助弹窗 */}
+            <HotkeyHelp isOpen={showHotkeyHelp} onClose={() => setShowHotkeyHelp(false)} />
+
             {/* 主内容 */}
-            <main className="flex-1 overflow-hidden p-6">
+            <main className="flex-1 overflow-hidden p-4 md:p-6">
                 {view === 'setup' && (
-                    <div className="max-w-3xl mx-auto space-y-6">
-                        <div>
-                            <h2 className="text-lg font-semibold text-white mb-4">选择讨论场景</h2>
-                            {scenarioLoading && scenarios.length === 0 ? (
-                                <div className="text-sm text-slate-400">加载场景中...</div>
-                            ) : (
-                                <ScenarioSelector
-                                    scenarios={scenarios}
-                                    selected={selectedScenario}
-                                    onSelect={setSelectedScenario}
-                                />
-                            )}
-                        </div>
-
-                        <div>
-                            <h2 className="text-lg font-semibold text-white mb-4">讨论主题</h2>
-                            <input
-                                type="text"
-                                value={topic}
-                                onChange={e => setTopic(e.target.value)}
-                                placeholder="输入你想讨论的问题..."
-                                className="w-full px-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:border-purple-500 focus:outline-none transition-colors"
-                            />
-                        </div>
-
-                        {/* Agent 配置面板 */}
-                        <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5">
-                            <AgentConfigPanel
-                                agents={configuredAgents}
-                                onAgentsChange={setConfiguredAgents}
-                                participants={participants}
-                                scenarioType={selectedScenario || undefined}
-                            />
-                        </div>
-
-                        {error && (
-                            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
-                                {error}
+                    <div className="h-full flex flex-col lg:flex-row gap-6">
+                        {/* 左侧主配置区 */}
+                        <div className="flex-1 space-y-6 overflow-auto">
+                            <div>
+                                <h2 className="text-lg font-semibold text-white mb-4">选择讨论场景</h2>
+                                {scenarioLoading && scenarios.length === 0 ? (
+                                    <div className="text-sm text-slate-400">加载场景中...</div>
+                                ) : (
+                                    <ScenarioSelector
+                                        scenarios={scenarios}
+                                        selected={selectedScenario}
+                                        onSelect={setSelectedScenario}
+                                    />
+                                )}
                             </div>
-                        )}
 
-                        <button
-                            onClick={handleCreateSession}
-                            disabled={loading || !selectedScenario || !topic.trim()}
-                            className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
-                        >
-                            {loading ? (
-                                <RefreshCw className="animate-spin" size={18} />
-                            ) : (
-                                <Users size={18} />
+                            <div>
+                                <h2 className="text-lg font-semibold text-white mb-4">讨论主题</h2>
+                                <input
+                                    type="text"
+                                    value={topic}
+                                    onChange={e => setTopic(e.target.value)}
+                                    placeholder="输入你想讨论的问题..."
+                                    className="w-full px-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:border-purple-500 focus:outline-none transition-colors"
+                                />
+                            </div>
+
+                            {/* Agent 配置面板 */}
+                            <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5">
+                                <AgentConfigPanel
+                                    agents={configuredAgents}
+                                    onAgentsChange={setConfiguredAgents}
+                                    participants={participants}
+                                    scenarioType={selectedScenario || undefined}
+                                />
+                            </div>
+
+                            {error && (
+                                <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
+                                    {error}
+                                </div>
                             )}
-                            创建讨论
-                        </button>
+
+                            <button
+                                onClick={handleCreateSession}
+                                disabled={loading || !selectedScenario || !topic.trim()}
+                                className="w-full py-3 bg-purple-600 hover:bg-purple-700 disabled:bg-slate-700 disabled:text-slate-500 text-white font-medium rounded-xl transition-colors flex items-center justify-center gap-2"
+                            >
+                                {loading ? (
+                                    <RefreshCw className="animate-spin" size={18} />
+                                ) : (
+                                    <Users size={18} />
+                                )}
+                                创建讨论
+                            </button>
+                        </div>
+
+                        {/* 右侧模板和云端同步 */}
+                        <div className="w-full lg:w-80 shrink-0 space-y-4 overflow-auto">
+                            <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5">
+                                <TemplatePanel
+                                    token={token}
+                                    onApplyTemplate={handleApplyTemplate}
+                                    currentScenarioId={selectedScenario || undefined}
+                                />
+                            </div>
+                            <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5">
+                                <IsolationCloudSync
+                                    token={token}
+                                    currentConfig={{
+                                        scenarioId: selectedScenario || undefined,
+                                        agents: configuredAgents,
+                                        topic: topic || undefined,
+                                    }}
+                                    onLoadConfig={handleLoadCloudConfig}
+                                />
+                            </div>
+                        </div>
                     </div>
                 )}
 
                 {view === 'discussion' && currentSession && (
-                    <div className="h-full flex gap-6">
+                    <div className="h-full flex flex-col lg:flex-row gap-4 md:gap-6">
                         {/* 左侧 - Agent 面板 */}
-                        <div className="w-64 shrink-0 space-y-4">
+                        <div className="w-full lg:w-64 shrink-0 space-y-4 overflow-auto">
                             <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
                                 参与者 ({currentSession.agents.length})
                             </h3>
@@ -848,17 +1060,86 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                             </div>
                         </div>
 
-                        {/* 右侧 - 事件时间线 */}
-                        <div className="flex-1 bg-slate-800/30 rounded-2xl p-6 border border-white/5">
+                        {/* 中间 - 事件时间线 */}
+                        <div className="flex-1 bg-slate-800/30 rounded-2xl p-4 md:p-6 border border-white/5 min-w-0">
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold text-white">
+                                <h3 className="text-lg font-semibold text-white truncate">
                                     {currentSession.topic}
                                 </h3>
-                                <div className="text-sm text-slate-400">
+                                <div className="text-sm text-slate-400 shrink-0">
                                     第 {currentSession.currentRound} 轮
                                 </div>
                             </div>
                             <EventTimeline events={currentSession.events} agents={currentSession.agents} />
+                        </div>
+
+                        {/* 右侧 - 高级面板 */}
+                        <div className={`w-72 shrink-0 space-y-3 overflow-auto transition-all duration-300 hidden xl:block ${showAdvancedPanels ? '' : 'xl:hidden'}`}>
+                            {/* 面板折叠控制 */}
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                    <Settings2 size={14} />
+                                    高级面板
+                                </h3>
+                                <button
+                                    onClick={() => setShowAdvancedPanels(!showAdvancedPanels)}
+                                    className="p-1 hover:bg-white/10 rounded text-slate-400"
+                                >
+                                    {showAdvancedPanels ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                </button>
+                            </div>
+
+                            {/* 统计面板 */}
+                            <StatsPanel
+                                agents={currentSession.agents}
+                                events={currentSession.events}
+                                currentRound={currentSession.currentRound}
+                                startTime={currentSession.startedAt ? new Date(currentSession.startedAt).getTime() : undefined}
+                            />
+
+                            {/* 观点追踪 */}
+                            <StanceTracker
+                                agents={currentSession.agents}
+                                events={currentSession.events}
+                                currentRound={currentSession.currentRound}
+                            />
+
+                            {/* 意图队列 */}
+                            <IntentQueuePanel
+                                intents={intents}
+                                agents={currentSession.agents}
+                                isLoading={intentsLoading}
+                                onRefresh={loadIntents}
+                                onApprove={(id) => handleProcessIntent(id, 'approve')}
+                                onReject={(id) => handleProcessIntent(id, 'reject')}
+                            />
+
+                            {/* 评委评分 */}
+                            <JudgePanel
+                                scoringResult={scoringResult}
+                                agents={currentSession.agents}
+                                isLoading={scoringLoading}
+                                onTriggerScore={handleTriggerScoring}
+                                disabled={currentSession.status !== 'completed'}
+                            />
+
+                            {/* 讨论总结 */}
+                            <SummaryPanel
+                                summary={summary}
+                                isLoading={summaryLoading}
+                                onGenerate={handleGenerateSummary}
+                                disabled={currentSession.status !== 'completed'}
+                            />
+
+                            {/* 语音控制 */}
+                            <VoicePanel
+                                apiKey={geminiApiKey}
+                                disabled={currentSession.status !== 'active'}
+                                onVoiceInput={(text) => {
+                                    // 语音输入可以作为主持人干预
+                                    isolationLogger.info('Voice input received', { text });
+                                }}
+                            />
                         </div>
                     </div>
                 )}
