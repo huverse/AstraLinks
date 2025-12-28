@@ -629,7 +629,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     )}
 
                     {/* Cloudflare Turnstile Widget */}
-                    {(mode === 'login' || mode === 'register') && turnstileLoginEnabled && (
+                    {(mode === 'login' || mode === 'register' || mode === 'emailLogin') && turnstileLoginEnabled && (
                         <div className="flex flex-col items-center gap-2">
                             <div ref={turnstileContainerRef} className="cf-turnstile" />
                             {turnstileToken && (
