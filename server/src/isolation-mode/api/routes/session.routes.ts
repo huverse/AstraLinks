@@ -30,6 +30,15 @@ router.post('/', async (req: Request, res: Response) => {
         const userId = (req as any).user?.id || 'anonymous';
         const { title, topic, scenario, agents, maxRounds, roundTimeLimit, llmConfig } = req.body;
 
+        // 详细日志：记录收到的请求
+        console.log('[Isolation] Creating session:', {
+            userId,
+            title,
+            scenarioId: scenario?.id,
+            agentCount: agents?.length,
+            hasLlmConfig: !!llmConfig
+        });
+
         const session = await sessionManager.create({
             title,
             topic,
@@ -43,6 +52,12 @@ router.post('/', async (req: Request, res: Response) => {
 
         res.json({ success: true, data: session });
     } catch (error: any) {
+        // 详细错误日志
+        console.error('[Isolation] Session creation failed:', {
+            errorMessage: error.message,
+            errorStack: error.stack,
+            errorName: error.name
+        });
         res.status(400).json({ success: false, error: error.message });
     }
 });
