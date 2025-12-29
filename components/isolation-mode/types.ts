@@ -43,6 +43,8 @@ export interface Agent {
     stance?: 'for' | 'against' | 'neutral';
     /** Agent 独立 LLM 配置 */
     agentLlmConfig?: AgentLlmConfig;
+    /** 发言长度限制 (maxTokens)，默认 1024 */
+    maxTokens?: number;
     /** 总发言时长(ms) */
     totalSpeakTime?: number;
 }

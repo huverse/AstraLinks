@@ -461,6 +461,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                     systemPrompt: agent.systemPrompt || `你是${agent.name}`,
                     personality: agent.personality,
                     stance: agent.stance,
+                    maxTokens: agent.maxTokens || 1024,
                 };
 
                 // 如果 Agent 有独立的 LLM 配置

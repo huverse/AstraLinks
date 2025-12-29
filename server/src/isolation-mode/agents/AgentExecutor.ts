@@ -99,9 +99,10 @@ export class AgentExecutor implements IAgent {
             // 2. 构建消息历史
             const messages = this.buildLlmMessages(prompt);
 
-            // 3. 调用 LLM
+            // 3. 调用 LLM (使用配置的 maxTokens，默认 1024)
+            const maxTokens = this.config.maxTokens || 1024;
             const result = await this.llmAdapter.generate(messages, {
-                maxTokens: 1024,
+                maxTokens,
                 temperature: 0.7,
                 timeout: worldEngineConfig.llm.timeout || 30000
             });

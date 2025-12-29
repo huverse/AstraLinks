@@ -457,6 +457,89 @@ router.delete('/users/:id', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/admin/invitation-codes/stats
+ * Get invitation codes statistics
+ */
+router.get('/invitation-codes/stats', async (req: Request, res: Response) => {
+    try {
+        // Get enabled status
+        const [enabledSetting] = await pool.execute<RowDataPacket[]>(
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+            ['invitation_code_enabled']
+        );
+        const enabled = enabledSetting[0]?.setting_value === 'true';
+
+        // Get total codes
+        const [totalResult] = await pool.execute<RowDataPacket[]>(
+            'SELECT COUNT(*) as total FROM invitation_codes'
+        );
+        const totalCodes = totalResult[0]?.total || 0;
+
+        // Get used codes
+        const [usedResult] = await pool.execute<RowDataPacket[]>(
+            'SELECT COUNT(*) as used FROM invitation_codes WHERE is_used = TRUE'
+        );
+        const usedCodes = usedResult[0]?.used || 0;
+
+        // Get today's generated codes
+        const [todayResult] = await pool.execute<RowDataPacket[]>(
+            'SELECT COUNT(*) as today FROM invitation_codes WHERE DATE(created_at) = CURDATE()'
+        );
+        const todayGenerated = todayResult[0]?.today || 0;
+
+        // Get users registered via invitation codes
+        const [usersResult] = await pool.execute<RowDataPacket[]>(
+            'SELECT COUNT(*) as count FROM users WHERE id IN (SELECT used_by_user_id FROM invitation_codes WHERE is_used = TRUE)'
+        );
+        const usersViaCode = usersResult[0]?.count || 0;
+
+        res.json({
+            enabled,
+            totalCodes,
+            usedCodes,
+            unusedCodes: totalCodes - usedCodes,
+            todayGenerated,
+            usersViaCode,
+            usageRate: totalCodes > 0 ? ((usedCodes / totalCodes) * 100).toFixed(1) : '0.0'
+        });
+    } catch (error: any) {
+        console.error('Get invitation codes stats error:', error);
+        res.status(500).json({ error: 'Failed to fetch invitation codes stats' });
+    }
+});
+
+/**
+ * PUT /api/admin/invitation-codes/toggle
+ * Toggle invitation code system enabled/disabled
+ */
+router.put('/invitation-codes/toggle', async (req: Request, res: Response) => {
+    try {
+        const { enabled } = req.body;
+        const adminId = (req as any).user.id;
+
+        if (typeof enabled !== 'boolean') {
+            res.status(400).json({ error: 'enabled must be a boolean' });
+            return;
+        }
+
+        // Upsert the setting
+        await pool.execute(
+            `INSERT INTO site_settings (setting_key, setting_value, updated_by)
+             VALUES ('invitation_code_enabled', ?, ?)
+             ON DUPLICATE KEY UPDATE setting_value = ?, updated_by = ?`,
+            [enabled ? 'true' : 'false', adminId, enabled ? 'true' : 'false', adminId]
+        );
+
+        await logAdminAction(adminId, 'TOGGLE_INVITATION_CODE', 'site_settings', null, { enabled }, getClientIP(req));
+
+        res.json({ message: `普通邀请码系统已${enabled ? '启用' : '禁用'}`, enabled });
+    } catch (error: any) {
+        console.error('Toggle invitation code error:', error);
+        res.status(500).json({ error: 'Failed to toggle invitation code system' });
+    }
+});
+
+/**
  * GET /api/admin/invitation-codes
  * List invitation codes
  */

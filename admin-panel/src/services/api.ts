@@ -69,6 +69,9 @@ export const adminAPI = {
     // Invitation Codes
     getCodes: (page = 1, filter = 'all') =>
         fetchAPI(`/api/admin/invitation-codes?page=${page}&filter=${filter}`),
+    getCodesStats: () => fetchAPI('/api/admin/invitation-codes/stats'),
+    toggleInvitationCode: (enabled: boolean) =>
+        fetchAPI('/api/admin/invitation-codes/toggle', { method: 'PUT', body: JSON.stringify({ enabled }) }),
     generateCodes: (count: number) =>
         fetchAPI('/api/admin/invitation-codes/generate', { method: 'POST', body: JSON.stringify({ count }) }),
     deleteCode: (id: number) =>

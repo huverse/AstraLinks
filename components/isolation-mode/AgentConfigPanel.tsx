@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { Plus, Trash2, User, Cpu, ChevronDown, ChevronUp, Key } from 'lucide-react';
+import { Plus, Trash2, User, Cpu, ChevronDown, ChevronUp, Key, MessageSquare } from 'lucide-react';
 import { Participant } from '../../types';
 import { Agent, AgentLlmConfig, CustomLlmConfig } from './types';
 
@@ -335,6 +335,42 @@ export const AgentConfigPanel: React.FC<AgentConfigPanelProps> = ({
                                         placeholder="例如: 犀利、幽默、严谨..."
                                         className="w-full px-3 py-1.5 bg-slate-700/50 border border-white/10 rounded text-sm text-white"
                                     />
+                                </div>
+
+                                {/* 发言长度限制 */}
+                                <div>
+                                    <label className="block text-xs text-slate-400 mb-1 flex items-center gap-1">
+                                        <MessageSquare size={12} />
+                                        发言长度限制 (tokens)
+                                    </label>
+                                    <div className="flex items-center gap-3">
+                                        <input
+                                            type="range"
+                                            min="256"
+                                            max="4096"
+                                            step="128"
+                                            value={agent.maxTokens || 1024}
+                                            onChange={(e) => handleUpdateAgent(agent.id, { maxTokens: parseInt(e.target.value) })}
+                                            className="flex-1 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-purple-500"
+                                        />
+                                        <input
+                                            type="number"
+                                            min="256"
+                                            max="4096"
+                                            step="128"
+                                            value={agent.maxTokens || 1024}
+                                            onChange={(e) => {
+                                                const val = parseInt(e.target.value);
+                                                if (!isNaN(val) && val >= 256 && val <= 4096) {
+                                                    handleUpdateAgent(agent.id, { maxTokens: val });
+                                                }
+                                            }}
+                                            className="w-20 px-2 py-1 bg-slate-700/50 border border-white/10 rounded text-xs text-white text-center"
+                                        />
+                                    </div>
+                                    <p className="text-xs text-slate-500 mt-1">
+                                        限制 AI 每次发言的最大长度，默认 1024 tokens (约 500-700 字)
+                                    </p>
                                 </div>
                             </div>
                         )}

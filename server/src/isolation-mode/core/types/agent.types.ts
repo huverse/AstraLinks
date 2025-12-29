@@ -36,6 +36,8 @@ export interface AgentConfig {
     stance?: 'for' | 'against' | 'neutral';
     /** Agent 独立 LLM 配置 */
     agentLlmConfig?: AgentLlmConfig;
+    /** 发言长度限制 (maxTokens)，默认 1024 */
+    maxTokens?: number;
     /** 额外配置 */
     metadata?: Record<string, unknown>;
 }

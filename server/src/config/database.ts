@@ -465,9 +465,10 @@ export async function initDatabase(): Promise<void> {
     try {
       await connection.execute(`
         INSERT IGNORE INTO site_settings (setting_key, setting_value)
-        VALUES 
+        VALUES
           ('split_invitation_enabled', 'false'),
-          ('split_invitation_code_limit', '2')
+          ('split_invitation_code_limit', '2'),
+          ('invitation_code_enabled', 'true')
       `);
     } catch (e) {
       // Settings may already exist

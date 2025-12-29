@@ -101,25 +101,41 @@ router.post('/register', async (req: Request, res: Response) => {
         let codeData: any = null;
         let splitTreeId: string | null = null;
 
-        // First check normal invitation codes (8 characters)
-        const [normalCodes] = await pool.execute<RowDataPacket[]>(
-            'SELECT id, is_used, used_device_fingerprint FROM invitation_codes WHERE code = ?',
-            [invitationCode]
+        // Check if normal invitation code system is enabled
+        const [normalCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+            ['invitation_code_enabled']
         );
+        const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value !== 'false';
 
-        if (normalCodes.length > 0) {
-            codeData = normalCodes[0];
-            codeType = 'normal';
-            if (codeData.is_used) {
-                res.status(400).json({ error: '该邀请码已被使用' });
-                return;
+        // Check if split invitation system is enabled
+        const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+            'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+            ['split_invitation_enabled']
+        );
+        const splitCodeEnabled = splitCodeEnabledSetting[0]?.setting_value === 'true';
+
+        // First check normal invitation codes (8 characters)
+        if (normalCodeEnabled) {
+            const [normalCodes] = await pool.execute<RowDataPacket[]>(
+                'SELECT id, is_used, used_device_fingerprint FROM invitation_codes WHERE code = ?',
+                [invitationCode]
+            );
+
+            if (normalCodes.length > 0) {
+                codeData = normalCodes[0];
+                codeType = 'normal';
+                if (codeData.is_used) {
+                    res.status(400).json({ error: '该邀请码已被使用' });
+                    return;
+                }
             }
         }
 
         // If not found, check split invitation codes (12 characters)
-        if (!codeData) {
+        if (!codeData && splitCodeEnabled) {
             const [splitCodes] = await pool.execute<RowDataPacket[]>(
-                `SELECT c.*, t.is_banned as tree_banned 
+                `SELECT c.*, t.is_banned as tree_banned
                  FROM split_invitation_codes c
                  JOIN split_invitation_trees t ON c.tree_id = t.id
                  WHERE c.code = ?`,
@@ -142,9 +158,14 @@ router.post('/register', async (req: Request, res: Response) => {
             }
         }
 
-        // Code not found in either system
+        // Code not found in either system or both systems disabled
         if (!codeData) {
-            res.status(400).json({ error: '邀请码无效' });
+            // Provide more helpful error message
+            if (!normalCodeEnabled && !splitCodeEnabled) {
+                res.status(400).json({ error: '邀请码注册已关闭' });
+            } else {
+                res.status(400).json({ error: '邀请码无效' });
+            }
             return;
         }
 
