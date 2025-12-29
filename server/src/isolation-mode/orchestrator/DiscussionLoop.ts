@@ -6,7 +6,7 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { EventType, Event, Intent } from '../core/types';
+import { EventType, Event, Intent, IntentUrgencyLevel } from '../core/types';
 import { IAgent } from '../core/interfaces';
 import { eventLogService, eventBus } from '../event-log';
 import { moderatorController } from '../moderator';
@@ -45,6 +45,8 @@ const DEFAULT_CONFIG: DiscussionLoopConfig = {
 export class DiscussionLoop {
     private running = new Map<string, boolean>();
     private lastProgressTime = new Map<string, number>();
+    /** 追踪上次生成意图的轮次，避免同一轮重复生成 */
+    private lastIntentRound = new Map<string, number>();
 
     /**
      * 启动讨论循环
@@ -141,6 +143,9 @@ export class DiscussionLoop {
             let intentProcessed = false;
 
             if (config.useIntentQueue) {
+                // 先确保意图队列中有内容（自动生成 Agent 意图）
+                await this.ensureAutoIntents(sessionId);
+
                 const intent = await moderatorController.processNextIntent(sessionId);
                 if (intent) {
                     speaker = moderatorController.getAgent(sessionId, intent.agentId) || null;
@@ -168,8 +173,23 @@ export class DiscussionLoop {
                 continue;
             }
 
-            // 4. 生成发言
-            const message = await speaker.generateResponse();
+            // 4. 广播思考状态 → 生成发言 → 广播完成状态
+            await this.publishAgentStatus(sessionId, speaker.config.id, 'thinking');
+            let message: { content: string; tokens?: number };
+            try {
+                message = await speaker.generateResponse();
+            } catch (genErr: any) {
+                weLogger.error({
+                    sessionId,
+                    agentId: speaker.config.id,
+                    error: genErr.message
+                }, 'agent_generate_response_error');
+                // 确保发送 done 状态，避免 UI 一直显示「思考中」
+                await this.publishAgentStatus(sessionId, speaker.config.id, 'done');
+                await this.sleep(config.speakIntervalMs);
+                continue;
+            }
+            await this.publishAgentStatus(sessionId, speaker.config.id, 'done');
 
             // 5. 发布事件
             await this.publishEvent(sessionId, {
@@ -266,6 +286,105 @@ export class DiscussionLoop {
 
     private sleep(ms: number): Promise<void> {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * 确保意图队列中有 Agent 的自主意图
+     * 每轮只生成一次，避免重复
+     */
+    private async ensureAutoIntents(sessionId: string): Promise<void> {
+        const state = moderatorController.getSessionState(sessionId);
+        if (!state) return;
+
+        // 如果已有待处理意图，跳过生成
+        const pendingIntents = moderatorController.getPendingIntents(sessionId);
+        if (pendingIntents.length > 0) return;
+
+        // 同一轮只生成一次
+        if (this.lastIntentRound.get(sessionId) === state.currentRound) return;
+        this.lastIntentRound.set(sessionId, state.currentRound);
+
+        const agents = moderatorController.getAgents(sessionId);
+        if (agents.length === 0) return;
+
+        // 获取最近事件供 Agent 决策
+        const recentEvents = await eventLogService.getRecentEvents(sessionId, 8);
+
+        // 并行让每个 Agent 生成意图
+        await Promise.all(agents.map(async (agent) => {
+            try {
+                const intent = await this.deriveAutoIntent(agent, recentEvents, state.currentRound);
+                // intent 为 null 表示 Agent 选择跳过（pass）
+                if (intent) {
+                    await moderatorController.submitIntent(sessionId, intent);
+                    weLogger.debug({
+                        sessionId,
+                        agentId: agent.config.id,
+                        intentType: intent.type,
+                        urgencyLevel: intent.urgencyLevel
+                    }, 'auto_intent_generated');
+                }
+            } catch (err: any) {
+                weLogger.warn({
+                    sessionId,
+                    agentId: agent.config.id,
+                    error: err.message
+                }, 'auto_intent_generation_failed');
+            }
+        }));
+    }
+
+    /**
+     * 为单个 Agent 生成自动意图
+     * 如果 Agent 有 generateIntent 方法则调用，否则返回默认低优先级举手
+     */
+    private async deriveAutoIntent(
+        agent: IAgent,
+        recentEvents: Event[],
+        round: number
+    ): Promise<Omit<Intent, 'timestamp'> | null> {
+        // 尝试调用 Agent 的意图生成方法（如果实现了的话）
+        const intentCapable = agent as IAgent & {
+            generateIntent?: (context: { recentEvents: Event[]; round: number }) => Promise<Omit<Intent, 'timestamp'> | null>;
+        };
+
+        if (typeof intentCapable.generateIntent === 'function') {
+            return intentCapable.generateIntent({ recentEvents, round });
+        }
+
+        // Agent 当前不空闲，跳过
+        if (agent.state.status !== 'idle') return null;
+
+        // 默认：低优先级举手意图
+        return {
+            agentId: agent.config.id,
+            type: 'speak',
+            urgency: 1,
+            urgencyLevel: IntentUrgencyLevel.RAISE_HAND
+        };
+    }
+
+    /**
+     * 发布 Agent 状态事件（瞬态，不入 EventLog）
+     * 用于实时向前端广播 thinking/done 状态
+     */
+    private async publishAgentStatus(
+        sessionId: string,
+        agentId: string,
+        status: 'thinking' | 'done'
+    ): Promise<void> {
+        const transientEvent = {
+            eventId: uuidv4(),
+            sessionId,
+            type: `agent:${status}`,
+            speaker: agentId,
+            content: { message: status, agentId },
+            timestamp: new Date().toISOString(),
+            sequence: Date.now(),
+            meta: { transient: true }
+        };
+        // 直接广播，不写入 EventLog（避免污染讨论历史）
+        eventBus.publish(transientEvent as any);
     }
 }
 

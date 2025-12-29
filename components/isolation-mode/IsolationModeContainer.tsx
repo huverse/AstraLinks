@@ -8,7 +8,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
     FlaskConical, Users, Play, Pause, Square,
     History, ChevronLeft, Plus, RefreshCw, Wifi, WifiOff, Loader2,
-    X, Eye, Download, Hand, Zap, Megaphone, SlidersHorizontal, FileText, Trash2,
+    X, Eye, Download, Megaphone, SlidersHorizontal, FileText, Trash2,
     ChevronDown, ChevronUp, Keyboard, Settings2
 } from 'lucide-react';
 import { API_BASE } from '../../utils/api';
@@ -65,7 +65,6 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [interventionLevel, setInterventionLevel] = useState(1);
     const [outline, setOutline] = useState('');
     const [outlineLoading, setOutlineLoading] = useState(false);
-    const [intentSubmitting, setIntentSubmitting] = useState(false);
     const [callSubmitting, setCallSubmitting] = useState(false);
 
     // 会话历史
@@ -148,6 +147,16 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                     }));
                 } else if (event.type === 'agent:done' || event.type === 'turn:end') {
                     updatedAgents = prev.agents.map(a => ({ ...a, status: 'idle' }));
+                }
+
+                // 处理大纲自动生成事件
+                if (payload?.action === 'OUTLINE_GENERATED') {
+                    const outlineData = payload?.outline as { objective?: string; itemCount?: number; conflictPoints?: string[] };
+                    const outlinePreview = outlineData ?
+                        `目标: ${outlineData.objective || '讨论'}\n话题数: ${outlineData.itemCount || 0}\n冲突点: ${(outlineData.conflictPoints || []).join('、') || '无'}` :
+                        '大纲已生成';
+                    // 通过 closure 更新外部状态
+                    setTimeout(() => setOutline(outlinePreview), 0);
                 }
 
                 // 更新轮次
@@ -621,25 +630,6 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         }
     };
 
-    // 提交举手/插话意图
-    const handleSubmitIntent = async (urgency: 'low' | 'interrupt') => {
-        if (!selectedAgentId) {
-            setError('请选择一个 Agent');
-            return;
-        }
-        setIntentSubmitting(true);
-        try {
-            const result = await isolationSocket.submitIntent({ agentId: selectedAgentId, urgency });
-            if (!result.success) {
-                setError(result.error || '提交请求失败');
-            }
-        } catch {
-            setError('提交请求失败');
-        } finally {
-            setIntentSubmitting(false);
-        }
-    };
-
     // 主持人点名
     const handleModeratorCall = async () => {
         if (!selectedAgentId) {
@@ -825,8 +815,6 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
         onPause: handlePauseDiscussion,
         onResume: handleResumeDiscussion,
         onEnd: handleEndDiscussion,
-        onRaiseHand: () => handleSubmitIntent('low'),
-        onInterrupt: () => handleSubmitIntent('interrupt'),
         onTogglePanel: (panel) => {
             setExpandedPanel(prev => prev === panel ? null : panel);
         },
@@ -1044,31 +1032,26 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                         ))}
                                     </select>
                                 </div>
-                                <div className="grid grid-cols-2 gap-2">
-                                    <button
-                                        onClick={() => handleSubmitIntent('low')}
-                                        disabled={intentSubmitting || !canTargetAgent}
-                                        className="py-1.5 bg-slate-700/60 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-1 text-sm"
-                                    >
-                                        <Hand size={14} />
-                                        举手
-                                    </button>
-                                    <button
-                                        onClick={() => handleSubmitIntent('interrupt')}
-                                        disabled={intentSubmitting || !canTargetAgent}
-                                        className="py-1.5 bg-purple-600/80 hover:bg-purple-600 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-1 text-sm"
-                                    >
-                                        <Zap size={14} />
-                                        插话
-                                    </button>
-                                    <button
-                                        onClick={handleModeratorCall}
-                                        disabled={callSubmitting || !canTargetAgent}
-                                        className="col-span-2 py-1.5 bg-slate-700/60 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-1 text-sm"
-                                    >
-                                        <Megaphone size={14} />
-                                        点名发言
-                                    </button>
+                                {/* 点名发言（主持人主动干预） */}
+                                <button
+                                    onClick={handleModeratorCall}
+                                    disabled={callSubmitting || !canTargetAgent}
+                                    className="w-full py-1.5 bg-slate-700/60 hover:bg-slate-700 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-1 text-sm"
+                                >
+                                    <Megaphone size={14} />
+                                    点名发言
+                                </button>
+                                {/* AI 意图队列 - 展示 Agent 自主表达的发言意愿 */}
+                                <div className="pt-2 border-t border-white/5">
+                                    <div className="text-[10px] text-slate-500 mb-2">
+                                        💡 Agent 自主表达发言意愿，系统自动处理
+                                    </div>
+                                    <IntentQueuePanel
+                                        intents={intents}
+                                        agents={currentSession.agents}
+                                        isLoading={intentsLoading}
+                                        onRefresh={loadIntents}
+                                    />
                                 </div>
                             </div>
 
@@ -1216,7 +1199,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 currentRound={currentSession.currentRound}
                             />
 
-                            {/* 意图队列 */}
+                            {/* 意图队列（高级面板，支持审批） */}
                             <IntentQueuePanel
                                 intents={intents}
                                 agents={currentSession.agents}
@@ -1224,6 +1207,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 onRefresh={loadIntents}
                                 onApprove={(id) => handleProcessIntent(id, 'approve')}
                                 onReject={(id) => handleProcessIntent(id, 'reject')}
+                                allowManualApproval={true}
                             />
 
                             {/* 评委评分 */}

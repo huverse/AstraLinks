@@ -5,17 +5,19 @@
  */
 
 import { v4 as uuidv4 } from 'uuid';
-import { SessionState, SessionStatus, EventType, Intent, IntentUrgencyLevel, DiscussionOutline } from '../core/types';
+import { SessionState, SessionStatus, SessionConfig, EventType, Intent, IntentUrgencyLevel, DiscussionOutline } from '../core/types';
 import { IModeratorController, IAgent, IRuleEngine } from '../core/interfaces';
 import { eventLogService, eventBus } from '../event-log';
 import { getDiscussionLoopLauncher } from '../orchestrator/DiscussionLoopLauncher';
 import { weLogger } from '../../services/world-engine-logger';
+import { outlineGenerator } from './index';
 
 /**
  * 主持人控制器实现
  */
 export class ModeratorController implements IModeratorController {
     private sessions: Map<string, SessionState> = new Map();
+    private sessionConfigs: Map<string, SessionConfig> = new Map();
     private agents: Map<string, Map<string, IAgent>> = new Map();
     private ruleEngines: Map<string, IRuleEngine> = new Map();
     private pendingIntents: Map<string, Intent[]> = new Map();
@@ -30,10 +32,18 @@ export class ModeratorController implements IModeratorController {
     }
 
     /**
+     * 设置会话配置（用于大纲生成等需要原始配置的场景）
+     */
+    setSessionConfig(sessionId: string, config: SessionConfig): void {
+        this.sessionConfigs.set(sessionId, config);
+    }
+
+    /**
      * 清理会话数据
      */
     clearSession(sessionId: string): void {
         this.sessions.delete(sessionId);
+        this.sessionConfigs.delete(sessionId);
         this.agents.delete(sessionId);
         this.ruleEngines.delete(sessionId);
     }
@@ -57,13 +67,22 @@ export class ModeratorController implements IModeratorController {
             throw new Error(`Session not found: ${sessionId}`);
         }
 
+        // 自动生成讨论大纲（如果尚未设置）
+        await this.ensureOutline(sessionId);
+
         state.status = 'active';
         state.startedAt = Date.now();
         state.currentRound = 1;
 
+        // 获取大纲摘要（如果有）
+        const outline = this.outlines.get(sessionId);
+        const outlineSummary = outline?.items?.slice(0, 2).map(i => i.topic).join('、');
+
         await this.publishSystemEvent(sessionId, 'SESSION_START', {
             message: '讨论开始',
-            round: 1
+            round: 1,
+            hasOutline: !!outline,
+            outlinePreview: outlineSummary || undefined
         });
 
         // 使用注册的启动器启动讨论循环
@@ -562,6 +581,57 @@ export class ModeratorController implements IModeratorController {
      */
     getOutline(sessionId: string): DiscussionOutline | undefined {
         return this.outlines.get(sessionId);
+    }
+
+    /**
+     * 确保大纲已生成（开场时自动调用）
+     */
+    private async ensureOutline(sessionId: string): Promise<void> {
+        // 如果已有大纲，跳过
+        if (this.outlines.has(sessionId)) return;
+
+        const sessionAgents = this.agents.get(sessionId);
+        if (!sessionAgents || sessionAgents.size === 0) return;
+
+        // 从 SessionConfig 获取 topic（优先）或回退到 SessionState
+        const config = this.sessionConfigs.get(sessionId);
+        const topic = config?.topic || '讨论';
+        // objective 必须是 'explore' | 'debate' | 'consensus'，默认 debate
+        const objective: 'explore' | 'debate' | 'consensus' = 'debate';
+        const maxRounds = config?.maxRounds || 10;
+
+        const agentNames = Array.from(sessionAgents.values()).map(a => a.config.name);
+
+        try {
+            weLogger.info({ sessionId, topic, agentNames }, 'auto_generating_outline');
+
+            const outline = await outlineGenerator.generate({
+                topic,
+                objective,
+                agentNames,
+                maxRounds
+            });
+
+            this.outlines.set(sessionId, outline);
+
+            await this.publishSystemEvent(sessionId, 'OUTLINE_GENERATED', {
+                message: '讨论大纲已自动生成',
+                outline: {
+                    objective: outline.objective,
+                    itemCount: outline.items?.length || 0,
+                    conflictPoints: outline.conflictDesign || []
+                }
+            });
+
+            weLogger.info({
+                sessionId,
+                itemCount: outline.items?.length || 0,
+                conflictPoints: outline.conflictDesign?.length || 0
+            }, 'outline_generated');
+        } catch (err: any) {
+            weLogger.warn({ sessionId, error: err.message }, 'outline_generation_failed');
+            // 大纲生成失败不阻塞讨论开始
+        }
     }
 
     // ============================================

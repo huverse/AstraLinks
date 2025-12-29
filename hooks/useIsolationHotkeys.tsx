@@ -9,8 +9,6 @@ interface HotkeyActions {
     onPause?: () => void;
     onResume?: () => void;
     onEnd?: () => void;
-    onRaiseHand?: () => void;
-    onInterrupt?: () => void;
     onTogglePanel?: (panel: 'stats' | 'judge' | 'outline') => void;
     onNextAgent?: () => void;
     onPrevAgent?: () => void;
@@ -24,8 +22,6 @@ interface UseIsolationHotkeysOptions {
 export const HOTKEY_MAP = {
     'Space': { action: 'togglePlayPause', label: '开始/暂停', key: '空格' },
     'Escape': { action: 'end', label: '结束讨论', key: 'Esc' },
-    'KeyH': { action: 'raiseHand', label: '举手', key: 'H' },
-    'KeyI': { action: 'interrupt', label: '插话', key: 'I' },
     'KeyS': { action: 'toggleStats', label: '统计面板', key: 'S' },
     'KeyJ': { action: 'toggleJudge', label: '评分面板', key: 'J' },
     'KeyO': { action: 'toggleOutline', label: '大纲面板', key: 'O' },
@@ -73,20 +69,6 @@ export function useIsolationHotkeys(
                 if (sessionStatus === 'active' || sessionStatus === 'paused') {
                     e.preventDefault();
                     actions.onEnd?.();
-                }
-                break;
-
-            case 'raiseHand':
-                if (sessionStatus === 'active') {
-                    e.preventDefault();
-                    actions.onRaiseHand?.();
-                }
-                break;
-
-            case 'interrupt':
-                if (sessionStatus === 'active') {
-                    e.preventDefault();
-                    actions.onInterrupt?.();
                 }
                 break;
 
