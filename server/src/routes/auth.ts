@@ -76,8 +76,8 @@ router.post('/register', async (req: Request, res: Response) => {
         }
 
         // Validation
-        if (!username || !password || !invitationCode) {
-            res.status(400).json({ error: '用户名、密码和邀请码为必填项' });
+        if (!username || !password) {
+            res.status(400).json({ error: '用户名和密码为必填项' });
             return;
         }
 
@@ -115,8 +115,11 @@ router.post('/register', async (req: Request, res: Response) => {
         );
         const splitCodeEnabled = splitCodeEnabledSetting[0]?.setting_value === 'true';
 
+        // If both systems are disabled, skip invitation code validation entirely
+        const invitationCodeRequired = normalCodeEnabled || splitCodeEnabled;
+
         // First check normal invitation codes (8 characters)
-        if (normalCodeEnabled) {
+        if (invitationCodeRequired && normalCodeEnabled) {
             const [normalCodes] = await pool.execute<RowDataPacket[]>(
                 'SELECT id, is_used, used_device_fingerprint FROM invitation_codes WHERE code = ?',
                 [invitationCode]
@@ -133,7 +136,7 @@ router.post('/register', async (req: Request, res: Response) => {
         }
 
         // If not found, check split invitation codes (12 characters)
-        if (!codeData && splitCodeEnabled) {
+        if (invitationCodeRequired && !codeData && splitCodeEnabled) {
             const [splitCodes] = await pool.execute<RowDataPacket[]>(
                 `SELECT c.*, t.is_banned as tree_banned
                  FROM split_invitation_codes c
@@ -158,14 +161,9 @@ router.post('/register', async (req: Request, res: Response) => {
             }
         }
 
-        // Code not found in either system or both systems disabled
-        if (!codeData) {
-            // Provide more helpful error message
-            if (!normalCodeEnabled && !splitCodeEnabled) {
-                res.status(400).json({ error: '邀请码注册已关闭' });
-            } else {
-                res.status(400).json({ error: '邀请码无效' });
-            }
+        // Code not found - only validate if invitation code is required
+        if (invitationCodeRequired && !codeData) {
+            res.status(400).json({ error: '邀请码无效' });
             return;
         }
 
@@ -203,26 +201,31 @@ router.post('/register', async (req: Request, res: Response) => {
             insertSql = `INSERT INTO users (username, email, password_hash, invitation_code_used, device_fingerprint, split_code_used, split_tree_id)
                          VALUES (?, ?, ?, NULL, ?, ?, ?)`;
             insertParams = [username, email || null, passwordHash, fingerprint, invitationCode, splitTreeId];
-        } else {
+        } else if (codeType === 'normal') {
             insertSql = `INSERT INTO users (username, email, password_hash, invitation_code_used, device_fingerprint)
                          VALUES (?, ?, ?, ?, ?)`;
             insertParams = [username, email || null, passwordHash, invitationCode, fingerprint];
+        } else {
+            // No invitation code required - register without code
+            insertSql = `INSERT INTO users (username, email, password_hash, device_fingerprint)
+                         VALUES (?, ?, ?, ?)`;
+            insertParams = [username, email || null, passwordHash, fingerprint];
         }
 
         const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
         const userId = result.insertId;
 
-        // Mark invitation code as used
-        if (codeType === 'normal') {
+        // Mark invitation code as used (only if code was required and used)
+        if (codeType === 'normal' && codeData) {
             await pool.execute(
-                `UPDATE invitation_codes 
+                `UPDATE invitation_codes
                  SET is_used = TRUE, used_by_user_id = ?, used_device_fingerprint = ?, used_at = NOW()
                  WHERE id = ?`,
                 [userId, fingerprint, codeData.id]
             );
-        } else {
+        } else if (codeType === 'split' && codeData) {
             await pool.execute(
-                `UPDATE split_invitation_codes 
+                `UPDATE split_invitation_codes
                  SET is_used = TRUE, used_by_user_id = ?, used_at = NOW()
                  WHERE id = ?`,
                 [userId, codeData.id]
