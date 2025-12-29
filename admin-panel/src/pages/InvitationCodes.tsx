@@ -30,7 +30,6 @@ export default function InvitationCodes() {
     const [generating, setGenerating] = useState(false);
     const [copiedCode, setCopiedCode] = useState<string | null>(null);
     const [generateCount, setGenerateCount] = useState(10);
-    const [showGenerateModal, setShowGenerateModal] = useState(false);
     const [newCodes, setNewCodes] = useState<string[]>([]);
 
     const fetchData = async () => {
