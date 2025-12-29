@@ -18,6 +18,30 @@ const router = Router();
 // ============================================
 
 /**
+ * 检查 Smithery API 健康状态
+ * GET /api/mcp-marketplace/health
+ */
+router.get('/health', async (_req: Request, res: Response) => {
+    try {
+        const isHealthy = await smithery.checkApiHealth();
+        res.json({
+            success: true,
+            healthy: isHealthy,
+            proxyConfigured: !!process.env.SMITHERY_PROXY_URL,
+            message: isHealthy
+                ? 'Smithery API 可访问'
+                : '无法连接 Smithery API，请检查网络或配置 SMITHERY_PROXY_URL'
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            healthy: false,
+            message: '检查失败：' + error.message
+        });
+    }
+});
+
+/**
  * 搜索 Smithery MCP
  * GET /api/mcp-marketplace/search
  */

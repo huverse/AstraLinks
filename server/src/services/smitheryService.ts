@@ -11,7 +11,9 @@ import axios from 'axios';
 // 配置
 // ============================================
 
-const SMITHERY_API_BASE = 'https://registry.smithery.ai';
+// 默认 Smithery API 地址，可通过 SMITHERY_PROXY_URL 配置反向代理
+// 注意：在中国大陆，registry.smithery.ai 可能无法访问，建议配置代理
+const SMITHERY_API_BASE = process.env.SMITHERY_PROXY_URL || 'https://registry.smithery.ai';
 const SMITHERY_API_KEY = process.env.SMITHERY_API_KEY || '';
 
 // ============================================
