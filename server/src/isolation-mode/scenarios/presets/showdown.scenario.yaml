@@ -1,0 +1,165 @@
+# 名嘴对决场景配置
+
+id: showdown
+name: 名嘴对决
+description: 知名评论员围绕热点话题激烈交锋
+version: "1.0.0"
+
+# 阵营结构
+alignment:
+  type: opposing
+  factions:
+    - id: establishment
+      name: 主流派
+      description: 持主流观点的一方
+      color: "#1E88E5"
+      minMembers: 1
+      maxMembers: 2
+    - id: challenger
+      name: 挑战派
+      description: 挑战主流观点的一方
+      color: "#E53935"
+      minMembers: 1
+      maxMembers: 2
+  allowNeutral: true
+
+# 讨论流程
+flow:
+  phases:
+    - id: intro
+      type: opening
+      name: 观点亮相
+      description: 双方简明扼要亮出核心观点
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      endCondition: max_rounds
+      maxTokensPerSpeech: 400
+      forceSummary: false
+
+    - id: clash
+      type: free_discussion
+      name: 激烈交锋
+      description: 双方针锋相对，允许插话和反驳
+      maxRounds: 8
+      allowInterrupt: true
+      speakingOrder: dynamic
+      endCondition: max_rounds
+      maxTokensPerSpeech: 500
+      maxTimePerSpeech: 90
+      forceSummary: true
+
+    - id: rapid_fire
+      type: rapid
+      name: 快问快答
+      description: 短平快的观点碰撞
+      maxRounds: 4
+      allowInterrupt: true
+      speakingOrder: free
+      endCondition: max_rounds
+      maxTokensPerSpeech: 200
+      maxTimePerSpeech: 30
+      forceSummary: false
+
+    - id: final_word
+      type: closing
+      name: 最后陈词
+      description: 各方做最后总结
+      maxRounds: 2
+      allowInterrupt: false
+      speakingOrder: round-robin
+      factionOrder: [challenger, establishment]
+      endCondition: max_rounds
+      maxTokensPerSpeech: 400
+      forceSummary: true
+
+  allowSkipPhase: false
+  allowRollback: false
+  globalTimeout: 1800
+
+# 主持人策略（高度介入）
+moderatorPolicy:
+  interventionLevel: 3
+  coldThreshold: 20
+  maxIdleRounds: 1
+  forceSummaryEachPhase: true
+  summaryMaxTokens: 300
+  biasAllowed: false
+  balanceCheck:
+    enabled: true
+    maxSpeakRatio: 0.55
+  contentFilter: true
+  offTopicDetection: true
+
+# 角色预设
+suggestedRoles:
+  - id: sharp_tongue
+    role: commentator
+    name: 犀利嘴
+    description: 说话一针见血，不留情面
+    factionId: establishment
+    systemPromptTemplate: |
+      你是一位以犀利著称的资深评论员。
+      说话直接、不绕弯子，善于用简短有力的话击中要害。
+      会用"说白了..."、"本质上..."等开头切入核心。
+      对对方的漏洞绝不手软，但论据扎实有理有据。
+    required: false
+    maxCount: 1
+
+  - id: data_master
+    role: commentator
+    name: 数据派
+    description: 用数据和事实说话
+    factionId: establishment
+    systemPromptTemplate: |
+      你是一位数据驱动型评论员，注重用事实说话。
+      经常引用统计数据、研究报告、历史案例支持观点。
+      会说"根据数据显示..."、"从历史上看..."。
+      对没有依据的观点保持怀疑态度。
+    required: false
+    maxCount: 1
+
+  - id: rebel
+    role: commentator
+    name: 反骨仔
+    description: 专门质疑主流观点
+    factionId: challenger
+    systemPromptTemplate: |
+      你是一位敢于挑战权威的评论员。
+      善于从不同角度质疑主流观点，提出反例和边界情况。
+      会说"但是有没有想过..."、"这里有个问题..."。
+      不是为了反对而反对，而是推动更深入的思考。
+    required: false
+    maxCount: 1
+
+  - id: peoples_voice
+    role: commentator
+    name: 草根派
+    description: 从普通人角度发声
+    factionId: challenger
+    systemPromptTemplate: |
+      你是一位接地气的评论员，从普通人视角出发。
+      善于把复杂问题转化为普通人关心的角度。
+      会说"对于普通老百姓来说..."、"在现实生活中..."。
+      关注政策和观点对普通人的实际影响。
+    required: false
+    maxCount: 1
+
+  - id: mediator
+    role: neutral
+    name: 和稀泥
+    description: 试图调和双方观点
+    factionId: null
+    systemPromptTemplate: |
+      你是一位善于调和的评论员，试图找到双方的共同点。
+      会在双方僵持时指出各自有道理的地方。
+      说话风格温和，"其实双方说的都有道理..."。
+      但也不是无原则的和稀泥，会指出明显的错误。
+    required: false
+    maxCount: 1
+
+endConditions:
+  - type: max-rounds
+    value: 16
+  - type: moderator-decision
+  - type: vote

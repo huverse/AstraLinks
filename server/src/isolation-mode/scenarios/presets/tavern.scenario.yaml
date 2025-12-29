@@ -1,0 +1,128 @@
+# AI酒馆场景配置
+
+id: tavern
+name: AI酒馆
+description: 轻松的社交聊天场景，AI角色如同朋友相聚闲聊
+version: "1.0.0"
+
+# 阵营结构（无对立阵营）
+alignment:
+  type: collaborative
+  factions:
+    - id: patrons
+      name: 酒客
+      description: 酒馆中的常客
+      color: "#8B4513"
+      minMembers: 2
+      maxMembers: 6
+  allowNeutral: true
+
+# 讨论流程
+flow:
+  phases:
+    - id: icebreaker
+      type: opening
+      name: 开场寒暄
+      description: 角色互相打招呼，分享近况
+      maxRounds: 1
+      allowInterrupt: true
+      speakingOrder: free
+      endCondition: max_rounds
+      maxTokensPerSpeech: 300
+      forceSummary: false
+
+    - id: main_chat
+      type: free_discussion
+      name: 畅聊时光
+      description: 围绕话题自由交流
+      maxRounds: 10
+      allowInterrupt: true
+      speakingOrder: free
+      endCondition: max_rounds
+      maxTokensPerSpeech: 400
+      maxTimePerSpeech: 60
+      forceSummary: false
+
+    - id: farewell
+      type: closing
+      name: 道别
+      description: 话题收尾，互道再见
+      maxRounds: 1
+      allowInterrupt: false
+      speakingOrder: free
+      endCondition: max_rounds
+      maxTokensPerSpeech: 200
+      forceSummary: false
+
+  allowSkipPhase: true
+  allowRollback: false
+  globalTimeout: 2400
+
+# 主持人策略（轻度介入）
+moderatorPolicy:
+  interventionLevel: 1
+  coldThreshold: 60
+  maxIdleRounds: 3
+  forceSummaryEachPhase: false
+  summaryMaxTokens: 200
+  biasAllowed: true
+  balanceCheck:
+    enabled: false
+    maxSpeakRatio: 0.8
+  contentFilter: false
+  offTopicDetection: false
+
+# 角色预设
+suggestedRoles:
+  - id: storyteller
+    role: patron
+    name: 故事王
+    description: 喜欢讲各种趣闻轶事
+    factionId: patrons
+    systemPromptTemplate: |
+      你是酒馆里的常客，喜欢讲各种有趣的故事和见闻。
+      说话风格轻松幽默，会用生动的比喻和夸张的表达。
+      经常说"这让我想起一个故事..."来引入话题。
+    required: false
+    maxCount: 1
+
+  - id: philosopher
+    role: patron
+    name: 哲学家
+    description: 喜欢深度思考，偶尔感慨人生
+    factionId: patrons
+    systemPromptTemplate: |
+      你是一位酒馆常客，喜欢在闲聊中探讨人生哲理。
+      说话带有文艺气息，偶尔引用名人名言。
+      会把日常话题升华到更深层次的思考。
+    required: false
+    maxCount: 1
+
+  - id: joker
+    role: patron
+    name: 段子手
+    description: 气氛活跃者，擅长抖机灵
+    factionId: patrons
+    systemPromptTemplate: |
+      你是酒馆里的开心果，擅长讲笑话和玩梗。
+      说话风格诙谐，喜欢用网络流行语。
+      会在气氛冷场时主动活跃气氛。
+    required: false
+    maxCount: 1
+
+  - id: listener
+    role: patron
+    name: 倾听者
+    description: 善于倾听并给予回应
+    factionId: patrons
+    systemPromptTemplate: |
+      你是酒馆里的好听众，善于倾听别人的故事。
+      会适时提出问题引导对方继续说下去。
+      发言简短但富有洞察力，让人感到被理解。
+    required: false
+    maxCount: 1
+
+endConditions:
+  - type: max-rounds
+    value: 12
+  - type: moderator-decision
