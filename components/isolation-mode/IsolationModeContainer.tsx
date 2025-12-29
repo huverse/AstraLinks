@@ -33,6 +33,7 @@ import { StanceTracker } from './StanceTracker';
 import { VoicePanel } from './VoicePanel';
 import { IsolationCloudSync } from './IsolationCloudSync';
 import { useIsolationHotkeys, HotkeyHelp } from '../../hooks/useIsolationHotkeys';
+import { ReplayPanel } from './ReplayPanel';
 
 interface IsolationModeContainerProps {
     onExit: () => void;
@@ -72,6 +73,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [selectedHistorySession, setSelectedHistorySession] = useState<any>(null);
     const [historyLoading, setHistoryLoading] = useState(false);
     const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null);
+    const [replayMode, setReplayMode] = useState(false);
 
     // 新功能状态
     const [scoringResult, setScoringResult] = useState<ScoringResult | null>(null);
@@ -1379,10 +1381,33 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 <Download size={16} />
                                 导出记录
                             </button>
+
+                            <button
+                                onClick={() => setReplayMode(true)}
+                                disabled={!selectedHistorySession.events?.length}
+                                className="w-full py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg flex items-center justify-center gap-2"
+                            >
+                                <Play size={16} />
+                                回放讨论
+                            </button>
                         </div>
 
-                        {/* 右侧 - 事件时间线 */}
-                        <div className="flex-1 bg-slate-800/30 rounded-2xl p-6 border border-white/5">
+                        {/* 右侧 - 事件时间线或回放 */}
+                        <div className="flex-1 bg-slate-800/30 rounded-2xl border border-white/5 overflow-hidden">
+                            {replayMode ? (
+                                <ReplayPanel
+                                    events={selectedHistorySession.events || []}
+                                    agents={selectedHistorySession.agents || []}
+                                    sessionInfo={{
+                                        topic: selectedHistorySession.topic,
+                                        scenarioName: selectedHistorySession.scenarioName || selectedHistorySession.scenario?.name,
+                                        startTime: selectedHistorySession.createdAt,
+                                        endTime: selectedHistorySession.endedAt
+                                    }}
+                                    onClose={() => setReplayMode(false)}
+                                />
+                            ) : (
+                                <div className="p-6">
                             <div className="flex items-center justify-between mb-4">
                                 <h3 className="text-lg font-semibold text-white">
                                     {selectedHistorySession.title}
@@ -1401,6 +1426,8 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                     agents={selectedHistorySession.agents || []}
                                     autoScroll={false}
                                 />
+                            )}
+                                </div>
                             )}
                         </div>
                     </div>

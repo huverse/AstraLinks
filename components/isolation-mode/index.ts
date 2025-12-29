@@ -19,3 +19,4 @@ export { TemplatePanel } from './TemplatePanel';
 export { StanceTracker } from './StanceTracker';
 export { VoicePanel } from './VoicePanel';
 export { IsolationCloudSync } from './IsolationCloudSync';
+export { ReplayPanel } from './ReplayPanel';
