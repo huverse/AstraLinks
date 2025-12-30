@@ -1,6 +1,6 @@
-import { useEffect, useState, useMemo } from 'react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
 import { adminAPI } from '../services/api';
-import { Plus, Edit, Trash2, Eye, EyeOff, Clock, Users, Globe, LogIn, UserPlus, Search, Filter, CheckSquare, Square, RefreshCw } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Clock, Users, Globe, LogIn, UserPlus, Search, Filter, CheckSquare, Square, RefreshCw, FileText, Code, Type, AlertCircle, AlertTriangle, Bell, Zap, Calendar, X, Loader2, Save } from 'lucide-react';
 
 interface Announcement {
     id: number;
@@ -77,6 +77,10 @@ export default function Announcements() {
     // 批量操作状态
     const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
     const [batchLoading, setBatchLoading] = useState(false);
+
+    // 编辑器增强状态
+    const [previewMode, setPreviewMode] = useState(false);
+    const [saving, setSaving] = useState(false);
 
     // 筛选后的公告列表
     const filteredAnnouncements = useMemo(() => {
@@ -186,6 +190,7 @@ export default function Announcements() {
         } else {
             resetForm();
         }
+        setPreviewMode(false);
         setShowEditor(true);
     };
 
@@ -195,6 +200,7 @@ export default function Announcements() {
             return;
         }
 
+        setSaving(true);
         try {
             // Convert local datetime to MySQL TIMESTAMP format
             // MySQL accepts 'YYYY-MM-DD HH:mm:ss' format
@@ -232,6 +238,8 @@ export default function Announcements() {
             loadAnnouncements();
         } catch (err: any) {
             alert('保存失败：' + err.message);
+        } finally {
+            setSaving(false);
         }
     };
 
@@ -314,6 +322,58 @@ export default function Announcements() {
         setFilterDisplayType('all');
         setFilterPriority('all');
         setFilterActive('all');
+    };
+
+    // 快捷时间设置
+    const setQuickTime = useCallback((type: 'start' | 'end', preset: string) => {
+        const now = new Date();
+        let targetDate: Date;
+
+        switch (preset) {
+            case 'now':
+                targetDate = now;
+                break;
+            case '1h':
+                targetDate = new Date(now.getTime() + 60 * 60 * 1000);
+                break;
+            case '24h':
+                targetDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+                break;
+            case '7d':
+                targetDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                break;
+            case '30d':
+                targetDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+                break;
+            default:
+                return;
+        }
+
+        const year = targetDate.getFullYear();
+        const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+        const day = String(targetDate.getDate()).padStart(2, '0');
+        const hours = String(targetDate.getHours()).padStart(2, '0');
+        const minutes = String(targetDate.getMinutes()).padStart(2, '0');
+        const formatted = `${year}-${month}-${day}T${hours}:${minutes}`;
+
+        if (type === 'start') {
+            setForm(prev => ({ ...prev, start_time: formatted }));
+        } else {
+            setForm(prev => ({ ...prev, end_time: formatted }));
+        }
+    }, []);
+
+    // 简单Markdown渲染
+    const renderMarkdown = (text: string): string => {
+        return text
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*(.+?)\*/g, '<em>$1</em>')
+            .replace(/`(.+?)`/g, '<code class="bg-gray-100 dark:bg-slate-600 px-1 rounded">$1</code>')
+            .replace(/^### (.+)$/gm, '<h3 class="text-lg font-semibold mt-3 mb-1">$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2 class="text-xl font-semibold mt-4 mb-2">$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1 class="text-2xl font-bold mt-4 mb-2">$1</h1>')
+            .replace(/^- (.+)$/gm, '<li class="ml-4">$1</li>')
+            .replace(/\n/g, '<br/>');
     };
 
     return (
@@ -561,139 +621,298 @@ export default function Announcements() {
 
             {/* Editor Modal */}
             {showEditor && (
-                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-                    <div className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-                        <div className="p-6 border-b dark:border-slate-700">
-                            <h2 className="text-xl font-bold">{editingItem ? '编辑公告' : '发布公告'}</h2>
-                        </div>
-                        <div className="p-6 space-y-4">
-                            {/* Title */}
+                <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden shadow-2xl flex flex-col">
+                        {/* Header */}
+                        <div className="px-6 py-4 border-b dark:border-slate-700 flex items-center justify-between bg-gradient-to-r from-blue-500/10 to-purple-500/10">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">标题 *</label>
+                                <h2 className="text-xl font-bold">{editingItem ? '编辑公告' : '发布新公告'}</h2>
+                                <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">填写公告信息并选择发布设置</p>
+                            </div>
+                            <button
+                                onClick={() => { setShowEditor(false); resetForm(); }}
+                                className="p-2 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                            {/* Title with character count */}
+                            <div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-sm font-medium text-gray-700 dark:text-gray-300">公告标题 <span className="text-red-500">*</span></label>
+                                    <span className="text-xs text-gray-400">{form.title.length}/100</span>
+                                </div>
                                 <input
                                     type="text"
                                     value={form.title}
-                                    onChange={e => setForm({ ...form, title: e.target.value })}
-                                    className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
-                                    placeholder="公告标题"
+                                    onChange={e => setForm({ ...form, title: e.target.value.slice(0, 100) })}
+                                    className="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-lg"
+                                    placeholder="输入简洁明了的公告标题..."
                                 />
                             </div>
 
-                            {/* Content */}
+                            {/* Content with tabs */}
                             <div>
-                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">内容 *</label>
-                                <textarea
-                                    value={form.content}
-                                    onChange={e => setForm({ ...form, content: e.target.value })}
-                                    rows={6}
-                                    className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none resize-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
-                                    placeholder="支持 Markdown 格式"
-                                />
-                            </div>
-
-                            {/* Type & Priority Row */}
-                            <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">内容格式</label>
-                                    <select
-                                        value={form.content_type}
-                                        onChange={e => setForm({ ...form, content_type: e.target.value as any })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
-                                    >
-                                        <option value="markdown">Markdown</option>
-                                        <option value="html">HTML</option>
-                                        <option value="text">纯文本</option>
-                                    </select>
+                                <div className="flex justify-between items-center mb-2">
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">公告内容 <span className="text-red-500">*</span></label>
+                                        <div className="flex bg-gray-100 dark:bg-slate-700 rounded-lg p-0.5">
+                                            <button
+                                                onClick={() => setPreviewMode(false)}
+                                                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                                    !previewMode ? 'bg-white dark:bg-slate-600 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                            >
+                                                <FileText size={12} className="inline mr-1" />编辑
+                                            </button>
+                                            <button
+                                                onClick={() => setPreviewMode(true)}
+                                                className={`px-3 py-1 text-xs rounded-md transition-colors ${
+                                                    previewMode ? 'bg-white dark:bg-slate-600 shadow-sm font-medium' : 'text-gray-500 hover:text-gray-700'
+                                                }`}
+                                            >
+                                                <Eye size={12} className="inline mr-1" />预览
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <span className="text-xs text-gray-400">{form.content.length} 字符</span>
                                 </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">显示时机</label>
-                                    <select
-                                        value={form.display_type}
-                                        onChange={e => setForm({ ...form, display_type: e.target.value as any })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
-                                    >
-                                        <option value="global">全局显示</option>
-                                        <option value="login">登录时显示</option>
-                                        <option value="register">注册时显示</option>
-                                        <option value="targeted">定向发送</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">优先级</label>
-                                    <select
-                                        value={form.priority}
-                                        onChange={e => setForm({ ...form, priority: e.target.value as any })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
-                                    >
-                                        <option value="low">低</option>
-                                        <option value="normal">普通</option>
-                                        <option value="high">高</option>
-                                        <option value="urgent">紧急</option>
-                                    </select>
-                                </div>
-                            </div>
-
-                            {/* Timing */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">开始时间 (可选)</label>
-                                    <input
-                                        type="datetime-local"
-                                        value={form.start_time}
-                                        onChange={e => setForm({ ...form, start_time: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
+                                {previewMode ? (
+                                    <div
+                                        className="w-full min-h-[180px] px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl bg-gray-50 dark:bg-slate-900 prose prose-sm dark:prose-invert max-w-none"
+                                        dangerouslySetInnerHTML={{ __html: form.content_type === 'html' ? form.content : renderMarkdown(form.content) }}
                                     />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">结束时间 (可选)</label>
-                                    <input
-                                        type="datetime-local"
-                                        value={form.end_time}
-                                        onChange={e => setForm({ ...form, end_time: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
+                                ) : (
+                                    <textarea
+                                        value={form.content}
+                                        onChange={e => setForm({ ...form, content: e.target.value })}
+                                        rows={7}
+                                        className="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 font-mono text-sm"
+                                        placeholder={form.content_type === 'markdown' ? '支持 Markdown 格式...\n\n# 标题\n**加粗** *斜体* `代码`\n- 列表项' : '输入公告内容...'}
                                     />
+                                )}
+                            </div>
+
+                            {/* Content Type */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">内容格式</label>
+                                <div className="flex gap-2">
+                                    {[
+                                        { value: 'markdown', icon: FileText, label: 'Markdown' },
+                                        { value: 'html', icon: Code, label: 'HTML' },
+                                        { value: 'text', icon: Type, label: '纯文本' }
+                                    ].map(type => (
+                                        <button
+                                            key={type.value}
+                                            onClick={() => setForm({ ...form, content_type: type.value as any })}
+                                            className={`flex items-center gap-2 px-4 py-2 rounded-lg border-2 transition-all ${
+                                                form.content_type === type.value
+                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
+                                                    : 'border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
+                                            }`}
+                                        >
+                                            <type.icon size={16} />
+                                            <span className="text-sm font-medium">{type.label}</span>
+                                        </button>
+                                    ))}
                                 </div>
                             </div>
 
-                            {/* Target Users */}
+                            {/* Display Type Cards */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">显示时机</label>
+                                <div className="grid grid-cols-4 gap-3">
+                                    {[
+                                        { value: 'global', icon: Globe, label: '全局', desc: '所有页面显示' },
+                                        { value: 'login', icon: LogIn, label: '登录', desc: '登录页显示' },
+                                        { value: 'register', icon: UserPlus, label: '注册', desc: '注册页显示' },
+                                        { value: 'targeted', icon: Users, label: '定向', desc: '指定用户' }
+                                    ].map(type => (
+                                        <button
+                                            key={type.value}
+                                            onClick={() => setForm({ ...form, display_type: type.value as any })}
+                                            className={`p-3 rounded-xl border-2 transition-all text-center ${
+                                                form.display_type === type.value
+                                                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30'
+                                                    : 'border-gray-200 dark:border-slate-600 hover:border-gray-300 dark:hover:border-slate-500'
+                                            }`}
+                                        >
+                                            <type.icon size={20} className={`mx-auto mb-1 ${form.display_type === type.value ? 'text-blue-500' : 'text-gray-400'}`} />
+                                            <div className={`text-sm font-medium ${form.display_type === type.value ? 'text-blue-600 dark:text-blue-400' : ''}`}>{type.label}</div>
+                                            <div className="text-xs text-gray-400 mt-0.5">{type.desc}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Target Users - only when targeted */}
                             {form.display_type === 'targeted' && (
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">目标用户ID (逗号分隔)</label>
+                                <div className="animate-in slide-in-from-top-2 duration-200">
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">目标用户ID</label>
                                     <input
                                         type="text"
                                         value={form.target_user_ids}
                                         onChange={e => setForm({ ...form, target_user_ids: e.target.value })}
-                                        className="w-full px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
-                                        placeholder="例如: 1, 2, 3"
+                                        className="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700"
+                                        placeholder="输入用户ID，多个用逗号分隔，如: 1, 2, 3"
                                     />
                                 </div>
                             )}
 
-                            {/* Active Toggle */}
-                            <div className="flex items-center gap-2">
-                                <input
-                                    type="checkbox"
-                                    id="is_active"
-                                    checked={form.is_active}
-                                    onChange={e => setForm({ ...form, is_active: e.target.checked })}
-                                    className="w-4 h-4 text-blue-600 rounded"
-                                />
-                                <label htmlFor="is_active" className="text-sm text-gray-700 dark:text-gray-300">立即启用</label>
+                            {/* Priority Cards */}
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">优先级</label>
+                                <div className="grid grid-cols-4 gap-3">
+                                    {[
+                                        { value: 'low', icon: Bell, label: '低', color: 'gray' },
+                                        { value: 'normal', icon: Bell, label: '普通', color: 'blue' },
+                                        { value: 'high', icon: AlertTriangle, label: '高', color: 'orange' },
+                                        { value: 'urgent', icon: Zap, label: '紧急', color: 'red' }
+                                    ].map(p => {
+                                        const isSelected = form.priority === p.value;
+                                        const colorClasses = {
+                                            gray: isSelected ? 'border-gray-400 bg-gray-50 dark:bg-gray-800' : '',
+                                            blue: isSelected ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30' : '',
+                                            orange: isSelected ? 'border-orange-500 bg-orange-50 dark:bg-orange-900/30' : '',
+                                            red: isSelected ? 'border-red-500 bg-red-50 dark:bg-red-900/30' : ''
+                                        };
+                                        const iconColors = {
+                                            gray: isSelected ? 'text-gray-500' : 'text-gray-300',
+                                            blue: isSelected ? 'text-blue-500' : 'text-gray-300',
+                                            orange: isSelected ? 'text-orange-500' : 'text-gray-300',
+                                            red: isSelected ? 'text-red-500' : 'text-gray-300'
+                                        };
+                                        return (
+                                            <button
+                                                key={p.value}
+                                                onClick={() => setForm({ ...form, priority: p.value as any })}
+                                                className={`p-3 rounded-xl border-2 transition-all flex flex-col items-center ${
+                                                    colorClasses[p.color as keyof typeof colorClasses] || (isSelected ? '' : 'border-gray-200 dark:border-slate-600 hover:border-gray-300')
+                                                }`}
+                                            >
+                                                <p.icon size={20} className={iconColors[p.color as keyof typeof iconColors]} />
+                                                <span className={`text-sm font-medium mt-1 ${isSelected ? `text-${p.color}-600 dark:text-${p.color}-400` : ''}`}>{p.label}</span>
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+
+                            {/* Time Settings */}
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">开始时间</label>
+                                        <div className="flex gap-1">
+                                            {[{ label: '立即', value: 'now' }, { label: '+1h', value: '1h' }, { label: '+24h', value: '24h' }].map(q => (
+                                                <button
+                                                    key={q.value}
+                                                    onClick={() => setQuickTime('start', q.value)}
+                                                    className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded transition-colors"
+                                                >
+                                                    {q.label}
+                                                </button>
+                                            ))}
+                                            {form.start_time && (
+                                                <button
+                                                    onClick={() => setForm({ ...form, start_time: '' })}
+                                                    className="px-2 py-0.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                                                >
+                                                    清除
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="relative">
+                                        <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="datetime-local"
+                                            value={form.start_time}
+                                            onChange={e => setForm({ ...form, start_time: e.target.value })}
+                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">结束时间</label>
+                                        <div className="flex gap-1">
+                                            {[{ label: '+7天', value: '7d' }, { label: '+30天', value: '30d' }].map(q => (
+                                                <button
+                                                    key={q.value}
+                                                    onClick={() => setQuickTime('end', q.value)}
+                                                    className="px-2 py-0.5 text-xs bg-gray-100 dark:bg-slate-700 hover:bg-gray-200 dark:hover:bg-slate-600 rounded transition-colors"
+                                                >
+                                                    {q.label}
+                                                </button>
+                                            ))}
+                                            {form.end_time && (
+                                                <button
+                                                    onClick={() => setForm({ ...form, end_time: '' })}
+                                                    className="px-2 py-0.5 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                                                >
+                                                    清除
+                                                </button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div className="relative">
+                                        <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="datetime-local"
+                                            value={form.end_time}
+                                            onChange={e => setForm({ ...form, end_time: e.target.value })}
+                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Active Toggle - Modern Switch */}
+                            <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-700/50 rounded-xl">
+                                <div>
+                                    <div className="font-medium text-gray-900 dark:text-gray-100">立即启用</div>
+                                    <div className="text-sm text-gray-500 dark:text-gray-400">开启后公告将立即对用户可见</div>
+                                </div>
+                                <button
+                                    onClick={() => setForm({ ...form, is_active: !form.is_active })}
+                                    className={`relative w-14 h-8 rounded-full transition-colors ${
+                                        form.is_active ? 'bg-blue-500' : 'bg-gray-300 dark:bg-slate-600'
+                                    }`}
+                                >
+                                    <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow-md transition-transform ${
+                                        form.is_active ? 'translate-x-7' : 'translate-x-1'
+                                    }`} />
+                                </button>
                             </div>
                         </div>
-                        <div className="p-6 border-t dark:border-slate-700 flex justify-end gap-3">
-                            <button
-                                onClick={() => { setShowEditor(false); resetForm(); }}
-                                className="px-4 py-2 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
-                            >
-                                取消
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                            >
-                                保存
-                            </button>
+
+                        {/* Footer */}
+                        <div className="px-6 py-4 border-t dark:border-slate-700 flex items-center justify-between bg-gray-50 dark:bg-slate-800/50">
+                            <div className="text-xs text-gray-400">
+                                提示: 支持 Markdown 格式，如 **加粗** *斜体* `代码`
+                            </div>
+                            <div className="flex gap-3">
+                                <button
+                                    onClick={() => { setShowEditor(false); resetForm(); }}
+                                    className="px-5 py-2.5 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-xl transition-colors font-medium"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={handleSave}
+                                    disabled={saving || !form.title || !form.content}
+                                    className="px-5 py-2.5 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-xl transition-all font-medium flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/25"
+                                >
+                                    {saving ? (
+                                        <><Loader2 size={16} className="animate-spin" />保存中...</>
+                                    ) : (
+                                        <><Save size={16} />{editingItem ? '更新公告' : '发布公告'}</>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
