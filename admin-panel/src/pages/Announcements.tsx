@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { adminAPI } from '../services/api';
-import { Plus, Edit, Trash2, Eye, EyeOff, Clock, Users, Globe, LogIn, UserPlus } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Clock, Users, Globe, LogIn, UserPlus, Search, Filter, CheckSquare, Square, RefreshCw } from 'lucide-react';
 
 interface Announcement {
     id: number;
@@ -67,6 +67,42 @@ export default function Announcements() {
     const [loading, setLoading] = useState(true);
     const [showEditor, setShowEditor] = useState(false);
     const [editingItem, setEditingItem] = useState<Announcement | null>(null);
+
+    // 搜索和筛选状态
+    const [searchQuery, setSearchQuery] = useState('');
+    const [filterDisplayType, setFilterDisplayType] = useState<string>('all');
+    const [filterPriority, setFilterPriority] = useState<string>('all');
+    const [filterActive, setFilterActive] = useState<string>('all');
+
+    // 批量操作状态
+    const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+    const [batchLoading, setBatchLoading] = useState(false);
+
+    // 筛选后的公告列表
+    const filteredAnnouncements = useMemo(() => {
+        return announcements.filter(item => {
+            // 搜索过滤
+            if (searchQuery) {
+                const query = searchQuery.toLowerCase();
+                if (!item.title.toLowerCase().includes(query) &&
+                    !item.content.toLowerCase().includes(query)) {
+                    return false;
+                }
+            }
+            // 显示类型过滤
+            if (filterDisplayType !== 'all' && item.display_type !== filterDisplayType) {
+                return false;
+            }
+            // 优先级过滤
+            if (filterPriority !== 'all' && item.priority !== filterPriority) {
+                return false;
+            }
+            // 状态过滤
+            if (filterActive === 'active' && !item.is_active) return false;
+            if (filterActive === 'inactive' && item.is_active) return false;
+            return true;
+        });
+    }, [announcements, searchQuery, filterDisplayType, filterPriority, filterActive]);
 
     // Form state with proper types
     const [form, setForm] = useState<{
@@ -219,89 +255,307 @@ export default function Announcements() {
         }
     };
 
+    // 批量选择操作
+    const toggleSelect = (id: number) => {
+        setSelectedIds(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(id)) {
+                newSet.delete(id);
+            } else {
+                newSet.add(id);
+            }
+            return newSet;
+        });
+    };
+
+    const selectAll = () => {
+        if (selectedIds.size === filteredAnnouncements.length) {
+            setSelectedIds(new Set());
+        } else {
+            setSelectedIds(new Set(filteredAnnouncements.map(a => a.id)));
+        }
+    };
+
+    const handleBatchDelete = async () => {
+        if (selectedIds.size === 0) return;
+        if (!confirm(`确定删除选中的 ${selectedIds.size} 条公告？`)) return;
+
+        setBatchLoading(true);
+        try {
+            await Promise.all(Array.from(selectedIds).map(id => adminAPI.deleteAnnouncement(id)));
+            setSelectedIds(new Set());
+            loadAnnouncements();
+        } catch (err: any) {
+            alert('批量删除失败：' + err.message);
+        } finally {
+            setBatchLoading(false);
+        }
+    };
+
+    const handleBatchToggle = async (active: boolean) => {
+        if (selectedIds.size === 0) return;
+
+        setBatchLoading(true);
+        try {
+            await Promise.all(Array.from(selectedIds).map(id =>
+                adminAPI.updateAnnouncement(id, { is_active: active })
+            ));
+            setSelectedIds(new Set());
+            loadAnnouncements();
+        } catch (err: any) {
+            alert('批量操作失败：' + err.message);
+        } finally {
+            setBatchLoading(false);
+        }
+    };
+
+    const clearFilters = () => {
+        setSearchQuery('');
+        setFilterDisplayType('all');
+        setFilterPriority('all');
+        setFilterActive('all');
+    };
+
     return (
         <div className="text-gray-900 dark:text-gray-100">
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold">公告管理</h1>
-                <button
-                    onClick={() => openEditor()}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                >
-                    <Plus size={18} />
-                    发布公告
-                </button>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={loadAnnouncements}
+                        className="p-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                        title="刷新"
+                    >
+                        <RefreshCw size={18} className={loading ? 'animate-spin' : ''} />
+                    </button>
+                    <button
+                        onClick={() => openEditor()}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        <Plus size={18} />
+                        发布公告
+                    </button>
+                </div>
             </div>
+
+            {/* 搜索和筛选栏 */}
+            <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4 mb-4">
+                <div className="flex flex-wrap gap-4 items-center">
+                    {/* 搜索框 */}
+                    <div className="flex-1 min-w-[200px] relative">
+                        <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="搜索标题或内容..."
+                            className="w-full pl-10 pr-4 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100"
+                        />
+                    </div>
+
+                    {/* 显示类型筛选 */}
+                    <div className="flex items-center gap-2">
+                        <Filter size={16} className="text-gray-400" />
+                        <select
+                            value={filterDisplayType}
+                            onChange={e => setFilterDisplayType(e.target.value)}
+                            className="px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm"
+                        >
+                            <option value="all">全部类型</option>
+                            <option value="global">全局显示</option>
+                            <option value="login">登录时显示</option>
+                            <option value="register">注册时显示</option>
+                            <option value="targeted">定向发送</option>
+                        </select>
+                    </div>
+
+                    {/* 优先级筛选 */}
+                    <select
+                        value={filterPriority}
+                        onChange={e => setFilterPriority(e.target.value)}
+                        className="px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm"
+                    >
+                        <option value="all">全部优先级</option>
+                        <option value="low">低</option>
+                        <option value="normal">普通</option>
+                        <option value="high">高</option>
+                        <option value="urgent">紧急</option>
+                    </select>
+
+                    {/* 状态筛选 */}
+                    <select
+                        value={filterActive}
+                        onChange={e => setFilterActive(e.target.value)}
+                        className="px-3 py-2 border border-gray-200 dark:border-slate-600 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700 text-gray-900 dark:text-gray-100 text-sm"
+                    >
+                        <option value="all">全部状态</option>
+                        <option value="active">已启用</option>
+                        <option value="inactive">已禁用</option>
+                    </select>
+
+                    {/* 清除筛选 */}
+                    {(searchQuery || filterDisplayType !== 'all' || filterPriority !== 'all' || filterActive !== 'all') && (
+                        <button
+                            onClick={clearFilters}
+                            className="text-sm text-blue-500 hover:text-blue-600"
+                        >
+                            清除筛选
+                        </button>
+                    )}
+                </div>
+
+                {/* 结果统计 */}
+                <div className="mt-3 text-sm text-gray-500 dark:text-gray-400">
+                    共 {filteredAnnouncements.length} 条公告
+                    {filteredAnnouncements.length !== announcements.length && (
+                        <span> (筛选自 {announcements.length} 条)</span>
+                    )}
+                </div>
+            </div>
+
+            {/* 批量操作栏 */}
+            {selectedIds.size > 0 && (
+                <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 mb-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <span className="text-blue-700 dark:text-blue-300 text-sm font-medium">
+                            已选择 {selectedIds.size} 项
+                        </span>
+                        <button
+                            onClick={() => setSelectedIds(new Set())}
+                            className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+                        >
+                            取消选择
+                        </button>
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <button
+                            onClick={() => handleBatchToggle(true)}
+                            disabled={batchLoading}
+                            className="px-3 py-1.5 bg-green-500 hover:bg-green-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                        >
+                            <Eye size={14} className="inline mr-1" />
+                            批量启用
+                        </button>
+                        <button
+                            onClick={() => handleBatchToggle(false)}
+                            disabled={batchLoading}
+                            className="px-3 py-1.5 bg-gray-500 hover:bg-gray-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                        >
+                            <EyeOff size={14} className="inline mr-1" />
+                            批量禁用
+                        </button>
+                        <button
+                            onClick={handleBatchDelete}
+                            disabled={batchLoading}
+                            className="px-3 py-1.5 bg-red-500 hover:bg-red-600 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                        >
+                            <Trash2 size={14} className="inline mr-1" />
+                            批量删除
+                        </button>
+                    </div>
+                </div>
+            )}
 
             {/* Announcements List */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-lg overflow-hidden">
                 {loading ? (
                     <div className="text-center py-20 text-gray-500 dark:text-gray-400">加载中...</div>
-                ) : announcements.length === 0 ? (
-                    <div className="text-center py-20 text-gray-500 dark:text-gray-400">暂无公告</div>
+                ) : filteredAnnouncements.length === 0 ? (
+                    <div className="text-center py-20 text-gray-500 dark:text-gray-400">
+                        {announcements.length === 0 ? '暂无公告' : '没有匹配的公告'}
+                    </div>
                 ) : (
-                    <div className="divide-y divide-gray-200 dark:divide-slate-700">
-                        {announcements.map(item => {
-                            const TypeIcon = displayTypeIcons[item.display_type];
-                            return (
-                                <div key={item.id} className={`p-6 ${!item.is_active ? 'opacity-50' : ''}`}>
-                                    <div className="flex justify-between items-start">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-3 mb-2">
-                                                <h3 className="text-lg font-semibold">{item.title}</h3>
-                                                <span className={`px-2 py-0.5 rounded text-xs font-medium ${priorityColors[item.priority]}`}>
-                                                    {priorityLabels[item.priority]}
-                                                </span>
-                                                <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
-                                                    <TypeIcon size={14} />
-                                                    {displayTypeLabels[item.display_type]}
-                                                </span>
-                                            </div>
-                                            <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-2">{item.content}</p>
-                                            <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
-                                                <span>创建者: {item.created_by_username}</span>
-                                                <span>创建时间: {formatDisplayTime(item.created_at)}</span>
-                                                {item.start_time && (
-                                                    <span className="flex items-center gap-1">
-                                                        <Clock size={12} />
-                                                        开始: {formatDisplayTime(item.start_time)}
+                    <>
+                        {/* 全选头部 */}
+                        <div className="px-6 py-3 bg-gray-50 dark:bg-slate-700/50 border-b border-gray-200 dark:border-slate-600 flex items-center gap-3">
+                            <button
+                                onClick={selectAll}
+                                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                            >
+                                {selectedIds.size === filteredAnnouncements.length && filteredAnnouncements.length > 0
+                                    ? <CheckSquare size={18} className="text-blue-500" />
+                                    : <Square size={18} />}
+                            </button>
+                            <span className="text-sm text-gray-600 dark:text-gray-300">
+                                {selectedIds.size === filteredAnnouncements.length && filteredAnnouncements.length > 0
+                                    ? '取消全选'
+                                    : '全选'}
+                            </span>
+                        </div>
+                        <div className="divide-y divide-gray-200 dark:divide-slate-700">
+                            {filteredAnnouncements.map(item => {
+                                const TypeIcon = displayTypeIcons[item.display_type];
+                                const isSelected = selectedIds.has(item.id);
+                                return (
+                                    <div key={item.id} className={`p-6 ${!item.is_active ? 'opacity-50' : ''} ${isSelected ? 'bg-blue-50/50 dark:bg-blue-900/20' : ''}`}>
+                                        <div className="flex justify-between items-start">
+                                            {/* 复选框 */}
+                                            <button
+                                                onClick={() => toggleSelect(item.id)}
+                                                className="mr-4 mt-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                                            >
+                                                {isSelected
+                                                    ? <CheckSquare size={18} className="text-blue-500" />
+                                                    : <Square size={18} />}
+                                            </button>
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-3 mb-2">
+                                                    <h3 className="text-lg font-semibold">{item.title}</h3>
+                                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${priorityColors[item.priority]}`}>
+                                                        {priorityLabels[item.priority]}
                                                     </span>
-                                                )}
-                                                {item.end_time && (
-                                                    <span className="flex items-center gap-1">
-                                                        <Clock size={12} />
-                                                        结束: {formatDisplayTime(item.end_time)}
+                                                    <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                                        <TypeIcon size={14} />
+                                                        {displayTypeLabels[item.display_type]}
                                                     </span>
-                                                )}
+                                                </div>
+                                                <p className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2 mb-2">{item.content}</p>
+                                                <div className="flex items-center gap-4 text-xs text-gray-400 dark:text-gray-500">
+                                                    <span>创建者: {item.created_by_username}</span>
+                                                    <span>创建时间: {formatDisplayTime(item.created_at)}</span>
+                                                    {item.start_time && (
+                                                        <span className="flex items-center gap-1">
+                                                            <Clock size={12} />
+                                                            开始: {formatDisplayTime(item.start_time)}
+                                                        </span>
+                                                    )}
+                                                    {item.end_time && (
+                                                        <span className="flex items-center gap-1">
+                                                            <Clock size={12} />
+                                                            结束: {formatDisplayTime(item.end_time)}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
-                                        </div>
-                                        <div className="flex items-center gap-2 ml-4">
-                                            <button
-                                                onClick={() => toggleActive(item)}
-                                                className={`p-2 rounded ${item.is_active ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-900/30' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
-                                                title={item.is_active ? '点击隐藏' : '点击显示'}
-                                            >
-                                                {item.is_active ? <Eye size={18} /> : <EyeOff size={18} />}
-                                            </button>
-                                            <button
-                                                onClick={() => openEditor(item)}
-                                                className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
-                                                title="编辑"
-                                            >
-                                                <Edit size={18} />
-                                            </button>
-                                            <button
-                                                onClick={() => handleDelete(item.id)}
-                                                className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
-                                                title="删除"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
+                                            <div className="flex items-center gap-2 ml-4">
+                                                <button
+                                                    onClick={() => toggleActive(item)}
+                                                    className={`p-2 rounded ${item.is_active ? 'text-green-500 hover:bg-green-50 dark:hover:bg-green-900/30' : 'text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-700'}`}
+                                                    title={item.is_active ? '点击隐藏' : '点击显示'}
+                                                >
+                                                    {item.is_active ? <Eye size={18} /> : <EyeOff size={18} />}
+                                                </button>
+                                                <button
+                                                    onClick={() => openEditor(item)}
+                                                    className="p-2 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 rounded"
+                                                    title="编辑"
+                                                >
+                                                    <Edit size={18} />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDelete(item.id)}
+                                                    className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded"
+                                                    title="删除"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
+                                );
+                            })}
+                        </div>
+                    </>
                 )}
             </div>
 
