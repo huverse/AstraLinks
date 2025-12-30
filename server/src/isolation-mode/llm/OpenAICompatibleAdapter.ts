@@ -82,6 +82,69 @@ export class OpenAICompatibleAdapter implements ILlmAdapter {
         );
     }
 
+    /**
+     * 流式生成文本
+     */
+    async *generateStream(
+        messages: LlmMessage[],
+        options: LlmGenerateOptions = {}
+    ): AsyncGenerator<string, void, unknown> {
+        this.validateInput(messages);
+        this.checkRateLimit();
+
+        const requestBody = {
+            ...this.buildRequestBody(messages, options),
+            stream: true
+        };
+
+        const url = `${this.baseUrl}/chat/completions`;
+
+        try {
+            const response = await axios.post(url, requestBody, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${this.apiKey}`
+                },
+                timeout: options.timeout || this.timeout,
+                responseType: 'stream'
+            });
+
+            let buffer = '';
+
+            for await (const chunk of response.data) {
+                buffer += chunk.toString();
+                const lines = buffer.split('\n');
+                buffer = lines.pop() || '';
+
+                for (const line of lines) {
+                    const trimmed = line.trim();
+                    if (!trimmed || trimmed === 'data: [DONE]') continue;
+
+                    if (trimmed.startsWith('data: ')) {
+                        try {
+                            const json = JSON.parse(trimmed.slice(6));
+                            const content = json.choices?.[0]?.delta?.content;
+                            if (content) {
+                                yield content;
+                            }
+                        } catch {
+                            // Skip malformed JSON
+                        }
+                    }
+                }
+            }
+        } catch (error: any) {
+            if (error.code === 'ECONNABORTED' || error.message.includes('timeout')) {
+                throw new LlmError('LLM request timed out', 'TIMEOUT');
+            }
+            throw new LlmError(
+                `Stream error: ${error.message}`,
+                'API_ERROR',
+                { originalError: error }
+            );
+        }
+    }
+
     private validateInput(messages: LlmMessage[]): void {
         if (!messages || messages.length === 0) {
             throw new LlmError('Messages cannot be empty', 'VALIDATION');

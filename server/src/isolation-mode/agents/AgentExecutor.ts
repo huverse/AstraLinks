@@ -79,8 +79,83 @@ export class AgentExecutor implements IAgent {
     }
 
     /**
+     * 流式生成发言
+     *
+     * 调用 LLM Adapter 流式生成 AI 回复
+     */
+    async *generateResponseStream(prompt?: string): AsyncGenerator<string, AgentMessage, unknown> {
+        this._state.status = 'thinking';
+        this._state.lastActiveAt = Date.now();
+
+        try {
+            // 1. 检查 LLM 是否可用
+            if (!this.llmAdapter.isAvailable()) {
+                throw new LlmError(
+                    'LLM is unavailable. Provide a valid API key or enable LLM configuration.',
+                    'DISABLED'
+                );
+            }
+
+            // 2. 检查是否支持流式
+            if (!this.llmAdapter.generateStream) {
+                // 降级为非流式
+                const result = await this.generateResponse(prompt);
+                yield result.content;
+                return result;
+            }
+
+            // 3. 构建消息历史
+            const messages = this.buildLlmMessages(prompt);
+
+            // 4. 流式调用 LLM
+            const maxTokens = this.config.maxTokens || 1024;
+            let fullContent = '';
+
+            for await (const chunk of this.llmAdapter.generateStream(messages, {
+                maxTokens,
+                temperature: 0.7,
+                timeout: worldEngineConfig.llm.timeout || 30000
+            })) {
+                fullContent += chunk;
+                yield chunk;
+            }
+
+            // 5. 更新统计
+            const estimatedTokens = Math.ceil(fullContent.length / 4);
+            this._state.totalTokens += estimatedTokens;
+            this._state.speakCount += 1;
+            this._state.status = 'idle';
+
+            // 6. 返回完整消息
+            return {
+                id: uuidv4(),
+                agentId: this.config.id,
+                content: fullContent,
+                timestamp: Date.now(),
+                tokens: estimatedTokens,
+            };
+
+        } catch (error: any) {
+            this._state.status = 'idle';
+
+            const errorMessage = error instanceof LlmError && error.code === 'DISABLED'
+                ? `[LLM Disabled] ${this.config.name} 无法发言: AI 功能未启用`
+                : `[Error] ${this.config.name} 发言失败: ${error.message}`;
+
+            yield errorMessage;
+            return {
+                id: uuidv4(),
+                agentId: this.config.id,
+                content: errorMessage,
+                timestamp: Date.now(),
+                tokens: 0,
+            };
+        }
+    }
+
+    /**
      * 生成发言
-     * 
+     *
      * 调用 LLM Adapter 生成真正的 AI 回复
      */
     async generateResponse(prompt?: string): Promise<AgentMessage> {

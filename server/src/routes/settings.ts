@@ -92,6 +92,55 @@ router.get('/public/privacy', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/settings/public/invitation-code
+ * Get invitation code system status (public, no auth needed, cached)
+ */
+router.get('/public/invitation-code', async (req: Request, res: Response) => {
+    try {
+        // Check cache first
+        const cachedNormalEnabled = getCached('invitation_code_enabled');
+        const cachedSplitEnabled = getCached('split_invitation_enabled');
+
+        if (cachedNormalEnabled !== null && cachedSplitEnabled !== null) {
+            const normalEnabled = cachedNormalEnabled !== 'false';
+            const splitEnabled = cachedSplitEnabled === 'true';
+            res.json({
+                enabled: normalEnabled || splitEnabled,
+                normalEnabled,
+                splitEnabled,
+                cached: true
+            });
+            return;
+        }
+
+        const [settings] = await pool.execute<RowDataPacket[]>(
+            `SELECT setting_key, setting_value FROM site_settings
+             WHERE setting_key IN ('invitation_code_enabled', 'split_invitation_enabled')`
+        );
+
+        const settingsMap: Record<string, string> = {};
+        settings.forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
+
+        // Default: normal codes enabled, split codes disabled
+        const normalEnabled = settingsMap['invitation_code_enabled'] !== 'false';
+        const splitEnabled = settingsMap['split_invitation_enabled'] === 'true';
+
+        // Cache the values
+        setCache('invitation_code_enabled', normalEnabled ? 'true' : 'false');
+        setCache('split_invitation_enabled', splitEnabled ? 'true' : 'false');
+
+        res.json({
+            enabled: normalEnabled || splitEnabled,  // 总开关：任一系统启用即需要邀请码
+            normalEnabled,
+            splitEnabled
+        });
+    } catch (error: any) {
+        console.error('Get invitation code settings error:', error);
+        res.status(500).json({ error: 'Failed to fetch invitation code settings' });
+    }
+});
+
+/**
  * GET /api/settings/public/turnstile
  * Get Turnstile settings (public, no auth needed, cached)
  */

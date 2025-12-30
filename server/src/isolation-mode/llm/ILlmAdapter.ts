@@ -53,7 +53,7 @@ export interface ILlmAdapter {
 
     /**
      * 生成文本
-     * 
+     *
      * @param messages 消息历史
      * @param options 生成选项
      * @returns 生成结果
@@ -62,6 +62,18 @@ export interface ILlmAdapter {
         messages: LlmMessage[],
         options?: LlmGenerateOptions
     ): Promise<LlmGenerateResult>;
+
+    /**
+     * 流式生成文本
+     *
+     * @param messages 消息历史
+     * @param options 生成选项
+     * @returns 流式文本生成器
+     */
+    generateStream?(
+        messages: LlmMessage[],
+        options?: LlmGenerateOptions
+    ): AsyncGenerator<string, void, unknown>;
 }
 
 // ============================================

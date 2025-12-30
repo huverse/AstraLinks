@@ -45,6 +45,9 @@ export default function CompleteOAuthPage() {
     const [password, setPassword] = useState('');
     const [invitationCode, setInvitationCode] = useState('');
 
+    // Invitation code system state
+    const [invitationCodeEnabled, setInvitationCodeEnabled] = useState(true); // Default to enabled
+
     // Get API endpoint based on OAuth type
     const getApiEndpoint = (action: 'session' | 'complete') => {
         const base = '/api/auth';
@@ -123,6 +126,23 @@ export default function CompleteOAuthPage() {
         loadSession();
     }, [session, oauthType]);
 
+    // Fetch invitation code settings
+    useEffect(() => {
+        const fetchInvitationCodeSettings = async () => {
+            try {
+                const response = await fetch('/api/settings/public/invitation-code');
+                if (response.ok) {
+                    const data = await response.json();
+                    setInvitationCodeEnabled(data.enabled);
+                }
+            } catch (err) {
+                console.error('Failed to fetch invitation code settings:', err);
+                // Keep default (enabled) if fetch fails
+            }
+        };
+        fetchInvitationCodeSettings();
+    }, []);
+
     // Handle form submit
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -141,7 +161,7 @@ export default function CompleteOAuthPage() {
             else if (oauthType === 'google') body.googleSession = session;
             else if (oauthType === 'email') body.emailSession = session;
 
-            if (activeTab === 'create') {
+            if (activeTab === 'create' && invitationCodeEnabled) {
                 body.invitationCode = invitationCode;
             }
 
@@ -290,8 +310,8 @@ export default function CompleteOAuthPage() {
                         </div>
                     </div>
 
-                    {/* Invitation Code (only for create) */}
-                    {activeTab === 'create' && (
+                    {/* Invitation Code (only for create, when enabled) */}
+                    {activeTab === 'create' && invitationCodeEnabled && (
                         <div>
                             <label className="block text-sm text-slate-400 mb-1">邀请码</label>
                             <div className="relative">

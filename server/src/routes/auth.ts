@@ -978,12 +978,7 @@ router.post('/qq/complete', async (req: Request, res: Response) => {
             });
 
         } else if (action === 'create') {
-            // Create new account - requires invitation code
-            if (!invitationCode) {
-                res.status(400).json({ error: '请输入邀请码' });
-                return;
-            }
-
+            // Create new account
             if (username.length < 3 || username.length > 60) {
                 res.status(400).json({ error: '用户名长度应为 3-60 个字符' });
                 return;
@@ -1000,53 +995,79 @@ router.post('/qq/complete', async (req: Request, res: Response) => {
                 return;
             }
 
-            // Validate invitation code (check both normal and split codes)
+            // Check if invitation code systems are enabled
+            const [normalCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+                'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+                ['invitation_code_enabled']
+            );
+            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value !== 'false';
+
+            const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+                'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+                ['split_invitation_enabled']
+            );
+            const splitCodeEnabled = splitCodeEnabledSetting[0]?.setting_value === 'true';
+
+            const invitationCodeRequired = normalCodeEnabled || splitCodeEnabled;
+
+            // Validate invitation code only if required
             let codeType: 'normal' | 'split' | null = null;
             let codeData: any = null;
             let splitTreeId: string | null = null;
 
-            const [normalCodes] = await pool.execute<RowDataPacket[]>(
-                'SELECT id, is_used FROM invitation_codes WHERE code = ?',
-                [invitationCode]
-            );
-
-            if (normalCodes.length > 0) {
-                codeData = normalCodes[0];
-                codeType = 'normal';
-                if (codeData.is_used) {
-                    res.status(400).json({ error: '该邀请码已被使用' });
+            if (invitationCodeRequired) {
+                if (!invitationCode) {
+                    res.status(400).json({ error: '请输入邀请码' });
                     return;
                 }
-            }
 
-            if (!codeData) {
-                const [splitCodes] = await pool.execute<RowDataPacket[]>(
-                    `SELECT c.*, t.is_banned as tree_banned 
-                     FROM split_invitation_codes c
-                     JOIN split_invitation_trees t ON c.tree_id = t.id
-                     WHERE c.code = ?`,
-                    [invitationCode]
-                );
+                // Check normal invitation codes
+                if (normalCodeEnabled) {
+                    const [normalCodes] = await pool.execute<RowDataPacket[]>(
+                        'SELECT id, is_used FROM invitation_codes WHERE code = ?',
+                        [invitationCode]
+                    );
 
-                if (splitCodes.length > 0) {
-                    codeData = splitCodes[0];
-                    codeType = 'split';
-                    splitTreeId = codeData.tree_id;
-
-                    if (codeData.is_used) {
-                        res.status(400).json({ error: '该邀请码已被使用' });
-                        return;
-                    }
-                    if (codeData.tree_banned) {
-                        res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
-                        return;
+                    if (normalCodes.length > 0) {
+                        codeData = normalCodes[0];
+                        codeType = 'normal';
+                        if (codeData.is_used) {
+                            res.status(400).json({ error: '该邀请码已被使用' });
+                            return;
+                        }
                     }
                 }
-            }
 
-            if (!codeData) {
-                res.status(400).json({ error: '邀请码无效' });
-                return;
+                // Check split invitation codes
+                if (!codeData && splitCodeEnabled) {
+                    const [splitCodes] = await pool.execute<RowDataPacket[]>(
+                        `SELECT c.*, t.is_banned as tree_banned
+                         FROM split_invitation_codes c
+                         JOIN split_invitation_trees t ON c.tree_id = t.id
+                         WHERE c.code = ?`,
+                        [invitationCode]
+                    );
+
+                    if (splitCodes.length > 0) {
+                        codeData = splitCodes[0];
+                        codeType = 'split';
+                        splitTreeId = codeData.tree_id;
+
+                        if (codeData.is_used) {
+                            res.status(400).json({ error: '该邀请码已被使用' });
+                            return;
+                        }
+                        if (codeData.tree_banned) {
+                            res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
+                            return;
+                        }
+                    }
+                }
+
+                if (!codeData) {
+                    res.status(400).json({ error: '邀请码无效' });
+                    return;
+                }
             }
 
             // Hash password and create user
@@ -1059,22 +1080,27 @@ router.post('/qq/complete', async (req: Request, res: Response) => {
                 insertSql = `INSERT INTO users (username, password_hash, qq_openid, qq_nickname, avatar_url, split_code_used, split_tree_id)
                              VALUES (?, ?, ?, ?, ?, ?, ?)`;
                 insertParams = [username, passwordHash, openid, qqNickname, avatarUrl, invitationCode, splitTreeId];
-            } else {
+            } else if (codeType === 'normal') {
                 insertSql = `INSERT INTO users (username, password_hash, qq_openid, qq_nickname, avatar_url, invitation_code_used)
                              VALUES (?, ?, ?, ?, ?, ?)`;
                 insertParams = [username, passwordHash, openid, qqNickname, avatarUrl, invitationCode];
+            } else {
+                // No invitation code required
+                insertSql = `INSERT INTO users (username, password_hash, qq_openid, qq_nickname, avatar_url)
+                             VALUES (?, ?, ?, ?, ?)`;
+                insertParams = [username, passwordHash, openid, qqNickname, avatarUrl];
             }
 
             const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
             const userId = result.insertId;
 
-            // Mark invitation code as used
-            if (codeType === 'normal') {
+            // Mark invitation code as used (only if code was required)
+            if (codeType === 'normal' && codeData) {
                 await pool.execute(
                     `UPDATE invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
                     [userId, codeData.id]
                 );
-            } else {
+            } else if (codeType === 'split' && codeData) {
                 await pool.execute(
                     `UPDATE split_invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
                     [userId, codeData.id]
@@ -1360,11 +1386,6 @@ router.post('/email/complete', async (req: Request, res: Response) => {
 
         } else if (action === 'create') {
             // Create new account
-            if (!invitationCode) {
-                res.status(400).json({ error: '请输入邀请码' });
-                return;
-            }
-
             if (username.length < 3 || username.length > 60) {
                 res.status(400).json({ error: '用户名长度应为 3-60 个字符' });
                 return;
@@ -1381,53 +1402,79 @@ router.post('/email/complete', async (req: Request, res: Response) => {
                 return;
             }
 
-            // Validate invitation code
+            // Check if invitation code systems are enabled
+            const [normalCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+                'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+                ['invitation_code_enabled']
+            );
+            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value !== 'false';
+
+            const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+                'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+                ['split_invitation_enabled']
+            );
+            const splitCodeEnabled = splitCodeEnabledSetting[0]?.setting_value === 'true';
+
+            const invitationCodeRequired = normalCodeEnabled || splitCodeEnabled;
+
+            // Validate invitation code only if required
             let codeType: 'normal' | 'split' | null = null;
             let codeData: any = null;
             let splitTreeId: string | null = null;
 
-            const [normalCodes] = await pool.execute<RowDataPacket[]>(
-                'SELECT id, is_used FROM invitation_codes WHERE code = ?',
-                [invitationCode]
-            );
-
-            if (normalCodes.length > 0) {
-                codeData = normalCodes[0];
-                codeType = 'normal';
-                if (codeData.is_used) {
-                    res.status(400).json({ error: '该邀请码已被使用' });
+            if (invitationCodeRequired) {
+                if (!invitationCode) {
+                    res.status(400).json({ error: '请输入邀请码' });
                     return;
                 }
-            }
 
-            if (!codeData) {
-                const [splitCodes] = await pool.execute<RowDataPacket[]>(
-                    `SELECT c.*, t.is_banned as tree_banned 
-                     FROM split_invitation_codes c
-                     JOIN split_invitation_trees t ON c.tree_id = t.id
-                     WHERE c.code = ?`,
-                    [invitationCode]
-                );
+                // Check normal invitation codes
+                if (normalCodeEnabled) {
+                    const [normalCodes] = await pool.execute<RowDataPacket[]>(
+                        'SELECT id, is_used FROM invitation_codes WHERE code = ?',
+                        [invitationCode]
+                    );
 
-                if (splitCodes.length > 0) {
-                    codeData = splitCodes[0];
-                    codeType = 'split';
-                    splitTreeId = codeData.tree_id;
-
-                    if (codeData.is_used) {
-                        res.status(400).json({ error: '该邀请码已被使用' });
-                        return;
-                    }
-                    if (codeData.tree_banned) {
-                        res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
-                        return;
+                    if (normalCodes.length > 0) {
+                        codeData = normalCodes[0];
+                        codeType = 'normal';
+                        if (codeData.is_used) {
+                            res.status(400).json({ error: '该邀请码已被使用' });
+                            return;
+                        }
                     }
                 }
-            }
 
-            if (!codeData) {
-                res.status(400).json({ error: '邀请码无效' });
-                return;
+                // Check split invitation codes
+                if (!codeData && splitCodeEnabled) {
+                    const [splitCodes] = await pool.execute<RowDataPacket[]>(
+                        `SELECT c.*, t.is_banned as tree_banned
+                         FROM split_invitation_codes c
+                         JOIN split_invitation_trees t ON c.tree_id = t.id
+                         WHERE c.code = ?`,
+                        [invitationCode]
+                    );
+
+                    if (splitCodes.length > 0) {
+                        codeData = splitCodes[0];
+                        codeType = 'split';
+                        splitTreeId = codeData.tree_id;
+
+                        if (codeData.is_used) {
+                            res.status(400).json({ error: '该邀请码已被使用' });
+                            return;
+                        }
+                        if (codeData.tree_banned) {
+                            res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
+                            return;
+                        }
+                    }
+                }
+
+                if (!codeData) {
+                    res.status(400).json({ error: '邀请码无效' });
+                    return;
+                }
             }
 
             // Hash password and create user
@@ -1440,22 +1487,27 @@ router.post('/email/complete', async (req: Request, res: Response) => {
                 insertSql = `INSERT INTO users (username, email, password_hash, split_code_used, split_tree_id)
                              VALUES (?, ?, ?, ?, ?)`;
                 insertParams = [username, email, passwordHash, invitationCode, splitTreeId];
-            } else {
+            } else if (codeType === 'normal') {
                 insertSql = `INSERT INTO users (username, email, password_hash, invitation_code_used)
                              VALUES (?, ?, ?, ?)`;
                 insertParams = [username, email, passwordHash, invitationCode];
+            } else {
+                // No invitation code required
+                insertSql = `INSERT INTO users (username, email, password_hash)
+                             VALUES (?, ?, ?)`;
+                insertParams = [username, email, passwordHash];
             }
 
             const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
             const userId = result.insertId;
 
-            // Mark invitation code as used
-            if (codeType === 'normal') {
+            // Mark invitation code as used (only if code was required)
+            if (codeType === 'normal' && codeData) {
                 await pool.execute(
                     `UPDATE invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
                     [userId, codeData.id]
                 );
-            } else {
+            } else if (codeType === 'split' && codeData) {
                 await pool.execute(
                     `UPDATE split_invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
                     [userId, codeData.id]
@@ -1760,12 +1812,7 @@ router.post('/google/complete', async (req: Request, res: Response) => {
             });
 
         } else if (action === 'create') {
-            // Create new account (same logic as email/QQ)
-            if (!invitationCode) {
-                res.status(400).json({ error: '请输入邀请码' });
-                return;
-            }
-
+            // Create new account
             if (username.length < 3 || username.length > 60) {
                 res.status(400).json({ error: '用户名长度应为 3-60 个字符' });
                 return;
@@ -1781,53 +1828,79 @@ router.post('/google/complete', async (req: Request, res: Response) => {
                 return;
             }
 
-            // Validate invitation code  
+            // Check if invitation code systems are enabled
+            const [normalCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+                'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+                ['invitation_code_enabled']
+            );
+            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value !== 'false';
+
+            const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+                'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+                ['split_invitation_enabled']
+            );
+            const splitCodeEnabled = splitCodeEnabledSetting[0]?.setting_value === 'true';
+
+            const invitationCodeRequired = normalCodeEnabled || splitCodeEnabled;
+
+            // Validate invitation code only if required
             let codeType: 'normal' | 'split' | null = null;
             let codeData: any = null;
             let splitTreeId: string | null = null;
 
-            const [normalCodes] = await pool.execute<RowDataPacket[]>(
-                'SELECT id, is_used FROM invitation_codes WHERE code = ?',
-                [invitationCode]
-            );
-
-            if (normalCodes.length > 0) {
-                codeData = normalCodes[0];
-                codeType = 'normal';
-                if (codeData.is_used) {
-                    res.status(400).json({ error: '该邀请码已被使用' });
+            if (invitationCodeRequired) {
+                if (!invitationCode) {
+                    res.status(400).json({ error: '请输入邀请码' });
                     return;
                 }
-            }
 
-            if (!codeData) {
-                const [splitCodes] = await pool.execute<RowDataPacket[]>(
-                    `SELECT c.*, t.is_banned as tree_banned 
-                     FROM split_invitation_codes c
-                     JOIN split_invitation_trees t ON c.tree_id = t.id
-                     WHERE c.code = ?`,
-                    [invitationCode]
-                );
+                // Check normal invitation codes
+                if (normalCodeEnabled) {
+                    const [normalCodes] = await pool.execute<RowDataPacket[]>(
+                        'SELECT id, is_used FROM invitation_codes WHERE code = ?',
+                        [invitationCode]
+                    );
 
-                if (splitCodes.length > 0) {
-                    codeData = splitCodes[0];
-                    codeType = 'split';
-                    splitTreeId = codeData.tree_id;
-
-                    if (codeData.is_used) {
-                        res.status(400).json({ error: '该邀请码已被使用' });
-                        return;
-                    }
-                    if (codeData.tree_banned) {
-                        res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
-                        return;
+                    if (normalCodes.length > 0) {
+                        codeData = normalCodes[0];
+                        codeType = 'normal';
+                        if (codeData.is_used) {
+                            res.status(400).json({ error: '该邀请码已被使用' });
+                            return;
+                        }
                     }
                 }
-            }
 
-            if (!codeData) {
-                res.status(400).json({ error: '邀请码无效' });
-                return;
+                // Check split invitation codes
+                if (!codeData && splitCodeEnabled) {
+                    const [splitCodes] = await pool.execute<RowDataPacket[]>(
+                        `SELECT c.*, t.is_banned as tree_banned
+                         FROM split_invitation_codes c
+                         JOIN split_invitation_trees t ON c.tree_id = t.id
+                         WHERE c.code = ?`,
+                        [invitationCode]
+                    );
+
+                    if (splitCodes.length > 0) {
+                        codeData = splitCodes[0];
+                        codeType = 'split';
+                        splitTreeId = codeData.tree_id;
+
+                        if (codeData.is_used) {
+                            res.status(400).json({ error: '该邀请码已被使用' });
+                            return;
+                        }
+                        if (codeData.tree_banned) {
+                            res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
+                            return;
+                        }
+                    }
+                }
+
+                if (!codeData) {
+                    res.status(400).json({ error: '邀请码无效' });
+                    return;
+                }
             }
 
             const passwordHash = await hashPassword(password);
@@ -1839,21 +1912,27 @@ router.post('/google/complete', async (req: Request, res: Response) => {
                 insertSql = `INSERT INTO users (username, email, password_hash, google_id, avatar_url, split_code_used, split_tree_id)
                              VALUES (?, ?, ?, ?, ?, ?, ?)`;
                 insertParams = [username, email, passwordHash, googleId, avatar, invitationCode, splitTreeId];
-            } else {
+            } else if (codeType === 'normal') {
                 insertSql = `INSERT INTO users (username, email, password_hash, google_id, avatar_url, invitation_code_used)
                              VALUES (?, ?, ?, ?, ?, ?)`;
                 insertParams = [username, email, passwordHash, googleId, avatar, invitationCode];
+            } else {
+                // No invitation code required
+                insertSql = `INSERT INTO users (username, email, password_hash, google_id, avatar_url)
+                             VALUES (?, ?, ?, ?, ?)`;
+                insertParams = [username, email, passwordHash, googleId, avatar];
             }
 
             const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
             const userId = result.insertId;
 
-            if (codeType === 'normal') {
+            // Mark invitation code as used (only if code was required)
+            if (codeType === 'normal' && codeData) {
                 await pool.execute(
                     `UPDATE invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
                     [userId, codeData.id]
                 );
-            } else {
+            } else if (codeType === 'split' && codeData) {
                 await pool.execute(
                     `UPDATE split_invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?`,
                     [userId, codeData.id]

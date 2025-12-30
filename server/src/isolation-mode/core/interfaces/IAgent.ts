@@ -37,6 +37,13 @@ export interface IAgent {
     generateResponse(prompt?: string): Promise<AgentMessage>;
 
     /**
+     * 流式生成发言
+     * @param prompt 主持人的指示或上下文
+     * @returns 流式文本生成器，最终返回完整消息
+     */
+    generateResponseStream?(prompt?: string): AsyncGenerator<string, AgentMessage, unknown>;
+
+    /**
      * 获取 Agent 的私有记忆摘要
      */
     getMemorySummary(): string;

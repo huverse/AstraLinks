@@ -28,6 +28,8 @@ interface DiscussionLoopConfig {
     noProgressTimeoutMs: number;
     /** 是否启用意图队列 */
     useIntentQueue: boolean;
+    /** 是否启用流式响应 (默认 true) */
+    enableStreaming: boolean;
 }
 
 const DEFAULT_CONFIG: DiscussionLoopConfig = {
@@ -35,7 +37,8 @@ const DEFAULT_CONFIG: DiscussionLoopConfig = {
     speakIntervalMs: 1000,
     maxRounds: 10,
     noProgressTimeoutMs: 60000,
-    useIntentQueue: true
+    useIntentQueue: true,
+    enableStreaming: true
 };
 
 // ============================================
@@ -64,6 +67,10 @@ export class DiscussionLoop {
         const sessionConfig = sessionManager.get(sessionId);
         if (sessionConfig?.maxRounds) {
             fullConfig.maxRounds = sessionConfig.maxRounds;
+        }
+        // 读取流式响应配置 (默认启用)
+        if (sessionConfig?.enableStreaming !== undefined) {
+            fullConfig.enableStreaming = sessionConfig.enableStreaming;
         }
         this.running.set(sessionId, true);
         this.lastProgressTime.set(sessionId, Date.now());
@@ -177,7 +184,29 @@ export class DiscussionLoop {
             await this.publishAgentStatus(sessionId, speaker.config.id, 'thinking');
             let message: { content: string; tokens?: number };
             try {
-                message = await speaker.generateResponse();
+                // 根据配置决定是否使用流式生成
+                const useStreaming = config.enableStreaming && typeof speaker.generateResponseStream === 'function';
+
+                if (useStreaming) {
+                    let fullContent = '';
+                    const generator = speaker.generateResponseStream!();
+
+                    while (true) {
+                        const { value, done } = await generator.next();
+                        if (done) {
+                            // 最后返回的是完整消息
+                            message = value as { content: string; tokens?: number };
+                            break;
+                        }
+                        // value 是 chunk
+                        fullContent += value;
+                        // 发布流式 chunk 事件
+                        await this.publishAgentChunk(sessionId, speaker.config.id, value, fullContent);
+                    }
+                } else {
+                    // 非流式生成
+                    message = await speaker.generateResponse();
+                }
             } catch (genErr: any) {
                 weLogger.error({
                     sessionId,
@@ -384,6 +413,33 @@ export class DiscussionLoop {
             meta: { transient: true }
         };
         // 直接广播，不写入 EventLog（避免污染讨论历史）
+        eventBus.publish(transientEvent as any);
+    }
+
+    /**
+     * 发布 Agent 流式 chunk 事件（瞬态，不入 EventLog）
+     * 用于实时向前端广播流式生成内容
+     */
+    private async publishAgentChunk(
+        sessionId: string,
+        agentId: string,
+        chunk: string,
+        accumulated: string
+    ): Promise<void> {
+        const transientEvent = {
+            eventId: uuidv4(),
+            sessionId,
+            type: 'agent:chunk',
+            speaker: agentId,
+            content: {
+                chunk,
+                accumulated,
+                agentId
+            },
+            timestamp: new Date().toISOString(),
+            sequence: Date.now(),
+            meta: { transient: true }
+        };
         eventBus.publish(transientEvent as any);
     }
 }

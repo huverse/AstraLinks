@@ -299,6 +299,36 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
     const [installing, setInstalling] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [showUpload, setShowUpload] = useState(false);
+    const [apiHealth, setApiHealth] = useState<{
+        checked: boolean;
+        healthy: boolean;
+        isFallback: boolean;
+        message: string;
+    }>({ checked: false, healthy: false, isFallback: false, message: '' });
+
+    // 检查 API 健康状态
+    const checkApiHealth = useCallback(async () => {
+        try {
+            const response = await fetchAPI<{ success: boolean; healthy: boolean; message: string }>(
+                '/api/mcp-marketplace/health'
+            );
+            if (response.success) {
+                setApiHealth({
+                    checked: true,
+                    healthy: response.healthy,
+                    isFallback: !response.healthy,
+                    message: response.message || ''
+                });
+            }
+        } catch {
+            setApiHealth({
+                checked: true,
+                healthy: false,
+                isFallback: true,
+                message: '无法检查 API 状态'
+            });
+        }
+    }, []);
 
     // 防抖搜索：延迟 500ms 后更新搜索查询
     useEffect(() => {
@@ -317,7 +347,13 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
                 `/api/mcp-marketplace/search?q=${encodeURIComponent(debouncedQuery)}&pageSize=30`
             );
             if (response.success) {
-                setServers(response.data || []);
+                const data = response.data || [];
+                // 检测是否为降级模式 (返回内置工具)
+                const isFallback = data.some(m => m.isBuiltin === true);
+                setServers(data);
+                if (isFallback) {
+                    setApiHealth(prev => ({ ...prev, isFallback: true, message: '显示内置工具作为备选' }));
+                }
             }
         } catch (err: any) {
             setError(err.message);
@@ -343,7 +379,8 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
     useEffect(() => {
         loadMarket();
         loadInstalled();
-    }, [loadMarket, loadInstalled]);
+        checkApiHealth();
+    }, [loadMarket, loadInstalled, checkApiHealth]);
 
     // 安装 MCP
     const handleInstall = async (server: MCPServer) => {
@@ -471,6 +508,14 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
                     <button onClick={() => setError(null)} className="ml-auto">
                         <X size={14} />
                     </button>
+                </div>
+            )}
+
+            {/* API 健康状态 (仅在降级模式显示) */}
+            {activeTab === 'market' && apiHealth.isFallback && (
+                <div className="mx-6 mt-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg flex items-center gap-2 text-yellow-400 text-sm">
+                    <AlertCircle size={16} />
+                    <span>Smithery API 暂时不可用，显示内置工具作为备选</span>
                 </div>
             )}
 

@@ -86,6 +86,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [expandedPanel, setExpandedPanel] = useState<string | null>('stats');
     const [showAdvancedPanels, setShowAdvancedPanels] = useState(true);
     const [geminiApiKey, setGeminiApiKey] = useState<string>('');
+    const [enableStreaming, setEnableStreaming] = useState(true); // 流式响应开关
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -526,6 +527,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                     },
                     agents: agentsPayload,
                     llmConfig: encryptedLlmConfig,
+                    enableStreaming, // 流式响应开关
                 }),
             });
 
@@ -948,6 +950,24 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                     participants={participants}
                                     scenarioType={selectedScenario || undefined}
                                 />
+                            </div>
+
+                            {/* 流式响应开关 */}
+                            <div className="flex items-center justify-between p-4 bg-slate-800/30 rounded-xl border border-white/5">
+                                <div>
+                                    <div className="text-sm font-medium text-white">流式响应</div>
+                                    <div className="text-xs text-slate-400 mt-0.5">实时显示AI发言内容，关闭后等待完整响应</div>
+                                </div>
+                                <button
+                                    onClick={() => setEnableStreaming(!enableStreaming)}
+                                    className={`relative w-11 h-6 rounded-full transition-colors ${
+                                        enableStreaming ? 'bg-purple-600' : 'bg-slate-600'
+                                    }`}
+                                >
+                                    <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${
+                                        enableStreaming ? 'translate-x-5' : 'translate-x-0'
+                                    }`} />
+                                </button>
                             </div>
 
                             {error && (

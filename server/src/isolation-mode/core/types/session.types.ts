@@ -52,6 +52,8 @@ export interface SessionConfig {
     maxRounds?: number;
     /** 单轮时间限制 (秒) */
     roundTimeLimit?: number;
+    /** 是否启用流式响应 (默认 true) */
+    enableStreaming?: boolean;
     /** 创建时间 */
     createdAt: number;
     /** 用户 LLM 配置 (加密) - 从 Galaxyous 配置中心同步 */

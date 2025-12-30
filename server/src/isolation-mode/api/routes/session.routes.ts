@@ -29,7 +29,7 @@ router.get('/', async (req: Request, res: Response) => {
 router.post('/', async (req: Request, res: Response) => {
     try {
         const userId = (req as any).user?.id || 'anonymous';
-        const { title, topic, scenario, agents, maxRounds, roundTimeLimit, llmConfig } = req.body;
+        const { title, topic, scenario, agents, maxRounds, roundTimeLimit, llmConfig, enableStreaming } = req.body;
 
         // 详细日志：记录收到的请求
         console.log('[Isolation] Creating session:', {
@@ -37,7 +37,8 @@ router.post('/', async (req: Request, res: Response) => {
             title,
             scenarioId: scenario?.id,
             agentCount: agents?.length,
-            hasLlmConfig: !!llmConfig
+            hasLlmConfig: !!llmConfig,
+            enableStreaming
         });
 
         const session = await sessionManager.create({
@@ -49,6 +50,7 @@ router.post('/', async (req: Request, res: Response) => {
             maxRounds,
             roundTimeLimit,
             llmConfig, // 加密的用户 AI 配置 (从 Galaxyous 配置中心同步)
+            enableStreaming, // 流式响应开关
         });
 
         res.json({ success: true, data: session });

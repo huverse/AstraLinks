@@ -71,6 +71,9 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     const turnstileWidgetId = useRef<string | null>(null);
     const turnstileContainerRef = useRef<HTMLDivElement>(null);
 
+    // Invitation code system
+    const [invitationCodeEnabled, setInvitationCodeEnabled] = useState(true); // Default to enabled
+
     // Fetch Turnstile settings from API
     useEffect(() => {
         const fetchTurnstileSettings = async () => {
@@ -97,6 +100,23 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             }
         };
         fetchTurnstileSettings();
+    }, []);
+
+    // Fetch invitation code settings from API
+    useEffect(() => {
+        const fetchInvitationCodeSettings = async () => {
+            try {
+                const response = await fetch('/api/settings/public/invitation-code');
+                if (response.ok) {
+                    const data = await response.json();
+                    setInvitationCodeEnabled(data.enabled);
+                }
+            } catch (err) {
+                console.error('Failed to fetch invitation code settings:', err);
+                // Keep default (enabled) if fetch fails
+            }
+        };
+        fetchInvitationCodeSettings();
     }, []);
 
     // Initialize Turnstile widget (only if login Turnstile is enabled)
@@ -256,7 +276,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
             return;
         }
 
-        if (!invitationCode) {
+        // Only check invitation code if the system is enabled
+        if (invitationCodeEnabled && !invitationCode) {
             setError('请输入邀请码');
             return;
         }
@@ -267,7 +288,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
         }
 
         setIsLoading(true);
-        const result = await register(username, email, password, invitationCode, turnstileLoginEnabled ? turnstileToken : undefined);
+        const result = await register(username, email, password, invitationCodeEnabled ? invitationCode : '', turnstileLoginEnabled ? turnstileToken : undefined);
         setIsLoading(false);
 
         if (result.success) {
@@ -442,7 +463,7 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                     </h2>
                     <p className="mt-1 text-blue-100">
                         {mode === 'login' && '登录您的 Galaxyous 账号'}
-                        {mode === 'register' && '使用邀请码注册新账号'}
+                        {mode === 'register' && (invitationCodeEnabled ? '使用邀请码注册新账号' : '注册新账号')}
                         {mode === 'resetPassword' && '您的账号需要设置新密码'}
                         {mode === 'emailLogin' && '使用邮箱验证码登录'}
                     </p>
@@ -578,8 +599,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
                         </div>
                     )}
 
-                    {/* Invitation Code (Register only) */}
-                    {mode === 'register' && (
+                    {/* Invitation Code (Register only, when enabled) */}
+                    {mode === 'register' && invitationCodeEnabled && (
                         <div className="relative">
                             <Key size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                             <input
