@@ -106,7 +106,7 @@ router.post('/register', async (req: Request, res: Response) => {
             'SELECT setting_value FROM site_settings WHERE setting_key = ?',
             ['invitation_code_enabled']
         );
-        const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value !== 'false';
+        const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value === 'true';
 
         // Check if split invitation system is enabled
         const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
@@ -1000,7 +1000,7 @@ router.post('/qq/complete', async (req: Request, res: Response) => {
                 'SELECT setting_value FROM site_settings WHERE setting_key = ?',
                 ['invitation_code_enabled']
             );
-            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value !== 'false';
+            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value === 'true';
 
             const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
                 'SELECT setting_value FROM site_settings WHERE setting_key = ?',
@@ -1407,7 +1407,7 @@ router.post('/email/complete', async (req: Request, res: Response) => {
                 'SELECT setting_value FROM site_settings WHERE setting_key = ?',
                 ['invitation_code_enabled']
             );
-            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value !== 'false';
+            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value === 'true';
 
             const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
                 'SELECT setting_value FROM site_settings WHERE setting_key = ?',
@@ -1833,7 +1833,7 @@ router.post('/google/complete', async (req: Request, res: Response) => {
                 'SELECT setting_value FROM site_settings WHERE setting_key = ?',
                 ['invitation_code_enabled']
             );
-            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value !== 'false';
+            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value === 'true';
 
             const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
                 'SELECT setting_value FROM site_settings WHERE setting_key = ?',

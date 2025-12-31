@@ -45,8 +45,8 @@ export default function CompleteOAuthPage() {
     const [password, setPassword] = useState('');
     const [invitationCode, setInvitationCode] = useState('');
 
-    // Invitation code system state
-    const [invitationCodeEnabled, setInvitationCodeEnabled] = useState(true); // Default to enabled
+    // Invitation code system state - default to disabled, API will enable if needed
+    const [invitationCodeEnabled, setInvitationCodeEnabled] = useState(false);
 
     // Get API endpoint based on OAuth type
     const getApiEndpoint = (action: 'session' | 'complete') => {
