@@ -71,8 +71,8 @@ const LoginModal: React.FC<LoginModalProps> = ({ isOpen, onClose }) => {
     const turnstileWidgetId = useRef<string | null>(null);
     const turnstileContainerRef = useRef<HTMLDivElement>(null);
 
-    // Invitation code system
-    const [invitationCodeEnabled, setInvitationCodeEnabled] = useState(true); // Default to enabled
+    // Invitation code system - default to disabled, API will enable if needed
+    const [invitationCodeEnabled, setInvitationCodeEnabled] = useState(false);
 
     // Fetch Turnstile settings from API
     useEffect(() => {

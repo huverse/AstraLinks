@@ -124,6 +124,17 @@ export class DiscussionLoop {
         let speakersThisRound = 0;
 
         while (this.running.get(sessionId)) {
+            // 0. 检查会话状态（暂停/结束）
+            const currentState = moderatorController.getSessionState(sessionId);
+            if (currentState?.status === 'paused') {
+                await this.sleep(500);
+                continue;
+            }
+            if (currentState?.status === 'completed' || currentState?.status === 'aborted') {
+                weLogger.info({ sessionId, status: currentState.status }, 'session_ended_by_status');
+                break;
+            }
+
             // 1. 检查结束条件
             if (this.shouldEnd(sessionId, config)) {
                 break;
@@ -199,9 +210,10 @@ export class DiscussionLoop {
                             break;
                         }
                         // value 是 chunk
-                        fullContent += value;
+                        const chunkStr = typeof value === 'string' ? value : String(value);
+                        fullContent += chunkStr;
                         // 发布流式 chunk 事件
-                        await this.publishAgentChunk(sessionId, speaker.config.id, value, fullContent);
+                        await this.publishAgentChunk(sessionId, speaker.config.id, chunkStr, fullContent);
                     }
                 } else {
                     // 非流式生成

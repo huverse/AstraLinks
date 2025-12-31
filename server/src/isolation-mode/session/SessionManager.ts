@@ -54,6 +54,9 @@ export class SessionManager {
         // 创建会话状态
         moderatorController.createSessionState(id);
         moderatorController.setSessionConfig(id, config);
+        if (typeof params.interventionLevel === 'number') {
+            moderatorController.setInterventionLevel(id, params.interventionLevel);
+        }
 
         // 绑定规则引擎
         const sessionRuleEngine = new RuleEngine();

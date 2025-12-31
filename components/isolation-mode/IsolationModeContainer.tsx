@@ -25,15 +25,14 @@ import { ScenarioSelector } from './ScenarioSelector';
 import { AgentConfigPanel } from './AgentConfigPanel';
 import { JudgePanel } from './JudgePanel';
 import { IntentQueuePanel } from './IntentQueuePanel';
-import { StatsPanel } from './StatsPanel';
 import { SummaryPanel } from './SummaryPanel';
 import { ExportMenu } from './ExportMenu';
 import { TemplatePanel } from './TemplatePanel';
-import { StanceTracker } from './StanceTracker';
 import { VoicePanel } from './VoicePanel';
 import { IsolationCloudSync } from './IsolationCloudSync';
 import { useIsolationHotkeys, HotkeyHelp } from '../../hooks/useIsolationHotkeys';
 import { ReplayPanel } from './ReplayPanel';
+import { LiveStatusPanel } from './LiveStatusPanel';
 
 interface IsolationModeContainerProps {
     onExit: () => void;
@@ -520,6 +519,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                 body: JSON.stringify({
                     title: `${topic} - ${new Date().toLocaleDateString()}`,
                     topic,
+                    interventionLevel,
                     scenario: {
                         id: selectedScenario,
                         name: scenarioInfo?.name || selectedScenario,
@@ -539,7 +539,9 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
             const sessionId = data.data.id || data.data.sessionId;
             const joinResult = await socketJoinSession(sessionId);
             if (!joinResult.success) {
-                isolationLogger.warn('Failed to join session via socket', { sessionId, error: joinResult.error });
+                isolationLogger.error('Failed to join session via socket', { sessionId, error: joinResult.error });
+                setError(joinResult.error || 'Socket 连接失败，请检查网络后重试');
+                return;
             }
             setCurrentSession({
                 ...data.data,
@@ -970,6 +972,32 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 </button>
                             </div>
 
+                            {/* 主持人介入程度 */}
+                            <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5">
+                                <h3 className="text-sm font-medium text-white mb-3">主持人介入程度</h3>
+                                <div className="grid grid-cols-4 gap-2">
+                                    {[
+                                        { level: 0, label: '静默', desc: '仅程序性把控' },
+                                        { level: 1, label: '低', desc: '跑题时介入' },
+                                        { level: 2, label: '中', desc: '适度追问引导' },
+                                        { level: 3, label: '高', desc: '主导会议进程' },
+                                    ].map(({ level, label, desc }) => (
+                                        <button
+                                            key={level}
+                                            onClick={() => setInterventionLevel(level)}
+                                            className={`p-3 rounded-xl border text-left transition-all ${
+                                                interventionLevel === level
+                                                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-200'
+                                                    : 'bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/20'
+                                            }`}
+                                        >
+                                            <div className="text-sm font-medium">{label}</div>
+                                            <div className="text-[10px] opacity-70 mt-1">{desc}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
                             {error && (
                                 <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                                     {error}
@@ -1064,18 +1092,6 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                     <Megaphone size={14} />
                                     点名发言
                                 </button>
-                                {/* AI 意图队列 - 展示 Agent 自主表达的发言意愿 */}
-                                <div className="pt-2 border-t border-white/5">
-                                    <div className="text-[10px] text-slate-500 mb-2">
-                                        💡 Agent 自主表达发言意愿，系统自动处理
-                                    </div>
-                                    <IntentQueuePanel
-                                        intents={intents}
-                                        agents={currentSession.agents}
-                                        isLoading={intentsLoading}
-                                        onRefresh={loadIntents}
-                                    />
-                                </div>
                             </div>
 
                             {/* 介入程度控制 */}
@@ -1188,16 +1204,28 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                     第 {currentSession.currentRound} 轮
                                 </div>
                             </div>
-                            <EventTimeline events={currentSession.events} agents={currentSession.agents} />
+                            <EventTimeline
+                                events={currentSession.events}
+                                agents={currentSession.agents}
+                                showControls={true}
+                                isPaused={currentSession.status === 'paused'}
+                                onTogglePause={() => {
+                                    if (currentSession.status === 'paused') {
+                                        handleResumeDiscussion();
+                                    } else {
+                                        handlePauseDiscussion();
+                                    }
+                                }}
+                            />
                         </div>
 
-                        {/* 右侧 - 高级面板 */}
-                        <div className={`w-72 shrink-0 space-y-3 overflow-auto transition-all duration-300 hidden xl:block ${showAdvancedPanels ? '' : 'xl:hidden'}`}>
+                        {/* 右侧 - 实时状态面板 */}
+                        <div className={`w-80 shrink-0 space-y-3 overflow-auto transition-all duration-300 hidden xl:block ${showAdvancedPanels ? '' : 'xl:hidden'}`}>
                             {/* 面板折叠控制 */}
                             <div className="flex items-center justify-between">
                                 <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider flex items-center gap-2">
                                     <Settings2 size={14} />
-                                    高级面板
+                                    实时状态
                                 </h3>
                                 <button
                                     onClick={() => setShowAdvancedPanels(!showAdvancedPanels)}
@@ -1207,19 +1235,31 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 </button>
                             </div>
 
-                            {/* 统计面板 */}
-                            <StatsPanel
+                            {/* 新的实时状态面板 */}
+                            <LiveStatusPanel
                                 agents={currentSession.agents}
                                 events={currentSession.events}
                                 currentRound={currentSession.currentRound}
-                                startTime={currentSession.startedAt ? new Date(currentSession.startedAt).getTime() : undefined}
-                            />
-
-                            {/* 观点追踪 */}
-                            <StanceTracker
-                                agents={currentSession.agents}
-                                events={currentSession.events}
-                                currentRound={currentSession.currentRound}
+                                sessionStatus={currentSession.status}
+                                currentSpeakerId={currentSession.agents.find(a => a.status === 'speaking')?.id}
+                                decisionState={
+                                    currentSession.status === 'pending' ? 'idle' :
+                                    currentSession.agents.some(a => a.status === 'speaking') ? 'speaking' :
+                                    currentSession.agents.some(a => a.status === 'thinking') ? 'thinking' : 'hands'
+                                }
+                                onSkipSpeaker={() => {
+                                    // 跳过当前发言者
+                                    isolationLogger.info('Skip speaker requested');
+                                }}
+                                onStanceAction={(action) => {
+                                    if (action === 'hand' && selectedAgentId && currentSession) {
+                                        isolationSocket.submitIntent({
+                                            agentId: selectedAgentId,
+                                            urgency: 'low',
+                                            reason: '手动举手',
+                                        });
+                                    }
+                                }}
                             />
 
                             {/* 意图队列（高级面板，支持审批） */}

@@ -102,7 +102,7 @@ router.get('/public/invitation-code', async (req: Request, res: Response) => {
         const cachedSplitEnabled = getCached('split_invitation_enabled');
 
         if (cachedNormalEnabled !== null && cachedSplitEnabled !== null) {
-            const normalEnabled = cachedNormalEnabled !== 'false';
+            const normalEnabled = cachedNormalEnabled === 'true';
             const splitEnabled = cachedSplitEnabled === 'true';
             res.json({
                 enabled: normalEnabled || splitEnabled,
@@ -121,8 +121,8 @@ router.get('/public/invitation-code', async (req: Request, res: Response) => {
         const settingsMap: Record<string, string> = {};
         settings.forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
 
-        // Default: normal codes enabled, split codes disabled
-        const normalEnabled = settingsMap['invitation_code_enabled'] !== 'false';
+        // Default: both codes disabled unless explicitly enabled
+        const normalEnabled = settingsMap['invitation_code_enabled'] === 'true';
         const splitEnabled = settingsMap['split_invitation_enabled'] === 'true';
 
         // Cache the values

@@ -52,6 +52,8 @@ export interface SessionConfig {
     maxRounds?: number;
     /** 单轮时间限制 (秒) */
     roundTimeLimit?: number;
+    /** Intervention level override (0-3) */
+    interventionLevel?: number;
     /** 是否启用流式响应 (默认 true) */
     enableStreaming?: boolean;
     /** 创建时间 */

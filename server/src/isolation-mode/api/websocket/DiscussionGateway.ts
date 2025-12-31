@@ -236,22 +236,30 @@ export function initializeWebSocketGateway(io: SocketIOServer): void {
         });
 
         // 处理暂停/恢复请求
-        socket.on('session:control', async (data: { sessionId: string; action: 'pause' | 'resume' | 'end' }) => {
+        socket.on('session:control', async (
+            data: { sessionId: string; action: 'pause' | 'resume' | 'end' },
+            callback?: (response: { success: boolean; error?: string }) => void
+        ) => {
             const { sessionId, action } = data;
 
             try {
                 switch (action) {
                     case 'pause':
                         await moderatorController.pauseSession(sessionId);
+                        socket.to(`session:${sessionId}`).emit('session:paused', { sessionId });
                         break;
                     case 'resume':
                         await moderatorController.resumeSession(sessionId);
+                        socket.to(`session:${sessionId}`).emit('session:resumed', { sessionId });
                         break;
                     case 'end':
                         await sessionManager.end(sessionId, 'User ended');
+                        socket.to(`session:${sessionId}`).emit('session:ended', { sessionId });
                         break;
                 }
+                callback?.({ success: true });
             } catch (error: any) {
+                callback?.({ success: false, error: error.message });
                 socket.emit('error', { message: error.message });
             }
         });

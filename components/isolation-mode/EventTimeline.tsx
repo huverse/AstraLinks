@@ -4,35 +4,66 @@
  * 显示讨论事件流，支持自动滚动和 Agent 名称映射
  */
 
-import React, { useRef, useEffect, useMemo } from 'react';
-import { MessageSquare, Bot, User, AlertCircle, PlayCircle, Loader2 } from 'lucide-react';
+import React, { useRef, useEffect, useMemo, useState } from 'react';
+import { MessageSquare, Bot, User, AlertCircle, PlayCircle, Loader2, ArrowDown, Pause, RefreshCw } from 'lucide-react';
 import { DiscussionEvent, Agent } from './types';
 
 interface EventTimelineProps {
     events: DiscussionEvent[];
     agents?: Agent[];
     autoScroll?: boolean;
+    title?: string;
+    showControls?: boolean;
+    isPaused?: boolean;
+    onTogglePause?: () => void;
 }
 
 export const EventTimeline: React.FC<EventTimelineProps> = ({
     events,
     agents = [],
-    autoScroll = true
+    autoScroll = true,
+    title = '讨论实况',
+    showControls = false,
+    isPaused = false,
+    onTogglePause,
 }) => {
     const containerRef = useRef<HTMLDivElement>(null);
+    const [isAtBottom, setIsAtBottom] = useState(true);
+    const [liveUpdate, setLiveUpdate] = useState(true);
 
     // 自动滚动到最新消息
     useEffect(() => {
-        if (autoScroll && containerRef.current) {
+        if (autoScroll && liveUpdate && isAtBottom && containerRef.current) {
             containerRef.current.scrollTop = containerRef.current.scrollHeight;
         }
-    }, [events.length, autoScroll]);
+    }, [events.length, autoScroll, liveUpdate, isAtBottom]);
+
+    // 监听滚动位置
+    const handleScroll = () => {
+        if (!containerRef.current) return;
+        const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
+        setIsAtBottom(scrollHeight - scrollTop - clientHeight < 50);
+    };
+
+    // 滚动到底部
+    const scrollToBottom = () => {
+        if (containerRef.current) {
+            containerRef.current.scrollTop = containerRef.current.scrollHeight;
+            setIsAtBottom(true);
+        }
+    };
 
     // 根据 sourceId 获取 Agent 名称
     const getAgentName = (sourceId: string): string => {
         if (sourceId === 'moderator' || sourceId === 'system') return sourceId;
         const agent = agents.find(a => a.id === sourceId);
         return agent?.name || sourceId;
+    };
+
+    // 根据 sourceId 获取 Agent 立场
+    const getAgentStance = (sourceId: string): 'for' | 'against' | 'neutral' | null => {
+        const agent = agents.find(a => a.id === sourceId);
+        return agent?.stance || null;
     };
 
     // 获取事件图标和样式
@@ -112,52 +143,108 @@ export const EventTimeline: React.FC<EventTimelineProps> = ({
     }, [events]);
 
     return (
-        <div
-            ref={containerRef}
-            className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 scroll-smooth"
-        >
-            {visibleEvents.map(event => {
-                const style = getEventStyle(event);
-                const agentName = getAgentName(event.sourceId);
-                const isThinking = event.type === 'agent:thinking';
-                const content = isThinking ? '正在思考...' : (event.payload?.content || event.payload?.message);
-
-                return (
-                    <div
-                        key={event.id}
-                        className={`p-4 rounded-xl border ${style.bg} transition-all duration-200`}
-                    >
-                        <div className="flex items-center gap-2 mb-2 text-xs text-slate-400">
-                            <span className="flex items-center gap-1 font-medium text-purple-400">
-                                {isThinking ? (
-                                    <Loader2 size={14} className="animate-spin text-yellow-400" />
-                                ) : style.icon}
-                                {event.sourceId === 'moderator' ? '🎙️ 主持人' :
-                                 event.sourceId === 'system' ? '⚙️ 系统' :
-                                 `👤 ${agentName}`}
-                            </span>
-                            <span className="text-slate-600">•</span>
-                            <span className="px-1.5 py-0.5 bg-slate-700/50 rounded text-[10px]">
-                                {style.label}
-                            </span>
-                            {!isThinking && (
-                                <>
-                                    <span className="text-slate-600">•</span>
-                                    <span>#{event.sequence}</span>
-                                </>
-                            )}
-                            <span className="ml-auto">
-                                {new Date(event.timestamp).toLocaleTimeString()}
-                            </span>
-                        </div>
-                        {content && (
-                            <div className={`text-sm whitespace-pre-wrap ${isThinking ? 'text-slate-400 italic' : 'text-slate-200'}`}>
-                                {content}
-                            </div>
+        <div className="flex flex-col h-full">
+            {/* 标题栏和控制 */}
+            {showControls && (
+                <div className="flex items-center justify-between mb-4 pb-3 border-b border-white/10">
+                    <h3 className="text-sm font-medium text-slate-400 uppercase tracking-wider">
+                        {title}
+                    </h3>
+                    <div className="flex items-center gap-2">
+                        {onTogglePause && (
+                            <button
+                                onClick={onTogglePause}
+                                className={`p-1.5 rounded-lg transition-colors ${
+                                    isPaused ? 'bg-yellow-500/20 text-yellow-400' : 'hover:bg-white/10 text-slate-400'
+                                }`}
+                                title={isPaused ? '继续' : '暂停'}
+                            >
+                                <Pause size={14} />
+                            </button>
                         )}
+                        <button
+                            onClick={() => setLiveUpdate(!liveUpdate)}
+                            className={`p-1.5 rounded-lg transition-colors ${
+                                liveUpdate ? 'bg-green-500/20 text-green-400' : 'hover:bg-white/10 text-slate-400'
+                            }`}
+                            title={liveUpdate ? '实时更新已开启' : '实时更新已关闭'}
+                        >
+                            <RefreshCw size={14} />
+                        </button>
                     </div>
-                );
-            })}
+                </div>
+            )}
+
+            {/* 事件列表 */}
+            <div
+                ref={containerRef}
+                onScroll={handleScroll}
+                className="flex-1 space-y-3 overflow-y-auto pr-2 scroll-smooth"
+            >
+                {visibleEvents.map(event => {
+                    const style = getEventStyle(event);
+                    const agentName = getAgentName(event.sourceId);
+                    const agentStance = getAgentStance(event.sourceId);
+                    const isThinking = event.type === 'agent:thinking';
+                    const content = isThinking ? '正在思考...' : (event.payload?.content || event.payload?.message);
+
+                    // 立场颜色
+                    const stanceColor = agentStance === 'for' ? 'text-emerald-400' :
+                                        agentStance === 'against' ? 'text-purple-400' : 'text-slate-400';
+                    const stanceBg = agentStance === 'for' ? 'bg-emerald-500/10 border-emerald-500/20' :
+                                     agentStance === 'against' ? 'bg-purple-500/10 border-purple-500/20' : style.bg;
+
+                    return (
+                        <div
+                            key={event.id}
+                            className={`p-4 rounded-xl border ${isThinking ? style.bg : stanceBg} transition-all duration-200`}
+                        >
+                            <div className="flex items-center gap-2 mb-2 text-xs text-slate-400">
+                                <span className="text-slate-500">
+                                    {new Date(event.timestamp).toLocaleTimeString()}
+                                </span>
+                                {agentStance && (
+                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                                        agentStance === 'for' ? 'bg-emerald-500/20 text-emerald-300' :
+                                        agentStance === 'against' ? 'bg-purple-500/20 text-purple-300' : 'bg-slate-700/50 text-slate-400'
+                                    }`}>
+                                        {agentStance === 'for' ? '正方' : agentStance === 'against' ? '反方' : '中立'}
+                                    </span>
+                                )}
+                                <span className={`flex items-center gap-1 font-medium ${stanceColor}`}>
+                                    {isThinking ? (
+                                        <Loader2 size={14} className="animate-spin text-yellow-400" />
+                                    ) : style.icon}
+                                    {event.sourceId === 'moderator' ? '主持人' :
+                                     event.sourceId === 'system' ? '系统' : agentName}
+                                </span>
+                                <span className="px-1.5 py-0.5 bg-slate-700/50 rounded text-[10px]">
+                                    {style.label}
+                                </span>
+                                {!isThinking && (
+                                    <span className="text-slate-600">#{event.sequence}</span>
+                                )}
+                            </div>
+                            {content && (
+                                <div className={`text-sm whitespace-pre-wrap ${isThinking ? 'text-slate-400 italic' : 'text-slate-200'}`}>
+                                    {content}
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+            </div>
+
+            {/* 滚动到底部按钮 */}
+            {!isAtBottom && (
+                <button
+                    onClick={scrollToBottom}
+                    className="absolute bottom-4 right-4 p-2 bg-purple-600 hover:bg-purple-700 text-white rounded-full shadow-lg transition-all"
+                    title="滚动到底部"
+                >
+                    <ArrowDown size={16} />
+                </button>
+            )}
         </div>
     );
 };

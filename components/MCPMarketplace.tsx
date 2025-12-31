@@ -310,7 +310,7 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
     const checkApiHealth = useCallback(async () => {
         try {
             const response = await fetchAPI<{ success: boolean; healthy: boolean; message: string }>(
-                '/api/mcp-marketplace/health'
+                '/mcp-marketplace/health'
             );
             if (response.success) {
                 setApiHealth({
