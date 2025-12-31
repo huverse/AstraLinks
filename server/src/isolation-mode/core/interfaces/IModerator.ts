@@ -91,6 +91,22 @@ export interface IModeratorLLM {
         score: number;
         feedback: string;
     }>;
+
+    /**
+     * 智能选择下一个发言者
+     * 当没有Agent主动举手时，由AI决定谁应该发言
+     * @param topic 讨论主题
+     * @param recentEvents 最近的讨论事件
+     * @param agents 可选的Agent列表
+     * @param speakCounts 各Agent发言次数统计
+     * @returns 被选中的Agent ID及选择原因
+     */
+    selectNextSpeaker(
+        topic: string,
+        recentEvents: DiscussionEvent[],
+        agents: Array<{ id: string; name: string; role?: string; stance?: string }>,
+        speakCounts: Map<string, number>
+    ): Promise<{ agentId: string; reason: string } | null>;
 }
 
 /**

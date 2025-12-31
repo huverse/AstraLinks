@@ -174,7 +174,11 @@ export const adminAPI = {
     unbanSplitInvitationTree: (treeId: string) =>
         fetchAPI(`/api/split-invitation/admin/unban-tree/${treeId}`, { method: 'POST' }),
     unbanSplitInvitationUser: (userId: number) =>
-        fetchAPI(`/api/split-invitation/admin/unban-user/${userId}`, { method: 'POST' })
+        fetchAPI(`/api/split-invitation/admin/unban-user/${userId}`, { method: 'POST' }),
+
+    // Full hierarchical tree visualization
+    getSplitInvitationFullTree: (treeId: string) =>
+        fetchAPI(`/api/split-invitation/admin/full-tree/${treeId}`)
 };
 
 

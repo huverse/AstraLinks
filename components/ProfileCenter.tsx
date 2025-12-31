@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User, Crown, Star, Shield, Copy, Check, Phone, MessageCircle, Zap, Link2, X, ChevronRight, RefreshCw, Plus, LogOut, Lock, AlertTriangle, Mail, Loader2 } from 'lucide-react';
 import { API_BASE } from '../utils/api';
+import UserInviteTree from './UserInviteTree';
 
 interface ProfileData {
     id: number;
@@ -664,6 +665,11 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                         {splitCodes.message || '您使用的是普通邀请码注册，不在分裂邀请系统中'}
                                     </p>
                                 </div>
+                            )}
+
+                            {/* Invitation Tree */}
+                            {splitEnabled && splitCodes?.treeId && (
+                                <UserInviteTree token={token} isVisible={isOpen} />
                             )}
 
                             {/* Password Change Section */}

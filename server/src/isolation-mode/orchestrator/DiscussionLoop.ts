@@ -180,9 +180,15 @@ export class DiscussionLoop {
                 }
             }
 
-            // 如果没有意图或意图对应的Agent不存在，使用默认选择
+            // 如果没有意图或意图对应的Agent不存在，尝试AI智能选择
             if (!speaker) {
-                speaker = await moderatorController.selectNextSpeaker(sessionId);
+                // 优先使用 AI 智能点名
+                speaker = await moderatorController.selectNextSpeakerByAI(sessionId);
+
+                // AI 点名失败或不可用时，回退到轮流模式
+                if (!speaker) {
+                    speaker = await moderatorController.selectNextSpeaker(sessionId);
+                }
             }
 
             if (!speaker) {

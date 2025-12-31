@@ -6,11 +6,11 @@
 
 import { v4 as uuidv4 } from 'uuid';
 import { SessionState, SessionStatus, SessionConfig, EventType, Intent, IntentUrgencyLevel, DiscussionOutline } from '../core/types';
-import { IModeratorController, IAgent, IRuleEngine } from '../core/interfaces';
+import { IModeratorController, IAgent, IRuleEngine, IModeratorLLM } from '../core/interfaces';
 import { eventLogService, eventBus } from '../event-log';
 import { getDiscussionLoopLauncher } from '../orchestrator/DiscussionLoopLauncher';
 import { weLogger } from '../../services/world-engine-logger';
-import { outlineGenerator } from './index';
+import { outlineGenerator, moderatorLLM } from './index';
 
 /**
  * 主持人控制器实现
@@ -198,6 +198,91 @@ export class ModeratorController implements IModeratorController {
         }
 
         return nextSpeaker;
+    }
+
+    /**
+     * 由AI智能选择下一个发言者
+     * 当意图队列为空时，主持人AI根据讨论进展决定谁应该发言
+     */
+    async selectNextSpeakerByAI(sessionId: string): Promise<IAgent | null> {
+        const state = this.sessions.get(sessionId);
+        const sessionAgents = this.agents.get(sessionId);
+        const config = this.sessionConfigs.get(sessionId);
+
+        if (!state || !sessionAgents || sessionAgents.size === 0) {
+            return null;
+        }
+
+        // 检查介入程度，如果为 0（低），则不使用AI点名
+        const interventionLevel = this.interventionLevels.get(sessionId) ?? 2;
+        if (interventionLevel === 0) {
+            return null; // 返回 null，让调用者使用轮流模式
+        }
+
+        // 准备 Agent 信息
+        const agentList = Array.from(sessionAgents.values());
+        const agentInfoList = agentList.map(a => ({
+            id: a.config.id,
+            name: a.config.name,
+            role: a.config.role,
+            stance: a.config.stance
+        }));
+
+        // 计算发言次数统计
+        const speakCounts = new Map<string, number>();
+        for (const agent of agentList) {
+            speakCounts.set(agent.config.id, agent.state.speakCount || 0);
+        }
+
+        // 获取最近的讨论事件
+        const recentEvents = await eventLogService.getRecentEvents(sessionId, 20);
+
+        // 获取主题
+        const topic = config?.topic || '讨论';
+
+        try {
+            // 调用 ModeratorLLM 进行智能选择
+            const selection = await moderatorLLM.selectNextSpeaker(
+                topic,
+                recentEvents,
+                agentInfoList,
+                speakCounts
+            );
+
+            if (selection) {
+                const selectedAgent = sessionAgents.get(selection.agentId);
+                if (selectedAgent) {
+                    // 设置当前发言者
+                    state.currentSpeakerId = selection.agentId;
+                    state.currentSpeakerStartTime = Date.now();
+
+                    // 发布AI点名事件
+                    await this.publishSystemEvent(sessionId, 'MODERATOR_AI_CALL', {
+                        message: `主持人点名 ${selectedAgent.config.name} 发言`,
+                        agentId: selection.agentId,
+                        agentName: selectedAgent.config.name,
+                        reason: selection.reason,
+                        interventionLevel
+                    });
+
+                    weLogger.info({
+                        sessionId,
+                        agentId: selection.agentId,
+                        agentName: selectedAgent.config.name,
+                        reason: selection.reason
+                    }, 'moderator_ai_selected_speaker');
+
+                    return selectedAgent;
+                }
+            }
+        } catch (error: any) {
+            weLogger.error({
+                sessionId,
+                error: error.message
+            }, 'moderator_ai_selection_error');
+        }
+
+        return null;
     }
 
     /**

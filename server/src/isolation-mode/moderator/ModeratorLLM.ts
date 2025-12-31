@@ -274,6 +274,113 @@ export class ModeratorLLM implements IModeratorLLM {
             feedback: '讨论表现中等，建议增加更多论据支持。',
         };
     }
+
+    /**
+     * 智能选择下一个发言者
+     * 当没有Agent主动举手时，由AI决定谁应该发言
+     */
+    async selectNextSpeaker(
+        topic: string,
+        recentEvents: Event[],
+        agents: Array<{ id: string; name: string; role?: string; stance?: string }>,
+        speakCounts: Map<string, number>
+    ): Promise<{ agentId: string; reason: string } | null> {
+        if (!this.llmProvider || agents.length === 0) {
+            return null;
+        }
+
+        // 构建发言统计
+        const speakStats = agents.map(a => {
+            const count = speakCounts.get(a.id) || 0;
+            return `${a.name}(${a.role || '参与者'}, ${a.stance || '中立'}): ${count}次发言`;
+        }).join('\n');
+
+        // 提取最近发言
+        const recentSpeeches = recentEvents
+            .filter(e => e.type === EventType.SPEECH)
+            .slice(-8)
+            .map(e => {
+                const content = typeof e.content === 'string'
+                    ? e.content
+                    : (e.content as any)?.message || JSON.stringify(e.content);
+                return `${e.speaker}: ${content.slice(0, 200)}`;
+            })
+            .join('\n');
+
+        // 构建 Agent 列表（含 ID）
+        const agentList = agents.map(a => `- ${a.id}: ${a.name} (${a.role || '参与者'}, ${a.stance || '中立'})`).join('\n');
+
+        const messages: LLMMessage[] = [
+            {
+                role: 'system',
+                content: `你是一位专业的讨论主持人。请根据讨论进展，决定下一个应该发言的人。
+
+决策原则：
+1. 优先让发言较少的人有机会表达
+2. 如果某个立场缺少回应，选择该立场的代表
+3. 如果讨论陷入僵局，选择可能带来新观点的人
+4. 避免同一个人连续发言
+5. 考虑谁的观点与当前话题最相关
+
+请以JSON格式返回：{"agentId": "选中的Agent ID", "reason": "简短原因(20字内)"}`,
+            },
+            {
+                role: 'user',
+                content: `讨论主题：${topic}
+
+参与者列表（ID: 名称）：
+${agentList}
+
+发言统计：
+${speakStats}
+
+最近发言：
+${recentSpeeches || '（讨论刚开始）'}
+
+请选择下一个发言者。`,
+            },
+        ];
+
+        try {
+            const result = await this.llmProvider.complete(messages, {
+                maxTokens: 100,
+                temperature: 0.4,
+            });
+
+            // 解析 JSON 响应
+            const jsonMatch = result.content.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                const selectedId = String(parsed.agentId || '').trim();
+                const reason = String(parsed.reason || '轮到发言').trim();
+
+                // 验证选中的 ID 是否在 agents 列表中
+                if (agents.some(a => a.id === selectedId)) {
+                    return { agentId: selectedId, reason };
+                }
+
+                // 如果 ID 不匹配，尝试通过名称匹配
+                const byName = agents.find(a => a.name === selectedId || parsed.agentId?.includes(a.name));
+                if (byName) {
+                    return { agentId: byName.id, reason };
+                }
+            }
+        } catch (error) {
+            console.error('[ModeratorLLM] selectNextSpeaker error:', error);
+        }
+
+        // 兜底：选择发言最少的 Agent
+        let minCount = Infinity;
+        let candidate = agents[0];
+        for (const agent of agents) {
+            const count = speakCounts.get(agent.id) || 0;
+            if (count < minCount) {
+                minCount = count;
+                candidate = agent;
+            }
+        }
+        return { agentId: candidate.id, reason: '发言机会均衡' };
+    }
 }
 
 export const moderatorLLM = new ModeratorLLM();

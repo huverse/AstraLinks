@@ -190,7 +190,7 @@ router.post('/validate/:code', async (req: Request, res: Response) => {
         const { code } = req.params;
 
         const [codes] = await pool.execute<RowDataPacket[]>(
-            `SELECT c.*, t.is_banned as tree_banned 
+            `SELECT c.*, t.is_banned as tree_banned
              FROM split_invitation_codes c
              JOIN split_invitation_trees t ON c.tree_id = t.id
              WHERE c.code = ?`,
@@ -213,6 +213,90 @@ router.post('/validate/:code', async (req: Request, res: Response) => {
         }
 
         res.json({ valid: true, treeId: codes[0].tree_id });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/split-invitation/my-tree
+ * Get current user's invitation tree (who they invited, up to 3 levels)
+ */
+router.get('/my-tree', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user.id;
+
+        // Get user's tree info first
+        const [users] = await pool.execute<RowDataPacket[]>(
+            'SELECT split_tree_id FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (!users[0]?.split_tree_id) {
+            res.json({ tree: null, message: '您不属于分裂邀请系统' });
+            return;
+        }
+
+        // Build tree recursively (up to 3 levels)
+        const buildTree = async (parentId: number, depth: number): Promise<any[]> => {
+            if (depth > 3) return [];
+
+            // Find users invited by this parent
+            const [invitees] = await pool.execute<RowDataPacket[]>(`
+                SELECT u.id, u.username, u.created_at,
+                       (SELECT COUNT(*) FROM split_invitation_codes WHERE creator_user_id = u.id AND is_used = TRUE) as invited_count,
+                       (SELECT MAX(created_at) FROM messages WHERE user_id = u.id) as last_active
+                FROM users u
+                JOIN split_invitation_codes sic ON u.split_code_used = sic.code
+                WHERE sic.creator_user_id = ?
+                ORDER BY u.created_at ASC
+            `, [parentId]);
+
+            const children = [];
+            for (const invitee of invitees) {
+                const subChildren = await buildTree(invitee.id, depth + 1);
+                children.push({
+                    userId: invitee.id,
+                    username: invitee.username,
+                    createdAt: invitee.created_at,
+                    lastActive: invitee.last_active,
+                    invitedCount: invitee.invited_count,
+                    children: subChildren
+                });
+            }
+            return children;
+        };
+
+        // Get current user info
+        const [currentUser] = await pool.execute<RowDataPacket[]>(`
+            SELECT id, username, created_at,
+                   (SELECT COUNT(*) FROM split_invitation_codes WHERE creator_user_id = ? AND is_used = TRUE) as invited_count
+            FROM users WHERE id = ?
+        `, [userId, userId]);
+
+        const tree = {
+            userId: currentUser[0].id,
+            username: currentUser[0].username,
+            createdAt: currentUser[0].created_at,
+            invitedCount: currentUser[0].invited_count,
+            isCurrentUser: true,
+            children: await buildTree(userId, 1)
+        };
+
+        // Calculate total descendants
+        const countDescendants = (node: any): number => {
+            let count = node.children?.length || 0;
+            for (const child of (node.children || [])) {
+                count += countDescendants(child);
+            }
+            return count;
+        };
+
+        res.json({
+            tree,
+            totalDescendants: countDescendants(tree),
+            treeId: users[0].split_tree_id
+        });
     } catch (error: any) {
         res.status(500).json({ error: error.message });
     }
@@ -338,6 +422,123 @@ router.get('/admin/tree/:treeId', authMiddleware, adminMiddleware, async (req: R
             tree: trees[0],
             users,
             codes
+        });
+    } catch (error: any) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/split-invitation/admin/full-tree/:treeId
+ * Get full hierarchical tree structure for visualization
+ */
+router.get('/admin/full-tree/:treeId', authMiddleware, adminMiddleware, async (req: Request, res: Response) => {
+    try {
+        const { treeId } = req.params;
+
+        // Get tree info
+        const [trees] = await pool.execute<RowDataPacket[]>(
+            'SELECT * FROM split_invitation_trees WHERE id = ?',
+            [treeId]
+        );
+
+        if (!trees.length) {
+            res.status(404).json({ error: '邀请树不存在' });
+            return;
+        }
+
+        // Get root code creator (or null if admin-created)
+        const [rootCode] = await pool.execute<RowDataPacket[]>(
+            'SELECT c.*, u.username as used_by_username FROM split_invitation_codes c LEFT JOIN users u ON c.used_by_user_id = u.id WHERE c.id = ?',
+            [trees[0].root_code_id]
+        );
+
+        // Build hierarchical tree structure
+        interface TreeNode {
+            userId: number;
+            username: string;
+            createdAt: string;
+            lastActive: string | null;
+            invitedCount: number;
+            codeUsed: string | null;
+            children: TreeNode[];
+        }
+
+        const buildFullTree = async (parentId: number | null, depth: number = 0): Promise<TreeNode[]> => {
+            // For root level (no parent), find users who used root codes (creator_user_id IS NULL)
+            let query: string;
+            let params: any[];
+
+            if (parentId === null) {
+                // Root level - find users who used codes with no creator (admin-created root codes)
+                query = `
+                    SELECT u.id, u.username, u.created_at, u.split_code_used,
+                           (SELECT COUNT(*) FROM split_invitation_codes WHERE creator_user_id = u.id AND is_used = TRUE) as invited_count,
+                           (SELECT MAX(created_at) FROM messages WHERE user_id = u.id) as last_active
+                    FROM users u
+                    JOIN split_invitation_codes sic ON u.split_code_used = sic.code
+                    WHERE sic.tree_id = ? AND sic.creator_user_id IS NULL
+                    ORDER BY u.created_at ASC
+                `;
+                params = [treeId];
+            } else {
+                // Normal level - find users invited by parent
+                query = `
+                    SELECT u.id, u.username, u.created_at, u.split_code_used,
+                           (SELECT COUNT(*) FROM split_invitation_codes WHERE creator_user_id = u.id AND is_used = TRUE) as invited_count,
+                           (SELECT MAX(created_at) FROM messages WHERE user_id = u.id) as last_active
+                    FROM users u
+                    JOIN split_invitation_codes sic ON u.split_code_used = sic.code
+                    WHERE sic.creator_user_id = ?
+                    ORDER BY u.created_at ASC
+                `;
+                params = [parentId];
+            }
+
+            const [invitees] = await pool.execute<RowDataPacket[]>(query, params);
+
+            const children: TreeNode[] = [];
+            for (const invitee of invitees) {
+                const subChildren = await buildFullTree(invitee.id, depth + 1);
+                children.push({
+                    userId: invitee.id,
+                    username: invitee.username,
+                    createdAt: invitee.created_at,
+                    lastActive: invitee.last_active,
+                    invitedCount: invitee.invited_count,
+                    codeUsed: invitee.split_code_used,
+                    children: subChildren
+                });
+            }
+            return children;
+        };
+
+        // Start building from root
+        const rootNodes = await buildFullTree(null);
+
+        // Calculate statistics
+        const countAll = (nodes: TreeNode[]): { total: number; maxDepth: number } => {
+            let total = nodes.length;
+            let maxDepth = nodes.length > 0 ? 1 : 0;
+            for (const node of nodes) {
+                const sub = countAll(node.children);
+                total += sub.total;
+                maxDepth = Math.max(maxDepth, sub.maxDepth + 1);
+            }
+            return { total, maxDepth };
+        };
+
+        const stats = countAll(rootNodes);
+
+        res.json({
+            treeInfo: trees[0],
+            rootCode: rootCode[0] || null,
+            tree: rootNodes,
+            stats: {
+                totalUsers: stats.total,
+                maxDepth: stats.maxDepth,
+                isBanned: trees[0].is_banned
+            }
         });
     } catch (error: any) {
         res.status(500).json({ error: error.message });

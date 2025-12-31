@@ -1,6 +1,9 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import { parse, isValid } from 'date-fns';
 import { adminAPI } from '../services/api';
-import { Plus, Edit, Trash2, Eye, EyeOff, Clock, Users, Globe, LogIn, UserPlus, Search, Filter, CheckSquare, Square, RefreshCw, FileText, Code, Type, AlertTriangle, Bell, Zap, Calendar, X, Loader2, Save } from 'lucide-react';
+import { Plus, Edit, Trash2, Eye, EyeOff, Clock, Users, Globe, LogIn, UserPlus, Search, Filter, CheckSquare, Square, RefreshCw, FileText, Code, Type, AlertTriangle, Bell, Zap, Calendar, X, Loader2, Save, ChevronDown, ChevronUp, Play, XCircle } from 'lucide-react';
 
 interface Announcement {
     id: number;
@@ -62,6 +65,14 @@ const formatDisplayTime = (isoString: string | null): string => {
     }
 };
 
+// Parse datetime string safely using date-fns to avoid DST/browser quirks
+const parseDateTimeString = (dtString: string): Date | null => {
+    if (!dtString) return null;
+    // Expected format: "YYYY-MM-DDTHH:mm" (datetime-local format)
+    const parsed = parse(dtString, "yyyy-MM-dd'T'HH:mm", new Date());
+    return isValid(parsed) ? parsed : null;
+};
+
 export default function Announcements() {
     const [announcements, setAnnouncements] = useState<Announcement[]>([]);
     const [loading, setLoading] = useState(true);
@@ -81,6 +92,10 @@ export default function Announcements() {
     // 编辑器增强状态
     const [previewMode, setPreviewMode] = useState(false);
     const [saving, setSaving] = useState(false);
+
+    // 定时发布队列状态
+    const [showScheduledQueue, setShowScheduledQueue] = useState(true);
+    const [scheduledOperating, setScheduledOperating] = useState<number | null>(null);
 
     // 筛选后的公告列表
     const filteredAnnouncements = useMemo(() => {
@@ -107,6 +122,22 @@ export default function Announcements() {
             return true;
         });
     }, [announcements, searchQuery, filterDisplayType, filterPriority, filterActive]);
+
+    // 定时发布队列 - start_time > NOW() 且已启用的公告
+    const scheduledAnnouncements = useMemo(() => {
+        const now = new Date();
+        return announcements
+            .filter(item => {
+                if (!item.start_time) return false;
+                const startTime = new Date(item.start_time);
+                return startTime > now;
+            })
+            .sort((a, b) => {
+                const timeA = new Date(a.start_time!).getTime();
+                const timeB = new Date(b.start_time!).getTime();
+                return timeA - timeB; // 按时间升序排列
+            });
+    }, [announcements]);
 
     // Form state with proper types
     const [form, setForm] = useState<{
@@ -324,6 +355,53 @@ export default function Announcements() {
         setFilterActive('all');
     };
 
+    // 定时队列操作：立即发布（设置 start_time = NOW）
+    const handlePublishNow = async (item: Announcement) => {
+        if (!confirm(`确定立即发布「${item.title}」？`)) return;
+        setScheduledOperating(item.id);
+        try {
+            const now = new Date();
+            const formatted = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}:00`;
+            await adminAPI.updateAnnouncement(item.id, { start_time: formatted, is_active: true });
+            loadAnnouncements();
+        } catch (err: any) {
+            alert('立即发布失败：' + err.message);
+        } finally {
+            setScheduledOperating(null);
+        }
+    };
+
+    // 定时队列操作：取消定时（清除 start_time）
+    const handleCancelSchedule = async (item: Announcement) => {
+        if (!confirm(`确定取消「${item.title}」的定时发布？公告将变为草稿状态。`)) return;
+        setScheduledOperating(item.id);
+        try {
+            await adminAPI.updateAnnouncement(item.id, { start_time: null, is_active: false });
+            loadAnnouncements();
+        } catch (err: any) {
+            alert('取消定时失败：' + err.message);
+        } finally {
+            setScheduledOperating(null);
+        }
+    };
+
+    // 计算距离发布的相对时间
+    const getTimeUntilPublish = (startTime: string): string => {
+        const now = new Date();
+        const target = new Date(startTime);
+        const diffMs = target.getTime() - now.getTime();
+        if (diffMs <= 0) return '即将发布';
+
+        const diffMinutes = Math.floor(diffMs / (1000 * 60));
+        if (diffMinutes < 60) return `${diffMinutes}分钟后`;
+
+        const diffHours = Math.floor(diffMinutes / 60);
+        if (diffHours < 24) return `${diffHours}小时后`;
+
+        const diffDays = Math.floor(diffHours / 24);
+        return `${diffDays}天后`;
+    };
+
     // 快捷时间设置
     const setQuickTime = useCallback((type: 'start' | 'end', preset: string) => {
         const now = new Date();
@@ -513,6 +591,87 @@ export default function Announcements() {
                             批量删除
                         </button>
                     </div>
+                </div>
+            )}
+
+            {/* 定时发布队列面板 */}
+            {scheduledAnnouncements.length > 0 && (
+                <div className="bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 border border-amber-200 dark:border-amber-800 rounded-lg mb-4 overflow-hidden">
+                    <button
+                        onClick={() => setShowScheduledQueue(!showScheduledQueue)}
+                        className="w-full px-4 py-3 flex items-center justify-between hover:bg-amber-100/50 dark:hover:bg-amber-900/30 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <Calendar size={18} className="text-amber-600 dark:text-amber-400" />
+                            <span className="font-medium text-amber-800 dark:text-amber-200">定时发布队列</span>
+                            <span className="px-2 py-0.5 bg-amber-200 dark:bg-amber-800 text-amber-700 dark:text-amber-300 text-xs rounded-full font-medium">
+                                {scheduledAnnouncements.length} 条待发布
+                            </span>
+                        </div>
+                        {showScheduledQueue ? <ChevronUp size={18} className="text-amber-600" /> : <ChevronDown size={18} className="text-amber-600" />}
+                    </button>
+                    {showScheduledQueue && (
+                        <div className="border-t border-amber-200 dark:border-amber-800 divide-y divide-amber-100 dark:divide-amber-800/50">
+                            {scheduledAnnouncements.map(item => {
+                                const TypeIcon = displayTypeIcons[item.display_type];
+                                const isOperating = scheduledOperating === item.id;
+                                return (
+                                    <div key={item.id} className="px-4 py-3 flex items-center justify-between gap-4 hover:bg-amber-100/30 dark:hover:bg-amber-900/20">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2 mb-1">
+                                                <Clock size={14} className="text-amber-500 flex-shrink-0" />
+                                                <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                                                    {formatDisplayTime(item.start_time)}
+                                                </span>
+                                                <span className="text-xs text-amber-500 dark:text-amber-400">
+                                                    ({getTimeUntilPublish(item.start_time!)})
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-medium text-gray-800 dark:text-gray-200 truncate">{item.title}</span>
+                                                <span className={`px-1.5 py-0.5 rounded text-xs font-medium ${priorityColors[item.priority]}`}>
+                                                    {priorityLabels[item.priority]}
+                                                </span>
+                                                <span className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                                                    <TypeIcon size={12} />
+                                                    {displayTypeLabels[item.display_type]}
+                                                </span>
+                                                {!item.is_active && (
+                                                    <span className="text-xs text-gray-400">(已禁用)</span>
+                                                )}
+                                            </div>
+                                        </div>
+                                        <div className="flex items-center gap-1 flex-shrink-0">
+                                            <button
+                                                onClick={() => openEditor(item)}
+                                                disabled={isOperating}
+                                                className="p-1.5 text-blue-500 hover:bg-blue-100 dark:hover:bg-blue-900/30 rounded transition-colors disabled:opacity-50"
+                                                title="修改时间"
+                                            >
+                                                <Edit size={16} />
+                                            </button>
+                                            <button
+                                                onClick={() => handlePublishNow(item)}
+                                                disabled={isOperating}
+                                                className="p-1.5 text-green-500 hover:bg-green-100 dark:hover:bg-green-900/30 rounded transition-colors disabled:opacity-50 flex items-center gap-1"
+                                                title="立即发布"
+                                            >
+                                                {isOperating ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
+                                            </button>
+                                            <button
+                                                onClick={() => handleCancelSchedule(item)}
+                                                disabled={isOperating}
+                                                className="p-1.5 text-red-500 hover:bg-red-100 dark:hover:bg-red-900/30 rounded transition-colors disabled:opacity-50"
+                                                title="取消定时"
+                                            >
+                                                <XCircle size={16} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -827,11 +986,25 @@ export default function Announcements() {
                                     </div>
                                     <div className="relative">
                                         <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                        <input
-                                            type="datetime-local"
-                                            value={form.start_time}
-                                            onChange={e => setForm({ ...form, start_time: e.target.value })}
+                                        <DatePicker
+                                            selected={parseDateTimeString(form.start_time)}
+                                            onChange={(date: Date | null) => {
+                                                if (!date) {
+                                                    setForm({ ...form, start_time: '' });
+                                                    return;
+                                                }
+                                                const year = date.getFullYear();
+                                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                                const day = String(date.getDate()).padStart(2, '0');
+                                                const hours = String(date.getHours()).padStart(2, '0');
+                                                const minutes = String(date.getMinutes()).padStart(2, '0');
+                                                setForm({ ...form, start_time: `${year}-${month}-${day}T${hours}:${minutes}` });
+                                            }}
+                                            showTimeSelect
+                                            timeIntervals={5}
+                                            dateFormat="yyyy-MM-dd HH:mm"
                                             className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700"
+                                            wrapperClassName="w-full"
                                         />
                                     </div>
                                 </div>
@@ -860,11 +1033,25 @@ export default function Announcements() {
                                     </div>
                                     <div className="relative">
                                         <Calendar size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-                                        <input
-                                            type="datetime-local"
-                                            value={form.end_time}
-                                            onChange={e => setForm({ ...form, end_time: e.target.value })}
+                                        <DatePicker
+                                            selected={parseDateTimeString(form.end_time)}
+                                            onChange={(date: Date | null) => {
+                                                if (!date) {
+                                                    setForm({ ...form, end_time: '' });
+                                                    return;
+                                                }
+                                                const year = date.getFullYear();
+                                                const month = String(date.getMonth() + 1).padStart(2, '0');
+                                                const day = String(date.getDate()).padStart(2, '0');
+                                                const hours = String(date.getHours()).padStart(2, '0');
+                                                const minutes = String(date.getMinutes()).padStart(2, '0');
+                                                setForm({ ...form, end_time: `${year}-${month}-${day}T${hours}:${minutes}` });
+                                            }}
+                                            showTimeSelect
+                                            timeIntervals={5}
+                                            dateFormat="yyyy-MM-dd HH:mm"
                                             className="w-full pl-10 pr-4 py-3 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none bg-white dark:bg-slate-700"
+                                            wrapperClassName="w-full"
                                         />
                                     </div>
                                 </div>
