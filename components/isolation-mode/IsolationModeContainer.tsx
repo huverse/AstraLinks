@@ -18,7 +18,7 @@ import { Participant } from '../../types';
 import { useIsolationSession } from '../../hooks/useIsolationSession';
 import { isolationSocket } from '../../services/isolationSocket';
 import { isolationLogger } from '../../utils/logger';
-import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS, ScoringResult, SpeakIntent, DiscussionTemplate } from './types';
+import { Agent, Session, Scenario, DiscussionEvent, DEFAULT_SCENARIOS, ScoringResult, SpeakIntent, DiscussionTemplate, CampMode, DebateFlow, DiscussionGoal } from './types';
 import { AgentCard } from './AgentCard';
 import { EventTimeline } from './EventTimeline';
 import { ScenarioSelector } from './ScenarioSelector';
@@ -86,6 +86,20 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
     const [showAdvancedPanels, setShowAdvancedPanels] = useState(true);
     const [geminiApiKey, setGeminiApiKey] = useState<string>('');
     const [enableStreaming, setEnableStreaming] = useState(true); // 流式响应开关
+
+    // P3 配置页面新增状态
+    const [proStance, setProStance] = useState(''); // 正方立场
+    const [conStance, setConStance] = useState(''); // 反方立场
+    const [topicDescription, setTopicDescription] = useState(''); // 议题详细描述
+    const [campMode, setCampMode] = useState<CampMode>('versus'); // 阵营划分
+    const [debateFlow, setDebateFlow] = useState<DebateFlow>('free'); // 辩论流程
+    const [discussionGoal, setDiscussionGoal] = useState<DiscussionGoal>('open'); // 讨论目标
+    const [minSpeechesPerRound, setMinSpeechesPerRound] = useState(2); // 每轮最少发言
+    const [maxSpeechesPerRound, setMaxSpeechesPerRound] = useState(5); // 每轮最多发言
+    const [minRounds, setMinRounds] = useState(1); // 最少轮次
+    const [maxRounds, setMaxRounds] = useState(10); // 最多轮次
+    const [moderatorModel, setModeratorModel] = useState(''); // 主持人模型
+    const [judgeType, setJudgeType] = useState<'none' | 'single' | 'panel'>('none'); // 评委类型
 
     useEffect(() => {
         if (typeof window === 'undefined') return;
@@ -919,7 +933,8 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                 {view === 'setup' && (
                     <div className="h-full flex flex-col lg:flex-row gap-6">
                         {/* 左侧主配置区 */}
-                        <div className="flex-1 space-y-6 overflow-auto">
+                        <div className="flex-1 space-y-6 overflow-auto pr-2">
+                            {/* 场景选择 */}
                             <div>
                                 <h2 className="text-lg font-semibold text-white mb-4">选择讨论场景</h2>
                                 {scenarioLoading && scenarios.length === 0 ? (
@@ -933,6 +948,7 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 )}
                             </div>
 
+                            {/* 讨论主题 */}
                             <div>
                                 <h2 className="text-lg font-semibold text-white mb-4">讨论主题</h2>
                                 <input
@@ -944,6 +960,149 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                 />
                             </div>
 
+                            {/* P3新增: 正方/反方立场输入 */}
+                            {campMode === 'versus' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-emerald-400 mb-2">正方立场</label>
+                                        <input
+                                            type="text"
+                                            value={proStance}
+                                            onChange={e => setProStance(e.target.value)}
+                                            placeholder="支持观点..."
+                                            className="w-full px-4 py-3 bg-slate-800/50 border-2 border-emerald-500/30 rounded-xl text-white placeholder:text-slate-500 focus:border-emerald-500 focus:outline-none transition-colors"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-purple-400 mb-2">反方立场</label>
+                                        <input
+                                            type="text"
+                                            value={conStance}
+                                            onChange={e => setConStance(e.target.value)}
+                                            placeholder="反对观点..."
+                                            className="w-full px-4 py-3 bg-slate-800/50 border-2 border-purple-500/30 rounded-xl text-white placeholder:text-slate-500 focus:border-purple-500 focus:outline-none transition-colors"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* P3新增: 议题描述+观点预览 */}
+                            <div>
+                                <label className="block text-sm font-medium text-white mb-2">议题描述（可选）</label>
+                                <textarea
+                                    value={topicDescription}
+                                    onChange={e => setTopicDescription(e.target.value)}
+                                    placeholder="详细描述议题背景、上下文或讨论要点..."
+                                    rows={3}
+                                    className="w-full px-4 py-3 bg-slate-800/50 border border-white/10 rounded-xl text-white placeholder:text-slate-500 focus:border-purple-500 focus:outline-none transition-colors resize-none"
+                                />
+                                {/* 观点预览卡片 */}
+                                {campMode === 'versus' && (proStance || conStance) && (
+                                    <div className="grid grid-cols-2 gap-3 mt-3">
+                                        {proStance && (
+                                            <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                                                <div className="text-xs text-emerald-400 mb-1">正方观点</div>
+                                                <div className="text-sm text-white">{proStance}</div>
+                                            </div>
+                                        )}
+                                        {conStance && (
+                                            <div className="p-3 bg-purple-500/10 border border-purple-500/30 rounded-xl">
+                                                <div className="text-xs text-purple-400 mb-1">反方观点</div>
+                                                <div className="text-sm text-white">{conStance}</div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* P3新增: 讨论模式 */}
+                            <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5 space-y-4">
+                                <h3 className="text-sm font-medium text-white">讨论模式</h3>
+
+                                {/* 阵营划分 */}
+                                <div>
+                                    <label className="block text-xs text-slate-400 mb-2">阵营划分</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => setCampMode('versus')}
+                                            className={`p-3 rounded-xl border text-left transition-all ${
+                                                campMode === 'versus'
+                                                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-200'
+                                                    : 'bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/20'
+                                            }`}
+                                        >
+                                            <div className="text-sm font-medium">对抗模式</div>
+                                            <div className="text-[10px] opacity-70 mt-1">正反双方观点交锋</div>
+                                        </button>
+                                        <button
+                                            onClick={() => setCampMode('free')}
+                                            className={`p-3 rounded-xl border text-left transition-all ${
+                                                campMode === 'free'
+                                                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-200'
+                                                    : 'bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/20'
+                                            }`}
+                                        >
+                                            <div className="text-sm font-medium">自由模式</div>
+                                            <div className="text-[10px] opacity-70 mt-1">无阵营自由讨论</div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 辩论流程 */}
+                                <div>
+                                    <label className="block text-xs text-slate-400 mb-2">辩论流程</label>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        <button
+                                            onClick={() => setDebateFlow('formal')}
+                                            className={`p-3 rounded-xl border text-left transition-all ${
+                                                debateFlow === 'formal'
+                                                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-200'
+                                                    : 'bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/20'
+                                            }`}
+                                        >
+                                            <div className="text-sm font-medium">正式辩论</div>
+                                            <div className="text-[10px] opacity-70 mt-1">立论→自由→总结</div>
+                                        </button>
+                                        <button
+                                            onClick={() => setDebateFlow('free')}
+                                            className={`p-3 rounded-xl border text-left transition-all ${
+                                                debateFlow === 'free'
+                                                    ? 'bg-purple-500/20 border-purple-500/50 text-purple-200'
+                                                    : 'bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/20'
+                                            }`}
+                                        >
+                                            <div className="text-sm font-medium">自由讨论</div>
+                                            <div className="text-[10px] opacity-70 mt-1">自由→总结</div>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 讨论目标 */}
+                                <div>
+                                    <label className="block text-xs text-slate-400 mb-2">讨论目标</label>
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {[
+                                            { value: 'open' as DiscussionGoal, label: '开放', desc: '自然发展' },
+                                            { value: 'clash' as DiscussionGoal, label: '碰撞', desc: '观点交锋' },
+                                            { value: 'converge' as DiscussionGoal, label: '收敛', desc: '寻求共识' },
+                                        ].map(({ value, label, desc }) => (
+                                            <button
+                                                key={value}
+                                                onClick={() => setDiscussionGoal(value)}
+                                                className={`p-3 rounded-xl border text-center transition-all ${
+                                                    discussionGoal === value
+                                                        ? 'bg-purple-500/20 border-purple-500/50 text-purple-200'
+                                                        : 'bg-slate-900/40 border-white/5 text-slate-400 hover:border-white/20'
+                                                }`}
+                                            >
+                                                <div className="text-sm font-medium">{label}</div>
+                                                <div className="text-[10px] opacity-70 mt-1">{desc}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Agent 配置面板 */}
                             <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5">
                                 <AgentConfigPanel
@@ -952,6 +1111,63 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                     participants={participants}
                                     scenarioType={selectedScenario || undefined}
                                 />
+                            </div>
+
+                            {/* P3新增: 发言条数/轮次范围 */}
+                            <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5 space-y-4">
+                                <h3 className="text-sm font-medium text-white">讨论参数</h3>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* 每轮发言条数 */}
+                                    <div>
+                                        <label className="block text-xs text-slate-400 mb-2">每轮发言条数</label>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                value={minSpeechesPerRound}
+                                                onChange={e => setMinSpeechesPerRound(Math.max(1, parseInt(e.target.value) || 1))}
+                                                min={1}
+                                                max={maxSpeechesPerRound}
+                                                className="w-20 px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+                                            />
+                                            <span className="text-slate-500">~</span>
+                                            <input
+                                                type="number"
+                                                value={maxSpeechesPerRound}
+                                                onChange={e => setMaxSpeechesPerRound(Math.max(minSpeechesPerRound, parseInt(e.target.value) || 5))}
+                                                min={minSpeechesPerRound}
+                                                max={20}
+                                                className="w-20 px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+                                            />
+                                            <span className="text-xs text-slate-500">条</span>
+                                        </div>
+                                    </div>
+
+                                    {/* 轮次范围 */}
+                                    <div>
+                                        <label className="block text-xs text-slate-400 mb-2">讨论轮次</label>
+                                        <div className="flex items-center gap-2">
+                                            <input
+                                                type="number"
+                                                value={minRounds}
+                                                onChange={e => setMinRounds(Math.max(1, parseInt(e.target.value) || 1))}
+                                                min={1}
+                                                max={maxRounds}
+                                                className="w-20 px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+                                            />
+                                            <span className="text-slate-500">~</span>
+                                            <input
+                                                type="number"
+                                                value={maxRounds}
+                                                onChange={e => setMaxRounds(Math.max(minRounds, parseInt(e.target.value) || 10))}
+                                                min={minRounds}
+                                                max={50}
+                                                className="w-20 px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+                                            />
+                                            <span className="text-xs text-slate-500">轮</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             {/* 流式响应开关 */}
@@ -995,6 +1211,44 @@ const IsolationModeContainer: React.FC<IsolationModeContainerProps> = ({ onExit,
                                             <div className="text-[10px] opacity-70 mt-1">{desc}</div>
                                         </button>
                                     ))}
+                                </div>
+                            </div>
+
+                            {/* P3新增: 主持人/评委选择 */}
+                            <div className="bg-slate-800/30 rounded-xl p-4 border border-white/5 space-y-4">
+                                <h3 className="text-sm font-medium text-white">主持人 & 评委</h3>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    {/* 主持人模型 */}
+                                    <div>
+                                        <label className="block text-xs text-slate-400 mb-2">主持人模型</label>
+                                        <select
+                                            value={moderatorModel}
+                                            onChange={e => setModeratorModel(e.target.value)}
+                                            className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+                                        >
+                                            <option value="">使用会话默认</option>
+                                            {participants.map(p => (
+                                                <option key={p.id} value={p.id}>
+                                                    {p.name || p.provider}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    {/* 评委类型 */}
+                                    <div>
+                                        <label className="block text-xs text-slate-400 mb-2">评委（可选）</label>
+                                        <select
+                                            value={judgeType}
+                                            onChange={e => setJudgeType(e.target.value as 'none' | 'single' | 'panel')}
+                                            className="w-full px-3 py-2 bg-slate-900/60 border border-white/10 rounded-lg text-white text-sm focus:border-purple-500 focus:outline-none"
+                                        >
+                                            <option value="none">无评委</option>
+                                            <option value="single">单人评委</option>
+                                            <option value="panel">评委团</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
 

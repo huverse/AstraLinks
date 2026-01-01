@@ -201,3 +201,44 @@ export interface DiscussionTemplate {
 // ============================================
 
 export type ExportFormat = 'markdown' | 'json' | 'pdf' | 'word';
+
+// ============================================
+// P3配置页面新增类型
+// ============================================
+
+/** 阵营划分模式 */
+export type CampMode = 'versus' | 'free';
+
+/** 辩论流程 */
+export type DebateFlow = 'formal' | 'free';
+
+/** 讨论目标 */
+export type DiscussionGoal = 'open' | 'clash' | 'converge';
+
+/** 讨论配置 */
+export interface DiscussionConfig {
+    /** 正方立场描述 */
+    proStance: string;
+    /** 反方立场描述 */
+    conStance: string;
+    /** 议题详细描述 */
+    topicDescription: string;
+    /** 阵营划分 */
+    campMode: CampMode;
+    /** 辩论流程 */
+    debateFlow: DebateFlow;
+    /** 讨论目标 */
+    discussionGoal: DiscussionGoal;
+    /** 每轮最少发言条数 */
+    minSpeechesPerRound: number;
+    /** 每轮最多发言条数 */
+    maxSpeechesPerRound: number;
+    /** 最少轮次 */
+    minRounds: number;
+    /** 最多轮次 */
+    maxRounds: number;
+    /** 主持人模型配置 */
+    moderatorModel?: string;
+    /** 评委类型 */
+    judgeType?: 'none' | 'single' | 'panel';
+}
