@@ -7,6 +7,8 @@ import React, { useState, useCallback } from 'react';
 import type { FutureView } from './types';
 import FutureLetterHome from './FutureLetterHome';
 import ComposeLetterPage from './ComposeLetterPage';
+import LetterListPage from './LetterListPage';
+import ViewLetterPage from './ViewLetterPage';
 
 interface FutureLetterContainerProps {
     onBack: () => void;
@@ -46,38 +48,48 @@ export default function FutureLetterContainer({ onBack }: FutureLetterContainerP
                 );
 
             case 'sent':
-            case 'received':
-            case 'drafts':
-                // TODO: Implement list pages
                 return (
-                    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center">
-                        <div className="text-center">
-                            <p className="text-xl mb-4">{view} 页面开发中...</p>
-                            <button
-                                onClick={handleBackToHome}
-                                className="px-6 py-2 bg-purple-500 rounded-lg hover:bg-purple-600 transition-colors"
-                            >
-                                返回首页
-                            </button>
-                        </div>
-                    </div>
+                    <LetterListPage
+                        type="sent"
+                        onBack={handleBackToHome}
+                        onNavigate={handleNavigate}
+                    />
+                );
+
+            case 'received':
+                return (
+                    <LetterListPage
+                        type="received"
+                        onBack={handleBackToHome}
+                        onNavigate={handleNavigate}
+                    />
+                );
+
+            case 'drafts':
+                return (
+                    <LetterListPage
+                        type="drafts"
+                        onBack={handleBackToHome}
+                        onNavigate={handleNavigate}
+                    />
                 );
 
             case 'detail':
-                // TODO: Implement detail page
+                if (!selectedLetterId) {
+                    // No letter ID, go back to home
+                    return (
+                        <FutureLetterHome
+                            onBack={onBack}
+                            onNavigate={handleNavigate}
+                        />
+                    );
+                }
                 return (
-                    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center">
-                        <div className="text-center">
-                            <p className="text-xl mb-4">信件详情页开发中...</p>
-                            <p className="text-white/50 mb-4">Letter ID: {selectedLetterId}</p>
-                            <button
-                                onClick={handleBackToHome}
-                                className="px-6 py-2 bg-purple-500 rounded-lg hover:bg-purple-600 transition-colors"
-                            >
-                                返回首页
-                            </button>
-                        </div>
-                    </div>
+                    <ViewLetterPage
+                        letterId={selectedLetterId}
+                        onBack={handleBackToHome}
+                        onNavigate={handleNavigate}
+                    />
                 );
 
             case 'settings':
