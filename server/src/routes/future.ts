@@ -332,6 +332,68 @@ router.get('/templates', asyncHandler(async (_req: AuthRequest, res: Response) =
 }));
 
 // ============================================
+// User Routes - Music
+// ============================================
+
+/**
+ * GET /api/future/music/parse - 解析网易云音乐歌曲信息
+ * 使用网易云音乐公开API获取歌曲信息
+ */
+router.get('/music/parse', asyncHandler(async (req: AuthRequest, res: Response) => {
+    const songId = req.query.id as string;
+
+    if (!songId || !/^\d+$/.test(songId)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的歌曲ID' }
+        });
+        return;
+    }
+
+    try {
+        // 使用网易云音乐公开API获取歌曲详情
+        // 注意：这是公开API，可能有频率限制
+        const apiUrl = `https://music.163.com/api/song/detail?ids=[${songId}]`;
+        const response = await fetch(apiUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Referer': 'https://music.163.com/',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch song info');
+        }
+
+        const data = await response.json() as { songs?: Array<{ name: string; artists?: Array<{ name: string }>; album?: { name: string; picUrl: string }; duration?: number }> };
+        const song = data.songs?.[0];
+
+        if (!song) {
+            res.status(404).json({
+                error: { code: 'NOT_FOUND', message: '歌曲不存在' }
+            });
+            return;
+        }
+
+        res.json({
+            id: songId,
+            name: song.name,
+            artist: song.artists?.map((a: { name: string }) => a.name).join(' / ') || '未知艺术家',
+            album: song.album?.name,
+            coverUrl: song.album?.picUrl,
+            duration: song.duration,
+        });
+    } catch (error) {
+        // 解析失败时返回基本信息，让前端仍可使用
+        console.warn('Failed to parse music info:', error);
+        res.json({
+            id: songId,
+            name: `歌曲 ${songId}`,
+            artist: '未知',
+        });
+    }
+}));
+
+// ============================================
 // User Routes - Attachments
 // ============================================
 

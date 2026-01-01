@@ -33,6 +33,7 @@ import type {
     MusicInfo,
 } from './types';
 import AttachmentUploader, { type AttachmentItem } from './components/AttachmentUploader';
+import MusicSelector from './components/MusicSelector';
 import { COMMON_TIMEZONES } from './types';
 
 interface ComposeLetterPageProps {
@@ -582,7 +583,18 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             </div>
 
             {/* Template Selector Modal - TODO */}
-            {/* Music Search Modal - TODO */}
+
+            {/* Music Selector Modal */}
+            <MusicSelector
+                isOpen={showMusicSearch}
+                onClose={() => setShowMusicSearch(false)}
+                onSelect={(musicInfo, musicUrl) => {
+                    updateState('musicInfo', musicInfo);
+                    updateState('musicUrl', musicUrl);
+                }}
+                currentMusic={state.musicInfo}
+            />
+
             {/* AI Assist Panel - TODO */}
         </div>
     );
