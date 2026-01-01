@@ -29,7 +29,7 @@ async function isTurnstileLoginEnabled(): Promise<boolean> {
 /**
  * Verify Cloudflare Turnstile token
  */
-async function verifyTurnstileToken(token: string, ip: string): Promise<{ success: boolean; error?: string }> {
+export async function verifyTurnstileToken(token: string, ip: string): Promise<{ success: boolean; error?: string }> {
     // If no secret key configured, skip verification
     if (!TURNSTILE_SECRET_KEY) {
         console.warn('[Turnstile] No secret key configured, skipping verification');

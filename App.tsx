@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Send, Settings, Users, Trash2, Menu, ImagePlus, BrainCircuit, X, Gavel, BookOpen, AlertTriangle, Share2, Download, Copy, Check, Plus, MessageSquare, MoreHorizontal, FileJson, Square, Handshake, Lock, Upload, User, Zap, Cpu, Sparkles, Coffee, Vote, Edit2, BarChart2, Wand2, RefreshCw, Hammer, Loader2, FileText, Book, ChevronDown, ChevronUp, UserX, LogIn, UserCheck, Layers, Key, FlaskConical } from 'lucide-react';
+import { Send, Settings, Users, Trash2, Menu, ImagePlus, BrainCircuit, X, Gavel, BookOpen, AlertTriangle, Share2, Download, Copy, Check, Plus, MessageSquare, MoreHorizontal, FileJson, Square, Handshake, Lock, Upload, User, Zap, Cpu, Sparkles, Coffee, Vote, Edit2, BarChart2, Wand2, RefreshCw, Hammer, Loader2, FileText, Book, ChevronDown, ChevronUp, UserX, LogIn, UserCheck, Layers, Key, FlaskConical, Mail } from 'lucide-react';
 import { DEFAULT_PARTICIPANTS, USER_ID } from './constants';
 import { Message, Participant, ParticipantConfig, GameMode, Session, ProviderType, TokenUsage, RefereeContext, VoteState } from './types';
 import ChatMessage from './components/ChatMessage';
@@ -18,6 +18,7 @@ import { useWorkspace } from './hooks/useWorkspace';
 import { useAuth } from './contexts/AuthContext';
 import { generateResponse, generateSessionTitle, detectRefereeIntent, summarizeHistory } from './services/aiService';
 import { IsolationModeContainer } from './components/isolation-mode';
+import { FutureLetterContainer } from './components/future';
 
 // Declare html2canvas globally
 declare const html2canvas: any;
@@ -254,13 +255,13 @@ const App: React.FC = () => {
   const { workspace } = useWorkspace(selectedWorkspaceId);
 
   // Isolation Mode State (Experimental)
+  // Isolation Mode State (Experimental)
   const [isolationMode, setIsolationMode] = useState(() => {
     try {
       return localStorage.getItem('galaxyous_isolation_mode') === 'true';
     } catch { return false; }
   });
   const [isolationModeFlipping, setIsolationModeFlipping] = useState(false);
-
   const toggleIsolationMode = () => {
     setIsolationModeFlipping(true);
     setTimeout(() => {
@@ -270,6 +271,25 @@ const App: React.FC = () => {
         return next;
       });
       setTimeout(() => setIsolationModeFlipping(false), 600);
+    }, 300);
+  };
+
+  // Future Letters Mode
+  const [isFutureMode, setIsFutureMode] = useState(() => {
+    try {
+      return localStorage.getItem('galaxyous_future_mode') === 'true';
+    } catch { return false; }
+  });
+  const [futureModeFlipping, setFutureModeFlipping] = useState(false);
+  const toggleFutureMode = () => {
+    setFutureModeFlipping(true);
+    setTimeout(() => {
+      setIsFutureMode(prev => {
+        const next = !prev;
+        localStorage.setItem('galaxyous_future_mode', String(next));
+        return next;
+      });
+      setTimeout(() => setFutureModeFlipping(false), 600);
     }, 300);
   };
 
@@ -1604,6 +1624,25 @@ const App: React.FC = () => {
   const activeCount = participants.filter(p => p.config.enabled).length;
   const isJudgeModeActive = activeSession.gameMode === GameMode.JUDGE_MODE;
 
+  // Future Letters Mode: 时光信模块 with flip animation
+  if (isFutureMode) {
+    return (
+      <div
+        className={`h-[100dvh] transition-transform duration-600 ${futureModeFlipping ? 'animate-flip-in' : ''}`}
+        style={{ perspective: '1000px' }}
+      >
+        <FutureLetterContainer onBack={toggleFutureMode} />
+        <style>{`
+          @keyframes flip-in {
+            0% { transform: rotateY(180deg); opacity: 0; }
+            100% { transform: rotateY(0deg); opacity: 1; }
+          }
+          .animate-flip-in { animation: flip-in 0.6s ease-out; }
+        `}</style>
+      </div>
+    );
+  }
+
   // Isolation Mode: Show completely different UI
   if (isolationMode) {
     return (
@@ -1624,7 +1663,7 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className={`flex h-[100dvh] bg-[#f5f5f7] dark:bg-black font-sans text-slate-900 dark:text-slate-100 overflow-hidden relative selection:bg-blue-200 dark:selection:bg-blue-900 ${isolationModeFlipping ? 'animate-flip-out' : ''}`}>
+    <div className={`flex h-[100dvh] bg-[#f5f5f7] dark:bg-black font-sans text-slate-900 dark:text-slate-100 overflow-hidden relative selection:bg-blue-200 dark:selection:bg-blue-900 ${(isolationModeFlipping || futureModeFlipping) ? 'animate-flip-out' : ''}`}>
       <style>{`
         @keyframes flip-out {
           0% { transform: rotateY(0deg); opacity: 1; }
@@ -1735,6 +1774,20 @@ const App: React.FC = () => {
         </div>
 
         <div className="pt-4 border-t border-slate-200 dark:border-white/10 space-y-2">
+          {/* Future Letters Toggle - 时光信 */}
+          <button
+            onClick={() => {
+              toggleFutureMode();
+              setIsSidebarOpen(false);
+            }}
+            className={`w-full flex items-center justify-center gap-2 p-3 rounded-xl transition-all text-sm font-medium ${isFutureMode
+              ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/20'
+              : 'bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300'
+              }`}
+          >
+            <Mail size={18} />
+            时光信
+          </button>
           {/* Isolation Mode Toggle - Experimental */}
           <button
             onClick={() => {
