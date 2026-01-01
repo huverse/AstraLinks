@@ -32,6 +32,12 @@ import type {
     UpdateLetterRequest,
     MusicInfo,
 } from './types';
+
+// 用户信息接口
+interface UserInfo {
+    email?: string;
+    username?: string;
+}
 import AttachmentUploader, { type AttachmentItem } from './components/AttachmentUploader';
 import MusicSelector from './components/MusicSelector';
 import { COMMON_TIMEZONES } from './types';
@@ -70,6 +76,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     const [showAIAssist, setShowAIAssist] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
+    const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
     const contentRef = useRef<HTMLTextAreaElement>(null);
 
     // 加载草稿或初始化
@@ -78,7 +85,26 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             loadDraft(draftId);
         }
         loadTemplates();
+        loadUserInfo();
     }, [draftId]);
+
+    // 加载用户信息（获取邮箱）
+    const loadUserInfo = async () => {
+        try {
+            const response = await fetch('/api/auth/me', {
+                credentials: 'include',
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setUserInfo({
+                    email: data.user?.email,
+                    username: data.user?.username,
+                });
+            }
+        } catch (error) {
+            console.error('Failed to load user info:', error);
+        }
+    };
 
     // 自动保存
     useEffect(() => {
@@ -168,7 +194,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
         try {
             const payload: CreateLetterRequest | UpdateLetterRequest = {
                 recipientType: state.recipientType,
-                recipientEmail: state.recipientType === 'other' ? state.recipientEmail : undefined,
+                recipientEmail: state.recipientEmail || undefined,  // 所有类型都需要邮箱
                 recipientName: state.recipientName || undefined,
                 title: state.title,
                 content: state.content,
@@ -233,8 +259,9 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             setError('请选择送达时间');
             return;
         }
-        if (state.recipientType === 'other' && !state.recipientEmail.trim()) {
-            setError('请填写收件人邮箱');
+        // 所有类型都需要邮箱
+        if (!state.recipientEmail.trim()) {
+            setError(state.recipientType === 'self' ? '请填写你的邮箱' : '请填写收件人邮箱');
             return;
         }
 
@@ -352,7 +379,42 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                         </button>
                     </div>
 
-                    {/* Recipient Email (for others) */}
+                    {/* Self Email Input */}
+                    {state.recipientType === 'self' && (
+                        <div className="mt-4 space-y-3">
+                            <div className="relative">
+                                <input
+                                    type="email"
+                                    value={state.recipientEmail}
+                                    onChange={(e) => updateState('recipientEmail', e.target.value)}
+                                    placeholder="你的邮箱 *（信件将发送到此邮箱）"
+                                    className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-xl focus:border-purple-500 focus:outline-none transition-colors"
+                                />
+                                {userInfo?.email && !state.recipientEmail && (
+                                    <button
+                                        type="button"
+                                        onClick={() => updateState('recipientEmail', userInfo.email || '')}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 px-3 py-1 text-xs bg-purple-500/30 text-purple-300 rounded-lg hover:bg-purple-500/40 transition-colors"
+                                    >
+                                        使用 {userInfo.email}
+                                    </button>
+                                )}
+                            </div>
+                            {!userInfo?.email && (
+                                <p className="text-xs text-amber-400/80 flex items-center gap-1">
+                                    <Info className="w-3 h-3" />
+                                    你还没有在个人中心绑定邮箱，请手动输入
+                                </p>
+                            )}
+                            {userInfo?.email && state.recipientEmail && state.recipientEmail !== userInfo.email && (
+                                <p className="text-xs text-white/50">
+                                    将发送到：{state.recipientEmail}（与个人中心绑定邮箱不同）
+                                </p>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Other Recipient Email */}
                     {state.recipientType === 'other' && (
                         <div className="mt-4 space-y-3">
                             <input
@@ -569,7 +631,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={state.isSubmitting || !state.title.trim() || !state.content.trim() || !state.scheduledLocal}
+                        disabled={state.isSubmitting || !state.title.trim() || !state.content.trim() || !state.scheduledLocal || !state.recipientEmail.trim()}
                         className="flex-1 py-3 px-6 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/30 transition-shadow disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {state.isSubmitting ? (
