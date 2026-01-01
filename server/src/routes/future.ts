@@ -6,6 +6,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { verifyTurnstileToken } from './auth';
 import * as letterService from '../services/future/letterService';
 import * as deliveryService from '../services/future/deliveryService';
+import * as uploadService from '../services/future/uploadService';
 import type {
     CreateLetterRequest,
     UpdateLetterRequest,
@@ -51,7 +52,7 @@ function requireAdmin(req: AuthRequest, res: Response, next: NextFunction): void
 }
 
 /**
- * 错误处理包装器
+ * 异步错误处理包装器
  */
 function asyncHandler(
     fn: (req: AuthRequest, res: Response) => Promise<void>
@@ -59,6 +60,27 @@ function asyncHandler(
     return (req, res, next) => {
         Promise.resolve(fn(req as AuthRequest, res)).catch(next);
     };
+}
+
+/**
+ * 上传错误处理
+ */
+function handleUploadError(res: Response, error: unknown): void {
+    if (error instanceof uploadService.UploadError) {
+        res.status(error.status).json({
+            error: {
+                code: error.code,
+                message: error.message,
+                details: error.details,
+            }
+        });
+        return;
+    }
+
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    res.status(500).json({
+        error: { code: 'INTERNAL_ERROR', message }
+    });
 }
 
 // ============================================
@@ -307,6 +329,109 @@ router.post('/letters/:id/submit', requireAuth, asyncHandler(async (req: AuthReq
 router.get('/templates', asyncHandler(async (_req: AuthRequest, res: Response) => {
     const templates = await letterService.getTemplates();
     res.json(templates);
+}));
+
+// ============================================
+// User Routes - Attachments
+// ============================================
+
+/**
+ * POST /api/future/letters/:id/attachments - 上传附件
+ */
+router.post('/letters/:id/attachments', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const letterId = req.params.id;
+
+    try {
+        const attachment = await uploadService.uploadAttachment(letterId, userId, req.body);
+        res.status(201).json(attachment);
+    } catch (error: unknown) {
+        handleUploadError(res, error);
+    }
+}));
+
+/**
+ * GET /api/future/letters/:id/attachments - 获取信件附件列表
+ */
+router.get('/letters/:id/attachments', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const letterId = req.params.id;
+
+    const attachments = await uploadService.getAttachmentsForLetter(letterId, userId);
+    res.json(attachments);
+}));
+
+/**
+ * DELETE /api/future/letters/:id/attachments/:attachmentId - 删除附件
+ */
+router.delete('/letters/:id/attachments/:attachmentId', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const letterId = req.params.id;
+    const attachmentId = parseInt(req.params.attachmentId, 10);
+
+    if (isNaN(attachmentId)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的附件ID' }
+        });
+        return;
+    }
+
+    try {
+        const deleted = await uploadService.deleteAttachment(letterId, attachmentId, userId);
+
+        if (!deleted) {
+            res.status(404).json({
+                error: { code: 'NOT_FOUND', message: '附件不存在' }
+            });
+            return;
+        }
+
+        res.status(204).send();
+    } catch (error: unknown) {
+        handleUploadError(res, error);
+    }
+}));
+
+/**
+ * GET /api/future/attachments/* - 获取附件文件
+ */
+router.get('/attachments/*', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    // 从URL中提取storageKey (去掉 /attachments/ 前缀)
+    const storageKey = req.params[0];
+
+    if (!storageKey) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的附件路径' }
+        });
+        return;
+    }
+
+    try {
+        const fileInfo = await uploadService.getAttachmentForDownload(storageKey, userId);
+
+        if (!fileInfo) {
+            res.status(404).json({
+                error: { code: 'NOT_FOUND', message: '附件不存在或无权访问' }
+            });
+            return;
+        }
+
+        // 设置响应头
+        res.setHeader('Content-Type', fileInfo.mimeType);
+        res.setHeader('Cache-Control', 'private, max-age=3600');
+
+        if (fileInfo.downloadName) {
+            // 支持中文文件名
+            const encodedName = encodeURIComponent(fileInfo.downloadName);
+            res.setHeader('Content-Disposition', `inline; filename*=UTF-8''${encodedName}`);
+        }
+
+        // 发送文件
+        res.sendFile(fileInfo.filePath);
+    } catch (error: unknown) {
+        handleUploadError(res, error);
+    }
 }));
 
 // ============================================

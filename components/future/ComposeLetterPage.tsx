@@ -32,6 +32,7 @@ import type {
     UpdateLetterRequest,
     MusicInfo,
 } from './types';
+import AttachmentUploader, { type AttachmentItem } from './components/AttachmentUploader';
 import { COMMON_TIMEZONES } from './types';
 
 interface ComposeLetterPageProps {
@@ -61,6 +62,7 @@ const INITIAL_STATE: ComposeState = {
 
 export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPageProps) {
     const [state, setState] = useState<ComposeState>(INITIAL_STATE);
+    const [attachmentItems, setAttachmentItems] = useState<AttachmentItem[]>([]);
     const [templates, setTemplates] = useState<FutureLetterTemplate[]>([]);
     const [showTemplates, setShowTemplates] = useState(false);
     const [showMusicSearch, setShowMusicSearch] = useState(false);
@@ -121,6 +123,15 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 version: letter.version,
                 isDirty: false,
             }));
+
+            // 加载附件
+            const attachmentsRes = await fetch(`/api/future/letters/${id}/attachments`, {
+                credentials: 'include',
+            });
+            if (attachmentsRes.ok) {
+                const attachments = await attachmentsRes.json();
+                setAttachmentItems(attachments);
+            }
         } catch (error) {
             console.error('Failed to load draft:', error);
             setError('加载草稿失败');
@@ -525,6 +536,22 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                         </div>
                         <div className="text-white/50">→</div>
                     </button>
+                </section>
+
+                {/* Attachments */}
+                <section className="mb-6">
+                    <label className="block text-sm font-medium text-white/70 mb-3 flex items-center gap-2">
+                        <Image className="w-4 h-4" />
+                        附件
+                    </label>
+                    <AttachmentUploader
+                        letterId={state.draftId}
+                        attachments={attachmentItems}
+                        onAttachmentsChange={setAttachmentItems}
+                        maxImages={2}
+                        maxAudio={1}
+                        disabled={state.isSubmitting}
+                    />
                 </section>
             </main>
 
