@@ -3,6 +3,33 @@
 -- Description: Tables for time-capsule letter functionality
 
 -- ============================================
+-- Table 0: future_letter_templates (信纸模板) - 需先创建，被主表引用
+-- ============================================
+CREATE TABLE IF NOT EXISTS future_letter_templates (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    description VARCHAR(500),
+    preview_url VARCHAR(500),
+    thumbnail_url VARCHAR(500),
+    css_class VARCHAR(100),
+    css_styles TEXT,  -- Custom CSS
+    background_url VARCHAR(500),
+
+    category ENUM('classic', 'modern', 'festival', 'romantic', 'business') DEFAULT 'classic',
+    is_premium BOOLEAN DEFAULT FALSE,
+    price DECIMAL(10,2) DEFAULT 0,
+
+    sort_order INT DEFAULT 0,
+    enabled BOOLEAN DEFAULT TRUE,
+
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_category (category),
+    INDEX idx_enabled_sort (enabled, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ============================================
 -- Table 1: future_letters (主表)
 -- ============================================
 CREATE TABLE IF NOT EXISTS future_letters (
@@ -154,34 +181,7 @@ CREATE TABLE IF NOT EXISTS future_letter_physical (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================
--- Table 3: future_letter_templates (信纸模板)
--- ============================================
-CREATE TABLE IF NOT EXISTS future_letter_templates (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    description VARCHAR(500),
-    preview_url VARCHAR(500),
-    thumbnail_url VARCHAR(500),
-    css_class VARCHAR(100),
-    css_styles TEXT,  -- Custom CSS
-    background_url VARCHAR(500),
-
-    category ENUM('classic', 'modern', 'festival', 'romantic', 'business') DEFAULT 'classic',
-    is_premium BOOLEAN DEFAULT FALSE,
-    price DECIMAL(10,2) DEFAULT 0,
-
-    sort_order INT DEFAULT 0,
-    enabled BOOLEAN DEFAULT TRUE,
-
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-    INDEX idx_category (category),
-    INDEX idx_enabled_sort (enabled, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ============================================
--- Table 4: future_letter_settings (系统设置)
+-- Table 3: future_letter_settings (系统设置)
 -- ============================================
 CREATE TABLE IF NOT EXISTS future_letter_settings (
     setting_key VARCHAR(100) PRIMARY KEY,
