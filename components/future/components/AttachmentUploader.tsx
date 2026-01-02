@@ -14,6 +14,8 @@ import {
     Pause,
     AlertCircle,
 } from 'lucide-react';
+import { useAuth } from '../../../contexts/AuthContext';
+import { API_BASE } from '../../../utils/api';
 
 export interface AttachmentItem {
     id: number;
@@ -60,6 +62,7 @@ export default function AttachmentUploader({
     maxAudio = 1,
     disabled = false,
 }: AttachmentUploaderProps) {
+    const { token } = useAuth();
     const [uploading, setUploading] = useState<UploadingFile[]>([]);
     const [error, setError] = useState<string | null>(null);
     const [playingAudio, setPlayingAudio] = useState<string | null>(null);
@@ -123,9 +126,12 @@ export default function AttachmentUploader({
 
         const base64 = await fileToBase64(file);
 
-        const response = await fetch(`/api/future/letters/${letterId}/attachments`, {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const response = await fetch(`${API_BASE}/api/future/letters/${letterId}/attachments`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers,
             credentials: 'include',
             body: JSON.stringify({
                 fileName: file.name,
@@ -202,9 +208,12 @@ export default function AttachmentUploader({
         if (!letterId || disabled) return;
 
         try {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             const response = await fetch(
-                `/api/future/letters/${letterId}/attachments/${attachment.id}`,
-                { method: 'DELETE', credentials: 'include' }
+                `${API_BASE}/api/future/letters/${letterId}/attachments/${attachment.id}`,
+                { method: 'DELETE', credentials: 'include', headers }
             );
 
             if (!response.ok && response.status !== 404) {
@@ -225,7 +234,7 @@ export default function AttachmentUploader({
             setPlayingAudio(null);
         } else {
             if (audioRef.current) {
-                audioRef.current.src = `/api/future/attachments/${storageKey}`;
+                audioRef.current.src = `${API_BASE}/api/future/attachments/${storageKey}`;
                 audioRef.current.play();
             }
             setPlayingAudio(storageKey);
@@ -246,10 +255,10 @@ export default function AttachmentUploader({
         return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     };
 
-    const getAttachmentUrl = (storageKey: string) => `/api/future/attachments/${storageKey}`;
+    const getAttachmentUrl = (storageKey: string) => `${API_BASE}/api/future/attachments/${storageKey}`;
     const getThumbnailUrl = (attachment: AttachmentItem) =>
         attachment.thumbnailKey
-            ? `/api/future/attachments/${attachment.thumbnailKey}`
+            ? `${API_BASE}/api/future/attachments/${attachment.thumbnailKey}`
             : getAttachmentUrl(attachment.storageKey);
 
     return (

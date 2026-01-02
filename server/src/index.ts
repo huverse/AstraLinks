@@ -42,6 +42,7 @@ import { initScheduler } from './services/scheduler';
 import { initWorldEngineSocket } from './isolation-mode/websocket';
 import { initializeWebSocketGateway } from './isolation-mode/api/websocket/DiscussionGateway';
 import { sessionRoutes as isolationSessionRoutes, agentRoutes as isolationAgentRoutes, eventRoutes as isolationEventRoutes, scenarioRoutes as isolationScenarioRoutes } from './isolation-mode/api/routes';
+import futureRoutes from './routes/future';
 import { discussionLoop } from './isolation-mode/orchestrator/DiscussionLoop';
 import { registerDiscussionLoopLauncher } from './isolation-mode/orchestrator/DiscussionLoopLauncher';
 import { validateConfig, isProductionLike } from './config/world-engine.config';
@@ -96,6 +97,7 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/workflows', collaborationRoutes); // P5 协作功能 (嵌套在 workflows 下)
 app.use('/api/database', databaseRoutes); // P7 数据库连接器
 app.use('/api/v1/world-engine', worldEngineRoutes); // World Engine API v1
+app.use('/api/future', futureRoutes); // 时光信 API
 
 // 隔离模式 API
 app.use('/api/isolation/sessions', isolationSessionRoutes);

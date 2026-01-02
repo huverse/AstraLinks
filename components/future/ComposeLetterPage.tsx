@@ -32,6 +32,8 @@ import type {
     UpdateLetterRequest,
     MusicInfo,
 } from './types';
+import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE } from '../../utils/api';
 
 // 用户信息接口
 interface UserInfo {
@@ -68,6 +70,7 @@ const INITIAL_STATE: ComposeState = {
 };
 
 export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPageProps) {
+    const { token } = useAuth();
     const [state, setState] = useState<ComposeState>(INITIAL_STATE);
     const [attachmentItems, setAttachmentItems] = useState<AttachmentItem[]>([]);
     const [templates, setTemplates] = useState<FutureLetterTemplate[]>([]);
@@ -91,8 +94,9 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     // 加载用户信息（获取邮箱）
     const loadUserInfo = async () => {
         try {
-            const response = await fetch('/api/auth/me', {
+            const response = await fetch(`${API_BASE}/api/auth/me`, {
                 credentials: 'include',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             });
             if (response.ok) {
                 const data = await response.json();
@@ -119,8 +123,9 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
 
     const loadDraft = async (id: string) => {
         try {
-            const response = await fetch(`/api/future/letters/${id}`, {
+            const response = await fetch(`${API_BASE}/api/future/letters/${id}`, {
                 credentials: 'include',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             });
             if (!response.ok) throw new Error('Failed to load draft');
 
@@ -152,8 +157,9 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             }));
 
             // 加载附件
-            const attachmentsRes = await fetch(`/api/future/letters/${id}/attachments`, {
+            const attachmentsRes = await fetch(`${API_BASE}/api/future/letters/${id}/attachments`, {
                 credentials: 'include',
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {},
             });
             if (attachmentsRes.ok) {
                 const attachments = await attachmentsRes.json();
@@ -167,7 +173,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
 
     const loadTemplates = async () => {
         try {
-            const response = await fetch('/api/future/templates');
+            const response = await fetch(`${API_BASE}/api/future/templates`);
             if (response.ok) {
                 const data = await response.json();
                 setTemplates(data);
@@ -209,17 +215,20 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             };
 
             let response: Response;
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             if (state.draftId) {
-                response = await fetch(`/api/future/letters/${state.draftId}`, {
+                response = await fetch(`${API_BASE}/api/future/letters/${state.draftId}`, {
                     method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     credentials: 'include',
                     body: JSON.stringify({ ...payload, version: state.version }),
                 });
             } else {
-                response = await fetch('/api/future/letters', {
+                response = await fetch(`${API_BASE}/api/future/letters`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers,
                     credentials: 'include',
                     body: JSON.stringify(payload),
                 });
@@ -279,9 +288,12 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
         setError(null);
 
         try {
-            const response = await fetch(`/api/future/letters/${state.draftId}/submit`, {
+            const submitHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) submitHeaders['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters/${state.draftId}/submit`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: submitHeaders,
                 credentials: 'include',
                 body: JSON.stringify({ turnstileToken }),
             });

@@ -2,7 +2,7 @@
  * Future Letters - Home Page (Entry with flip animation)
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
     Mail,
     Send,
@@ -19,6 +19,8 @@ import {
 } from 'lucide-react';
 import type { FutureView, FutureLetterSummary, LetterListResponse } from './types';
 import { STATUS_LABELS, STATUS_COLORS } from './types';
+import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE } from '../../utils/api';
 
 interface FutureLetterHomeProps {
     onBack: () => void;
@@ -26,6 +28,7 @@ interface FutureLetterHomeProps {
 }
 
 export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHomeProps) {
+    const { token } = useAuth();
     const [recentLetters, setRecentLetters] = useState<FutureLetterSummary[]>([]);
     const [stats, setStats] = useState({
         drafts: 0,
@@ -34,16 +37,16 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
     });
     const [isLoading, setIsLoading] = useState(true);
 
-    useEffect(() => {
-        loadHomeData();
-    }, []);
-
-    const loadHomeData = async () => {
+    const loadHomeData = useCallback(async () => {
         setIsLoading(true);
         try {
             // 加载最近信件
-            const response = await fetch('/api/future/letters?limit=5&sort=created_at&order=desc', {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters?limit=5&sort=created_at&order=desc`, {
                 credentials: 'include',
+                headers,
             });
             if (response.ok) {
                 const data: LetterListResponse = await response.json();
@@ -56,7 +59,11 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [token]);
+
+    useEffect(() => {
+        loadHomeData();
+    }, [loadHomeData]);
 
     const menuItems = [
         {

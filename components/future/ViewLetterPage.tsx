@@ -25,6 +25,8 @@ import {
 } from 'lucide-react';
 import type { FutureLetterDetail, FutureView } from './types';
 import { STATUS_LABELS, STATUS_COLORS } from './types';
+import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE } from '../../utils/api';
 
 interface ViewLetterPageProps {
     letterId: string;
@@ -33,6 +35,7 @@ interface ViewLetterPageProps {
 }
 
 export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLetterPageProps) {
+    const { token } = useAuth();
     const [letter, setLetter] = useState<FutureLetterDetail | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -52,8 +55,12 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
         setError(null);
 
         try {
-            const response = await fetch(`/api/future/letters/${letterId}`, {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}`, {
                 credentials: 'include',
+                headers,
             });
 
             if (response.status === 404) {
@@ -73,7 +80,7 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
         } finally {
             setIsLoading(false);
         }
-    }, [letterId]);
+    }, [letterId, token]);
 
     useEffect(() => {
         loadLetter();
@@ -95,9 +102,12 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
 
         setIsUnlocking(true);
         try {
-            const response = await fetch(`/api/future/letters/${letterId}/unlock`, {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}/unlock`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers,
                 credentials: 'include',
                 body: JSON.stringify({ password: unlockPassword }),
             });

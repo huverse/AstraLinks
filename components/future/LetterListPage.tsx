@@ -21,6 +21,8 @@ import {
 } from 'lucide-react';
 import type { FutureView, FutureLetterSummary, LetterListResponse, LetterStatus } from './types';
 import { STATUS_LABELS, STATUS_COLORS } from './types';
+import { useAuth } from '../../contexts/AuthContext';
+import { API_BASE } from '../../utils/api';
 
 type ListType = 'sent' | 'received' | 'drafts';
 
@@ -52,6 +54,7 @@ const LIST_CONFIG: Record<ListType, { title: string; icon: React.ElementType; em
 };
 
 export default function LetterListPage({ type, onBack, onNavigate }: LetterListPageProps) {
+    const { token } = useAuth();
     const [letters, setLetters] = useState<FutureLetterSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -80,8 +83,12 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
             });
             if (cursor) params.set('cursor', cursor);
 
-            const response = await fetch(`/api/future/letters?${params}`, {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters?${params}`, {
                 credentials: 'include',
+                headers,
             });
 
             if (!response.ok) {
@@ -103,7 +110,7 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
             setIsLoading(false);
             setIsLoadingMore(false);
         }
-    }, [type]);
+    }, [type, token]);
 
     useEffect(() => {
         loadLetters();
@@ -121,9 +128,13 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
 
         setDeletingId(letterId);
         try {
-            const response = await fetch(`/api/future/letters/${letterId}`, {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}`, {
                 method: 'DELETE',
                 credentials: 'include',
+                headers,
             });
 
             if (!response.ok) {

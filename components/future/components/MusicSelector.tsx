@@ -15,6 +15,7 @@ import {
     AlertCircle,
 } from 'lucide-react';
 import type { MusicInfo } from '../types';
+import { API_BASE } from '../../../utils/api';
 
 interface MusicSelectorProps {
     isOpen: boolean;
@@ -91,7 +92,7 @@ export default function MusicSelector({
 
         try {
             // 尝试获取歌曲信息（通过后端代理避免跨域）
-            const response = await fetch(`/api/future/music/parse?id=${songId}`, {
+            const response = await fetch(`${API_BASE}/api/future/music/parse?id=${songId}`, {
                 credentials: 'include',
             });
 
