@@ -65,6 +65,11 @@ export interface FutureLetter {
     aiOptIn: boolean;
     turnstileVerified: boolean;
 
+    // 公开信选项
+    isPublic?: boolean;
+    publicAnonymous?: boolean;
+    publicAlias?: string;
+
     version: number;
     createdAt: string;
     updatedAt: string;
@@ -172,6 +177,11 @@ export interface CreateLetterRequest {
 
     letterType?: LetterType;
     aiOptIn?: boolean;
+
+    // 公开信选项
+    isPublic?: boolean;
+    publicAnonymous?: boolean;
+    publicAlias?: string;
 }
 
 export interface UpdateLetterRequest {
@@ -191,6 +201,11 @@ export interface UpdateLetterRequest {
     scheduledTz?: string;
 
     aiOptIn?: boolean;
+
+    // 公开信选项
+    isPublic?: boolean;
+    publicAnonymous?: boolean;
+    publicAlias?: string;
 
     version: number;
 }
@@ -236,7 +251,7 @@ export interface SuggestTimeResponse {
 // View State Types
 // ============================================
 
-export type FutureView = 'home' | 'compose' | 'sent' | 'received' | 'drafts' | 'detail' | 'settings';
+export type FutureView = 'home' | 'compose' | 'sent' | 'received' | 'drafts' | 'detail' | 'settings' | 'public';
 
 export interface FutureLetterState {
     view: FutureView;
@@ -266,6 +281,10 @@ export interface ComposeState {
     isSubmitting: boolean;
     draftId?: string;
     version: number;
+    // 公开信选项
+    isPublic: boolean;
+    publicAnonymous: boolean;
+    publicAlias: string;
 }
 
 // ============================================

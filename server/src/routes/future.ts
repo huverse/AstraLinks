@@ -4,6 +4,8 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { verifyTurnstileToken } from './auth';
+import { pool } from '../config/database';
+import type { RowDataPacket } from 'mysql2';
 import * as letterService from '../services/future/letterService';
 import * as deliveryService from '../services/future/deliveryService';
 import * as uploadService from '../services/future/uploadService';
@@ -513,6 +515,191 @@ router.get('/received', requireAuth, asyncHandler(async (req: AuthRequest, res: 
 
     const result = await letterService.getLetterList(userId, query);
     res.json(result);
+}));
+
+// ============================================
+// Public Routes - Open Letter Wall (公开信墙)
+// No authentication required for reading
+// ============================================
+
+const PUBLIC_LETTER_DEFAULT_LIMIT = 20;
+const PUBLIC_LETTER_MAX_LIMIT = 50;
+
+/**
+ * 获取公开显示名称
+ * @param isAnonymous 是否匿名
+ * @param alias 自定义别名
+ * @param username 用户名（作为非匿名用户的备选）
+ */
+function getPublicDisplayName(isAnonymous: boolean, alias: string | null, username?: string | null): string {
+    if (isAnonymous) {
+        return '匿名用户';
+    }
+    if (alias?.trim()) {
+        return alias.trim();
+    }
+    if (username?.trim()) {
+        return username.trim();
+    }
+    return '时光信用户';
+}
+
+/**
+ * 转换为ISO时间字符串
+ */
+function toIsoString(value: Date | string | null): string {
+    if (!value) return '';
+    if (value instanceof Date) {
+        return value.toISOString();
+    }
+    return new Date(value).toISOString();
+}
+
+/**
+ * GET /api/future/public/letters - 获取公开信列表 (无需登录)
+ */
+router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Response) => {
+    // 检查功能是否启用
+    const wallEnabled = await letterService.getSetting('open_letter_wall_enabled');
+    if (wallEnabled === 'false') {
+        res.status(403).json({
+            error: { code: 'FEATURE_DISABLED', message: '公开信墙功能未启用' }
+        });
+        return;
+    }
+
+    // 分页参数
+    const rawLimit = req.query.limit ? parseInt(req.query.limit as string, 10) : PUBLIC_LETTER_DEFAULT_LIMIT;
+    const safeLimit = Number.isFinite(rawLimit) ? rawLimit : PUBLIC_LETTER_DEFAULT_LIMIT;
+    const limit = Math.min(Math.max(safeLimit, 1), PUBLIC_LETTER_MAX_LIMIT);
+    const cursor = req.query.cursor as string | undefined;
+
+    // 基础查询条件(不含游标)
+    const baseWhereClause = `
+        WHERE fl.is_public = TRUE
+            AND fl.deleted_at IS NULL
+            AND fl.status = 'delivered'
+            AND fl.delivered_at IS NOT NULL
+    `;
+
+    // 构建分页查询条件
+    let whereClause = baseWhereClause;
+    const params: (string | number)[] = [];
+
+    // 游标分页
+    if (cursor) {
+        try {
+            const cursorValue = Buffer.from(cursor, 'base64').toString('utf-8');
+            whereClause += ' AND fl.delivered_at < ?';
+            params.push(cursorValue);
+        } catch {
+            // 无效游标，忽略
+        }
+    }
+
+    // 获取总数(使用基础条件,不受分页影响)
+    const countSql = `SELECT COUNT(*) as total FROM future_letters fl ${baseWhereClause}`;
+    const [countRows] = await pool.execute<RowDataPacket[]>(countSql, []);
+    const total = countRows[0]?.total || 0;
+
+    // 获取列表
+    const listSql = `
+        SELECT
+            fl.id,
+            fl.title,
+            SUBSTRING(fl.content, 1, 240) as content_preview,
+            fl.public_anonymous,
+            fl.public_alias,
+            fl.delivered_at,
+            u.username as sender_username
+        FROM future_letters fl
+        LEFT JOIN users u ON fl.sender_user_id = u.id
+        ${whereClause}
+        ORDER BY fl.delivered_at DESC
+        LIMIT ?
+    `;
+    const [rows] = await pool.execute<RowDataPacket[]>(listSql, [...params, limit + 1]);
+
+    // 构建响应
+    const hasMore = rows.length > limit;
+    const letters = rows.slice(0, limit).map((row) => ({
+        id: row.id,
+        title: row.title || '无题',
+        contentPreview: row.content_preview ? String(row.content_preview) : '',
+        displayName: getPublicDisplayName(Boolean(row.public_anonymous), row.public_alias, row.sender_username),
+        publishedAt: toIsoString(row.delivered_at),
+    }));
+
+    let nextCursor: string | undefined;
+    if (hasMore && letters.length > 0 && letters[letters.length - 1].publishedAt) {
+        nextCursor = Buffer.from(letters[letters.length - 1].publishedAt).toString('base64');
+    }
+
+    res.json({ letters, nextCursor, total });
+}));
+
+/**
+ * GET /api/future/public/letters/:id - 获取公开信详情 (无需登录)
+ */
+router.get('/public/letters/:id', asyncHandler(async (req: AuthRequest, res: Response) => {
+    // 检查功能是否启用
+    const wallEnabled = await letterService.getSetting('open_letter_wall_enabled');
+    if (wallEnabled === 'false') {
+        res.status(403).json({
+            error: { code: 'FEATURE_DISABLED', message: '公开信墙功能未启用' }
+        });
+        return;
+    }
+
+    const letterId = req.params.id;
+
+    const query = `
+        SELECT
+            fl.id,
+            fl.title,
+            fl.content,
+            fl.content_html_sanitized,
+            fl.public_anonymous,
+            fl.public_alias,
+            fl.delivered_at,
+            fl.music_id,
+            fl.music_name,
+            fl.music_artist,
+            fl.music_cover_url,
+            u.username as sender_username
+        FROM future_letters fl
+        LEFT JOIN users u ON fl.sender_user_id = u.id
+        WHERE fl.id = ?
+            AND fl.is_public = TRUE
+            AND fl.deleted_at IS NULL
+            AND fl.status = 'delivered'
+            AND fl.delivered_at IS NOT NULL
+        LIMIT 1
+    `;
+    const [rows] = await pool.execute<RowDataPacket[]>(query, [letterId]);
+
+    if (rows.length === 0) {
+        res.status(404).json({
+            error: { code: 'NOT_FOUND', message: '公开信不存在' }
+        });
+        return;
+    }
+
+    const row = rows[0];
+    res.json({
+        id: row.id,
+        title: row.title || '无题',
+        content: row.content,
+        contentHtmlSanitized: row.content_html_sanitized || undefined,
+        displayName: getPublicDisplayName(Boolean(row.public_anonymous), row.public_alias, row.sender_username),
+        publishedAt: toIsoString(row.delivered_at),
+        music: row.music_id ? {
+            id: row.music_id,
+            name: row.music_name,
+            artist: row.music_artist,
+            coverUrl: row.music_cover_url,
+        } : undefined,
+    });
 }));
 
 // ============================================

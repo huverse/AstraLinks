@@ -9,6 +9,7 @@ import FutureLetterHome from './FutureLetterHome';
 import ComposeLetterPage from './ComposeLetterPage';
 import LetterListPage from './LetterListPage';
 import ViewLetterPage from './ViewLetterPage';
+import OpenLetterWall from './OpenLetterWall';
 
 interface FutureLetterContainerProps {
     onBack: () => void;
@@ -106,6 +107,13 @@ export default function FutureLetterContainer({ onBack }: FutureLetterContainerP
                             </button>
                         </div>
                     </div>
+                );
+
+            case 'public':
+                return (
+                    <OpenLetterWall
+                        onBack={handleBackToHome}
+                    />
                 );
 
             default:

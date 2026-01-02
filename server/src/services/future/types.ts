@@ -113,6 +113,11 @@ export interface FutureLetter {
     // 验证
     turnstileVerified: boolean;
 
+    // 公开信选项
+    isPublic: boolean;
+    publicAnonymous: boolean;
+    publicAlias?: string;
+
     // 元数据
     version: number;
     deletedAt?: Date;
@@ -317,6 +322,11 @@ export interface CreateLetterRequest {
 
     letterType?: LetterType;
     aiOptIn?: boolean;
+
+    // 公开信选项
+    isPublic?: boolean;
+    publicAnonymous?: boolean;
+    publicAlias?: string;
 }
 
 export interface UpdateLetterRequest {
@@ -336,6 +346,11 @@ export interface UpdateLetterRequest {
     scheduledTz?: string;
 
     aiOptIn?: boolean;
+
+    // 公开信选项
+    isPublic?: boolean;
+    publicAnonymous?: boolean;
+    publicAlias?: string;
 
     version: number;  // 乐观锁
 }

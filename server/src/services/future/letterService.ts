@@ -86,6 +86,7 @@ export async function createLetter(
             music_url,
             scheduled_local, scheduled_tz, scheduled_at_utc,
             letter_type, status, ai_opt_in,
+            is_public, public_anonymous, public_alias,
             created_at, updated_at
         ) VALUES (
             ?, ?,
@@ -96,6 +97,7 @@ export async function createLetter(
             ?,
             ?, ?, ?,
             ?, 'draft', ?,
+            ?, ?, ?,
             ?, ?
         )
     `;
@@ -109,6 +111,7 @@ export async function createLetter(
         data.musicUrl || null,
         scheduledLocal, timezone, scheduledAtUtc,
         data.letterType || 'electronic', data.aiOptIn !== false,
+        data.isPublic || false, data.publicAnonymous || false, data.publicAlias || null,
         now, now,
     ]);
 
@@ -369,6 +372,22 @@ export async function updateLetter(
         params.push(data.aiOptIn ? 1 : 0);
     }
 
+    // 公开信选项
+    if (data.isPublic !== undefined) {
+        updates.push('is_public = ?');
+        params.push(data.isPublic ? 1 : 0);
+    }
+
+    if (data.publicAnonymous !== undefined) {
+        updates.push('public_anonymous = ?');
+        params.push(data.publicAnonymous ? 1 : 0);
+    }
+
+    if (data.publicAlias !== undefined) {
+        updates.push('public_alias = ?');
+        params.push(data.publicAlias || null);
+    }
+
     // 更新版本
     updates.push('version = version + 1');
     updates.push('updated_at = ?');
@@ -569,6 +588,9 @@ function mapRowToLetter(row: RowDataPacket): FutureLetter {
         aiSuggestions: row.ai_suggestions ? JSON.parse(row.ai_suggestions) : undefined,
         timetraceData: row.timetrace_data ? JSON.parse(row.timetrace_data) : undefined,
         turnstileVerified: Boolean(row.turnstile_verified),
+        isPublic: Boolean(row.is_public),
+        publicAnonymous: Boolean(row.public_anonymous),
+        publicAlias: row.public_alias,
         version: row.version,
         deletedAt: row.deleted_at,
         createdAt: row.created_at,

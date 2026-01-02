@@ -16,6 +16,7 @@ import {
     Sparkles,
     ChevronRight,
     ArrowLeft,
+    Globe,
 } from 'lucide-react';
 import type { FutureView, FutureLetterSummary, LetterListResponse } from './types';
 import { STATUS_LABELS, STATUS_COLORS } from './types';
@@ -96,6 +97,13 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
             color: 'from-orange-500 to-amber-500',
             count: stats.drafts,
             onClick: () => onNavigate('drafts'),
+        },
+        {
+            icon: Globe,
+            label: '公开信墙',
+            description: '浏览公开分享的信件',
+            color: 'from-indigo-500 to-purple-500',
+            onClick: () => onNavigate('public'),
         },
     ];
 

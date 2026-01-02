@@ -67,6 +67,10 @@ const INITIAL_STATE: ComposeState = {
     isSaving: false,
     isSubmitting: false,
     version: 1,
+    // 公开信选项
+    isPublic: false,
+    publicAnonymous: false,
+    publicAlias: '',
 };
 
 export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPageProps) {
@@ -154,6 +158,10 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 draftId: letter.id,
                 version: letter.version,
                 isDirty: false,
+                // 公开信选项
+                isPublic: letter.isPublic || false,
+                publicAnonymous: letter.publicAnonymous || false,
+                publicAlias: letter.publicAlias || '',
             }));
 
             // 加载附件
@@ -212,6 +220,10 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 musicUrl: state.musicUrl || undefined,
                 letterType: state.letterType,
                 aiOptIn: state.aiOptIn,
+                // 公开信选项
+                isPublic: state.isPublic,
+                publicAnonymous: state.publicAnonymous,
+                publicAlias: state.publicAlias || undefined,
             };
 
             let response: Response;
@@ -611,6 +623,65 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                         </div>
                         <div className="text-white/50">→</div>
                     </button>
+
+                    {/* Public Letter Wall */}
+                    <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <Globe className="w-5 h-5 text-indigo-400" />
+                                <div>
+                                    <div className="font-medium">公开信墙</div>
+                                    <div className="text-xs text-white/50">送达后展示在公开信墙上</div>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => updateState('isPublic', !state.isPublic)}
+                                className={`w-12 h-6 rounded-full transition-colors ${
+                                    state.isPublic ? 'bg-indigo-500' : 'bg-white/20'
+                                }`}
+                            >
+                                <div className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                                    state.isPublic ? 'translate-x-6' : 'translate-x-0.5'
+                                }`} />
+                            </button>
+                        </div>
+                        {state.isPublic && (
+                            <div className="mt-4 space-y-3">
+                                {/* Anonymous toggle */}
+                                <div className="flex items-center justify-between py-2">
+                                    <div>
+                                        <div className="text-sm">匿名发布</div>
+                                        <div className="text-xs text-white/50">隐藏你的名字</div>
+                                    </div>
+                                    <button
+                                        onClick={() => updateState('publicAnonymous', !state.publicAnonymous)}
+                                        className={`w-10 h-5 rounded-full transition-colors ${
+                                            state.publicAnonymous ? 'bg-indigo-500' : 'bg-white/20'
+                                        }`}
+                                    >
+                                        <div className={`w-4 h-4 rounded-full bg-white shadow transition-transform ${
+                                            state.publicAnonymous ? 'translate-x-5' : 'translate-x-0.5'
+                                        }`} />
+                                    </button>
+                                </div>
+                                {/* Display alias */}
+                                {!state.publicAnonymous && (
+                                    <input
+                                        type="text"
+                                        value={state.publicAlias}
+                                        onChange={(e) => updateState('publicAlias', e.target.value)}
+                                        placeholder="显示名称（可选，留空使用默认昵称）"
+                                        maxLength={50}
+                                        className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:border-indigo-500 focus:outline-none"
+                                    />
+                                )}
+                                <p className="text-xs text-amber-400/80 flex items-center gap-1">
+                                    <Info className="w-3 h-3" />
+                                    公开信会在送达后显示在公开信墙，所有人可见
+                                </p>
+                            </div>
+                        )}
+                    </div>
                 </section>
 
                 {/* Attachments */}
