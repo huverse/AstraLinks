@@ -1633,6 +1633,8 @@ const App: React.FC = () => {
         style={{ perspective: '1000px' }}
       >
         <FutureLetterContainer onBack={toggleFutureMode} />
+        {/* Global Background Music Player - Only shown in Future Letters Mode */}
+        <GlobalMusicPlayer />
         <style>{`
           @keyframes flip-in {
             0% { transform: rotateY(180deg); opacity: 0; }
@@ -2428,9 +2430,6 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
-
-      {/* Global Background Music Player */}
-      <GlobalMusicPlayer />
 
       {/* Feedback Widget - Always visible floating button */}
       <FeedbackWidget />

@@ -174,7 +174,7 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+        <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
             {/* Header */}
             <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
                 <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">

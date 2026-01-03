@@ -333,7 +333,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+        <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
             {/* Header */}
             <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
                 <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -361,7 +361,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 </div>
             </header>
 
-            <main className="max-w-4xl mx-auto px-4 py-6 pb-32">
+            <main className="max-w-4xl mx-auto px-4 py-6 pb-[calc(8rem+env(safe-area-inset-bottom,0px))]">
                 {/* Error Message */}
                 {error && (
                     <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center gap-3">
@@ -702,7 +702,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             </main>
 
             {/* Bottom Actions */}
-            <div className="fixed bottom-0 left-0 right-0 bg-slate-900/90 backdrop-blur-xl border-t border-white/10 p-4">
+            <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-xl border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
                 <div className="max-w-4xl mx-auto flex gap-3">
                     <button
                         onClick={saveDraft}

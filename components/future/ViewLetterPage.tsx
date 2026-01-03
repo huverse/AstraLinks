@@ -185,7 +185,7 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
     // Loading state
     if (isLoading) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center">
+            <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center">
                 <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
             </div>
         );
@@ -194,7 +194,7 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
     // Error state
     if (error || !letter) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+            <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
                 <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
                     <div className="max-w-4xl mx-auto px-4 py-4">
                         <button
@@ -224,7 +224,7 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
     // Locked state - need password
     if (isLocked) {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+            <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
                 <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
                     <div className="max-w-4xl mx-auto px-4 py-4">
                         <button
