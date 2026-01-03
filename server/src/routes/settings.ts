@@ -141,6 +141,50 @@ router.get('/public/invitation-code', async (req: Request, res: Response) => {
 });
 
 /**
+ * GET /api/settings/public/background-music
+ * Get background music settings (public, no auth needed, cached)
+ */
+router.get('/public/background-music', async (req: Request, res: Response) => {
+    try {
+        const cachedEnabled = getCached('background_music_enabled');
+        const cachedSongId = getCached('background_music_song_id');
+        const cachedAutoplay = getCached('background_music_autoplay');
+
+        if (cachedEnabled !== null && cachedSongId !== null && cachedAutoplay !== null) {
+            res.json({
+                enabled: cachedEnabled === 'true',
+                songId: cachedSongId,
+                autoplay: cachedAutoplay === 'true',
+                cached: true
+            });
+            return;
+        }
+
+        const [settings] = await pool.execute<RowDataPacket[]>(
+            `SELECT setting_key, setting_value FROM site_settings
+             WHERE setting_key IN ('background_music_enabled', 'background_music_song_id', 'background_music_autoplay')`
+        );
+
+        const settingsMap: Record<string, string> = {};
+        settings.forEach(s => { settingsMap[s.setting_key] = s.setting_value; });
+
+        const enabled = settingsMap['background_music_enabled'] === 'true';
+        const songId = settingsMap['background_music_song_id'] || '';
+        const autoplay = settingsMap['background_music_autoplay'] === 'true';
+
+        // Cache the values
+        setCache('background_music_enabled', String(enabled));
+        setCache('background_music_song_id', songId);
+        setCache('background_music_autoplay', String(autoplay));
+
+        res.json({ enabled, songId, autoplay });
+    } catch (error: any) {
+        console.error('Get background music settings error:', error);
+        res.status(500).json({ error: 'Failed to fetch background music settings' });
+    }
+});
+
+/**
  * GET /api/settings/public/turnstile
  * Get Turnstile settings (public, no auth needed, cached)
  */

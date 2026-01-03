@@ -10,6 +10,7 @@ import MultimodalCenter from './components/MultimodalCenter';
 import VotingPanel from './components/VotingPanel';
 import LoginModal from './components/LoginModal';
 import FeedbackWidget from './components/FeedbackWidget';
+import GlobalMusicPlayer from './components/GlobalMusicPlayer';
 import ProfileCenter from './components/ProfileCenter';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import TurnstileGate from './components/TurnstileGate';
@@ -2427,6 +2428,9 @@ const App: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Global Background Music Player */}
+      <GlobalMusicPlayer />
 
       {/* Feedback Widget - Always visible floating button */}
       <FeedbackWidget />

@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { adminAPI } from '../services/api';
-import { Save, FileText, RefreshCw, Shield, Key, Globe } from 'lucide-react';
+import { Save, FileText, RefreshCw, Shield, Key, Globe, Music, Link, Play, ExternalLink } from 'lucide-react';
 
 export default function Settings() {
     const [termsContent, setTermsContent] = useState('');
     const [privacyContent, setPrivacyContent] = useState('');
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [activeTab, setActiveTab] = useState<'terms' | 'privacy' | 'security'>('terms');
+    const [activeTab, setActiveTab] = useState<'terms' | 'privacy' | 'security' | 'music'>('terms');
 
     // Security settings
     const [turnstileSiteEnabled, setTurnstileSiteEnabled] = useState(false);
@@ -16,6 +16,12 @@ export default function Settings() {
     const [turnstileExpiryHours, setTurnstileExpiryHours] = useState(24);
     const [turnstileStorageMode, setTurnstileStorageMode] = useState<'session' | 'persistent'>('session');
     const [turnstileSkipForLoggedIn, setTurnstileSkipForLoggedIn] = useState(false);
+
+    // Background music settings
+    const [bgMusicEnabled, setBgMusicEnabled] = useState(false);
+    const [bgMusicSongId, setBgMusicSongId] = useState('');
+    const [bgMusicAutoplay, setBgMusicAutoplay] = useState(false);
+    const [bgMusicInputUrl, setBgMusicInputUrl] = useState('');
 
     const loadSettings = async () => {
         setLoading(true);
@@ -48,6 +54,20 @@ export default function Settings() {
                 setTurnstileStorageMode(storageMode.setting.setting_value as 'session' | 'persistent');
             }
             setTurnstileSkipForLoggedIn(skipForLoggedIn.setting?.setting_value === 'true');
+
+            // Load background music settings
+            const [bgEnabled, bgSongId, bgAutoplay] = await Promise.all([
+                adminAPI.getSetting('background_music_enabled'),
+                adminAPI.getSetting('background_music_song_id'),
+                adminAPI.getSetting('background_music_autoplay')
+            ]);
+            setBgMusicEnabled(bgEnabled.setting?.setting_value === 'true');
+            const songId = bgSongId.setting?.setting_value || '';
+            setBgMusicSongId(songId);
+            if (songId) {
+                setBgMusicInputUrl(`https://music.163.com/#/song?id=${songId}`);
+            }
+            setBgMusicAutoplay(bgAutoplay.setting?.setting_value === 'true');
         } catch (err) {
             console.error('Failed to load settings:', err);
         } finally {
@@ -72,6 +92,12 @@ export default function Settings() {
                     adminAPI.updateSetting('turnstile_expiry_hours', String(turnstileExpiryHours)),
                     adminAPI.updateSetting('turnstile_storage_mode', turnstileStorageMode),
                     adminAPI.updateSetting('turnstile_skip_for_logged_in', String(turnstileSkipForLoggedIn))
+                ]);
+            } else if (activeTab === 'music') {
+                await Promise.all([
+                    adminAPI.updateSetting('background_music_enabled', String(bgMusicEnabled)),
+                    adminAPI.updateSetting('background_music_song_id', bgMusicSongId),
+                    adminAPI.updateSetting('background_music_autoplay', String(bgMusicAutoplay))
                 ]);
             }
             alert('保存成功');
@@ -187,6 +213,16 @@ export default function Settings() {
                 >
                     <Shield size={18} />
                     安全设置
+                </button>
+                <button
+                    onClick={() => setActiveTab('music')}
+                    className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${activeTab === 'music'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-slate-600'
+                        }`}
+                >
+                    <Music size={18} />
+                    入站音乐
                 </button>
             </div>
 
@@ -406,6 +442,150 @@ export default function Settings() {
                             <button
                                 onClick={handleSave}
                                 disabled={saving}
+                                className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                            >
+                                <Save size={18} />
+                                {saving ? '保存中...' : '保存设置'}
+                            </button>
+                        </div>
+                    </div>
+                ) : activeTab === 'music' ? (
+                    /* Background Music Settings Panel */
+                    <div className="p-6 space-y-6">
+                        <div className="border-b border-gray-200 dark:border-slate-700 pb-4 mb-4">
+                            <h2 className="text-xl font-semibold flex items-center gap-2">
+                                <Music size={24} className="text-pink-500" />
+                                入站背景音乐
+                            </h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                配置用户进入网站时播放的背景音乐
+                            </p>
+                        </div>
+
+                        {/* Enable Toggle */}
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                <Music size={24} className="text-pink-500" />
+                                <div>
+                                    <h3 className="font-medium">启用入站音乐</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        用户访问网站时显示音乐播放器
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setBgMusicEnabled(!bgMusicEnabled)}
+                                className={`relative w-14 h-8 rounded-full transition-colors ${bgMusicEnabled ? 'bg-green-500' : 'bg-gray-300 dark:bg-slate-600'}`}
+                            >
+                                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${bgMusicEnabled ? 'translate-x-7' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+
+                        {/* Song URL Input */}
+                        <div className="space-y-2">
+                            <label className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300">
+                                <Link size={16} />
+                                网易云音乐链接或歌曲ID
+                            </label>
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={bgMusicInputUrl}
+                                    onChange={e => {
+                                        setBgMusicInputUrl(e.target.value);
+                                        // 自动解析歌曲ID
+                                        const input = e.target.value.trim();
+                                        let resolvedSongId = '';
+                                        if (/^\d+$/.test(input)) {
+                                            resolvedSongId = input;
+                                        } else {
+                                            const patterns = [
+                                                /music\.163\.com.*[?&]id=(\d+)/,
+                                                /music\.163\.com\/song\/(\d+)/,
+                                            ];
+                                            for (const pattern of patterns) {
+                                                const match = input.match(pattern);
+                                                if (match) {
+                                                    resolvedSongId = match[1];
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                        setBgMusicSongId(resolvedSongId);
+                                    }}
+                                    placeholder="https://music.163.com/#/song?id=... 或 歌曲ID"
+                                    className="flex-1 px-4 py-2 border border-gray-200 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-pink-500 outline-none"
+                                />
+                            </div>
+                            {bgMusicSongId && (
+                                <p className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1">
+                                    ✓ 已识别歌曲ID: {bgMusicSongId}
+                                </p>
+                            )}
+                            <p className="text-xs text-gray-500">支持网易云音乐链接或纯数字歌曲ID</p>
+                        </div>
+
+                        {/* Autoplay Toggle */}
+                        <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-slate-900 rounded-lg">
+                            <div className="flex items-center gap-3">
+                                <Play size={24} className="text-purple-500" />
+                                <div>
+                                    <h3 className="font-medium">自动播放</h3>
+                                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                                        用户进入网站时自动开始播放（部分浏览器可能阻止）
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => setBgMusicAutoplay(!bgMusicAutoplay)}
+                                className={`relative w-14 h-8 rounded-full transition-colors ${bgMusicAutoplay ? 'bg-green-500' : 'bg-gray-300 dark:bg-slate-600'}`}
+                            >
+                                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full shadow transition-transform ${bgMusicAutoplay ? 'translate-x-7' : 'translate-x-1'}`} />
+                            </button>
+                        </div>
+
+                        {/* Preview */}
+                        {bgMusicSongId && (
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">预览</label>
+                                <div className="rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-900">
+                                    <iframe
+                                        src={`https://music.163.com/outchain/player?type=2&id=${bgMusicSongId}&auto=0&height=66`}
+                                        width="100%"
+                                        height="86"
+                                        frameBorder="0"
+                                        title="网易云音乐播放器预览"
+                                        className="w-full"
+                                    />
+                                </div>
+                                <div className="flex justify-end">
+                                    <a
+                                        href={`https://music.163.com/#/song?id=${bgMusicSongId}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                                    >
+                                        <ExternalLink size={14} />
+                                        在网易云音乐中打开
+                                    </a>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Info */}
+                        {bgMusicEnabled && (
+                            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                <p className="text-sm text-blue-800 dark:text-blue-200">
+                                    💡 用户可以随时隐藏或静音播放器，偏好设置会保存在本地。
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Save Button */}
+                        <div className="flex justify-end pt-4 border-t border-gray-200 dark:border-slate-700">
+                            <button
+                                onClick={handleSave}
+                                disabled={saving || (bgMusicEnabled && !bgMusicSongId)}
                                 className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                             >
                                 <Save size={18} />
