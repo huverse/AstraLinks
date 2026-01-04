@@ -776,16 +776,64 @@ router.get('/public/letters/:id', asyncHandler(async (req: AuthRequest, res: Res
  * GET /api/future/admin/letters - 获取所有信件(管理员)
  */
 router.get('/admin/letters', requireAuth, requireAdmin, asyncHandler(async (req: AuthRequest, res: Response) => {
-    // TODO: 实现管理员信件列表
-    res.json({ letters: [], total: 0 });
+    const status = req.query.status as string | undefined;
+    const page = parseInt(req.query.page as string) || 1;
+    const limit = parseInt(req.query.limit as string) || 20;
+    const offset = (page - 1) * limit;
+
+    let whereClause = 'WHERE fl.deleted_at IS NULL';
+    const params: any[] = [];
+
+    if (status && status !== 'all') {
+        whereClause += ' AND fl.status = ?';
+        params.push(status);
+    }
+
+    const [[{ total }]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as total FROM future_letters fl ${whereClause}`,
+        params
+    );
+
+    const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT
+            fl.id, fl.title, fl.content, fl.status, fl.recipient_type,
+            fl.recipient_email, fl.scheduled_local, fl.scheduled_at_utc,
+            fl.delivered_at, fl.created_at, fl.is_public, fl.review_note,
+            fl.rejected_reason, fl.reviewed_at,
+            u.username as sender_username, u.email as sender_email
+         FROM future_letters fl
+         LEFT JOIN users u ON fl.sender_user_id = u.id
+         ${whereClause}
+         ORDER BY fl.created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+    );
+
+    res.json({
+        letters: rows,
+        total,
+        page,
+        totalPages: Math.ceil(Number(total) / limit)
+    });
 }));
 
 /**
  * GET /api/future/admin/letters/pending-review - 获取待审核信件
  */
 router.get('/admin/letters/pending-review', requireAuth, requireAdmin, asyncHandler(async (req: AuthRequest, res: Response) => {
-    // TODO: 实现待审核列表
-    res.json({ letters: [], total: 0 });
+    const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT
+            fl.id, fl.title, fl.content, fl.status, fl.recipient_type,
+            fl.recipient_email, fl.scheduled_local, fl.scheduled_at_utc,
+            fl.created_at, fl.is_public, fl.submitted_at,
+            u.username as sender_username, u.email as sender_email
+         FROM future_letters fl
+         LEFT JOIN users u ON fl.sender_user_id = u.id
+         WHERE fl.status = 'pending_review' AND fl.deleted_at IS NULL
+         ORDER BY fl.submitted_at ASC`
+    );
+
+    res.json({ letters: rows, total: rows.length });
 }));
 
 /**
@@ -796,8 +844,34 @@ router.post('/admin/letters/:id/approve', requireAuth, requireAdmin, asyncHandle
     const { note } = req.body;
     const adminId = req.user!.id;
 
-    // TODO: 实现审核通过逻辑
-    res.json({ success: true });
+    // 检查信件是否存在且状态正确
+    const [[letter]] = await pool.execute<RowDataPacket[]>(
+        'SELECT id, status FROM future_letters WHERE id = ? AND deleted_at IS NULL',
+        [letterId]
+    );
+
+    if (!letter) {
+        res.status(404).json({ error: { code: 'NOT_FOUND', message: '信件不存在' } });
+        return;
+    }
+
+    if (letter.status !== 'pending_review') {
+        res.status(400).json({ error: { code: 'INVALID_STATUS', message: '信件状态不允许审核' } });
+        return;
+    }
+
+    // 更新信件状态为approved
+    await pool.execute(
+        `UPDATE future_letters SET
+            status = 'approved',
+            reviewed_at = NOW(),
+            reviewer_user_id = ?,
+            review_note = ?
+         WHERE id = ?`,
+        [adminId, note || null, letterId]
+    );
+
+    res.json({ success: true, message: '信件已审核通过' });
 }));
 
 /**
@@ -815,8 +889,34 @@ router.post('/admin/letters/:id/reject', requireAuth, requireAdmin, asyncHandler
         return;
     }
 
-    // TODO: 实现审核拒绝逻辑
-    res.json({ success: true });
+    // 检查信件是否存在且状态正确
+    const [[letter]] = await pool.execute<RowDataPacket[]>(
+        'SELECT id, status FROM future_letters WHERE id = ? AND deleted_at IS NULL',
+        [letterId]
+    );
+
+    if (!letter) {
+        res.status(404).json({ error: { code: 'NOT_FOUND', message: '信件不存在' } });
+        return;
+    }
+
+    if (letter.status !== 'pending_review') {
+        res.status(400).json({ error: { code: 'INVALID_STATUS', message: '信件状态不允许审核' } });
+        return;
+    }
+
+    // 更新信件状态为rejected
+    await pool.execute(
+        `UPDATE future_letters SET
+            status = 'rejected',
+            reviewed_at = NOW(),
+            reviewer_user_id = ?,
+            rejected_reason = ?
+         WHERE id = ?`,
+        [adminId, reason, letterId]
+    );
+
+    res.json({ success: true, message: '信件已拒绝' });
 }));
 
 /**
@@ -851,14 +951,40 @@ router.put('/admin/settings', requireAuth, requireAdmin, asyncHandler(async (req
  * GET /api/future/admin/stats - 获取统计数据
  */
 router.get('/admin/stats', requireAuth, requireAdmin, asyncHandler(async (_req: AuthRequest, res: Response) => {
-    // TODO: 实现统计查询
+    // 总信件数
+    const [[{ totalLetters }]] = await pool.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) as totalLetters FROM future_letters WHERE deleted_at IS NULL'
+    );
+
+    // 待审核数
+    const [[{ pendingReview }]] = await pool.execute<RowDataPacket[]>(
+        "SELECT COUNT(*) as pendingReview FROM future_letters WHERE status = 'pending_review' AND deleted_at IS NULL"
+    );
+
+    // 今日排期数
+    const [[{ scheduledToday }]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as scheduledToday FROM future_letters
+         WHERE DATE(scheduled_at_utc) = CURDATE() AND status = 'approved' AND deleted_at IS NULL`
+    );
+
+    // 本月已投递数
+    const [[{ deliveredThisMonth }]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as deliveredThisMonth FROM future_letters
+         WHERE status = 'delivered' AND MONTH(delivered_at) = MONTH(NOW()) AND YEAR(delivered_at) = YEAR(NOW()) AND deleted_at IS NULL`
+    );
+
+    // 本月失败数
+    const [[{ failedThisMonth }]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as failedThisMonth FROM future_letters
+         WHERE status = 'failed' AND MONTH(updated_at) = MONTH(NOW()) AND YEAR(updated_at) = YEAR(NOW()) AND deleted_at IS NULL`
+    );
+
     res.json({
-        totalLetters: 0,
-        pendingReview: 0,
-        scheduledToday: 0,
-        deliveredThisMonth: 0,
-        failedThisMonth: 0,
-        topTemplates: [],
+        totalLetters: Number(totalLetters),
+        pendingReview: Number(pendingReview),
+        scheduledToday: Number(scheduledToday),
+        deliveredThisMonth: Number(deliveredThisMonth),
+        failedThisMonth: Number(failedThisMonth),
     });
 }));
 

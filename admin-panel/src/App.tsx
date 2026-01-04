@@ -16,6 +16,7 @@ import Settings from './pages/Settings';
 import ConfigTemplates from './pages/ConfigTemplates';
 import WorkflowManagement from './pages/WorkflowManagement';
 import MCPRegistry from './pages/MCPRegistry';
+import FutureLetters from './pages/FutureLetters';
 import Layout from './components/Layout';
 import './index.css';
 
@@ -50,6 +51,7 @@ function App() {
           <Route path="/config-templates" element={<ConfigTemplates />} />
           <Route path="/workflows" element={<WorkflowManagement />} />
           <Route path="/mcp-registry" element={<MCPRegistry />} />
+          <Route path="/future-letters" element={<FutureLetters />} />
         </Routes>
       </Layout>
     </BrowserRouter>
