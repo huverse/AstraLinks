@@ -773,7 +773,7 @@ export async function getUserStats(userId: number, userEmail: string): Promise<U
     // 已排期数量 (approved但还没到投递时间)
     const [[scheduledRow]] = await pool.execute<RowDataPacket[]>(
         `SELECT COUNT(*) as count FROM future_letters
-         WHERE sender_user_id = ? AND status = 'approved' AND deliver_at > NOW() AND deleted_at IS NULL`,
+         WHERE sender_user_id = ? AND status = 'approved' AND scheduled_at_utc > NOW() AND deleted_at IS NULL`,
         [userId]
     );
 
