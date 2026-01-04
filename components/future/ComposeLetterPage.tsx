@@ -361,7 +361,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 </div>
             </header>
 
-            <main className="max-w-4xl mx-auto px-4 py-6 pb-[calc(8rem+env(safe-area-inset-bottom,0px))]">
+            <main className="max-w-4xl mx-auto px-4 py-6 pb-[calc(10rem+env(safe-area-inset-bottom,0px))]">
                 {/* Error Message */}
                 {error && (
                     <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center gap-3">
@@ -701,8 +701,8 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 </section>
             </main>
 
-            {/* Bottom Actions */}
-            <div className="fixed bottom-0 left-0 right-0 z-50 bg-slate-900/90 backdrop-blur-xl border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+            {/* Bottom Actions - 使用z-40避免与全局元素冲突 */}
+            <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
                 <div className="max-w-4xl mx-auto flex gap-3">
                     <button
                         onClick={saveDraft}

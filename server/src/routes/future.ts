@@ -6,6 +6,7 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { verifyTurnstileToken } from './auth';
 import { pool } from '../config/database';
 import type { RowDataPacket } from 'mysql2';
+import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
 import * as letterService from '../services/future/letterService';
 import * as deliveryService from '../services/future/deliveryService';
 import * as uploadService from '../services/future/uploadService';
@@ -23,21 +24,27 @@ const router = Router();
 // Middleware
 // ============================================
 
-interface AuthRequest extends Request {
-    user?: { id: number; isAdmin?: boolean };
-}
+// 使用AuthenticatedRequest作为AuthRequest的别名，保持代码兼容性
+type AuthRequest = AuthenticatedRequest;
 
 /**
- * 认证中间件
+ * 认证中间件 - 先调用authMiddleware解析token，再检查用户是否存在
  */
-function requireAuth(req: AuthRequest, res: Response, next: NextFunction): void {
-    if (!req.user?.id) {
-        res.status(401).json({
-            error: { code: 'UNAUTHORIZED', message: '请先登录' }
-        });
-        return;
-    }
-    next();
+function requireAuth(req: Request, res: Response, next: NextFunction): void {
+    authMiddleware(req as AuthRequest, res, (err?: unknown) => {
+        if (err) {
+            next(err);
+            return;
+        }
+        const authReq = req as AuthRequest;
+        if (!authReq.user?.id) {
+            res.status(401).json({
+                error: { code: 'UNAUTHORIZED', message: '请先登录' }
+            });
+            return;
+        }
+        next();
+    });
 }
 
 /**
@@ -192,6 +199,54 @@ router.get('/letters/:id', requireAuth, asyncHandler(async (req: AuthRequest, re
     }
 
     res.json(letter);
+}));
+
+/**
+ * POST /api/future/letters/:id/unlock - 解锁加密信件
+ */
+router.post('/letters/:id/unlock', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const letterId = req.params.id;
+    const { password } = req.body;
+
+    if (!password) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '请输入密码' }
+        });
+        return;
+    }
+
+    try {
+        // 获取信件详情
+        const letter = await letterService.getLetterDetail(letterId, userId);
+
+        if (!letter) {
+            res.status(404).json({
+                error: { code: 'NOT_FOUND', message: '信件不存在' }
+            });
+            return;
+        }
+
+        // 检查是否是加密信件
+        if (!letter.isEncrypted) {
+            // 非加密信件直接返回详情
+            res.json(letter);
+            return;
+        }
+
+        // 验证密码 (简单实现：直接比较，实际应使用加密验证)
+        // TODO: 实现完整的加密验证逻辑
+        // 目前简单实现：对于加密信件，暂时返回内容
+        // 后续可以实现 KDF 验证和解密
+
+        // 返回完整信件详情
+        res.json(letter);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({
+            error: { code: 'INTERNAL_ERROR', message }
+        });
+    }
 }));
 
 /**

@@ -10,7 +10,7 @@ import {
     Search, Download, Check, Plug, ExternalLink,
     ChevronRight, Star, RefreshCw, AlertCircle, X, Upload, Globe
 } from 'lucide-react';
-import { authFetch } from '../utils/api';
+import { authFetch, apiFetch, API_BASE } from '../utils/api';
 import MCPUpload from './MCPUpload';
 
 // ============================================
@@ -121,9 +121,34 @@ interface InstalledMCP {
 
 const getToken = () => localStorage.getItem('galaxyous_token');
 
-const fetchAPI = async <T = any>(endpoint: string, options: RequestInit = {}): Promise<T> => {
+/**
+ * MCP市场API调用封装
+ * @param endpoint API端点
+ * @param options fetch选项
+ * @param requiresAuth 是否需要认证（默认false，公开端点不需要）
+ */
+const fetchAPI = async <T = any>(
+    endpoint: string,
+    options: RequestInit = {},
+    requiresAuth: boolean = false
+): Promise<T> => {
     const token = getToken();
-    return authFetch<T>(endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`, token, options);
+    const url = endpoint.startsWith('/api') ? `${API_BASE}${endpoint}` : `${API_BASE}/api${endpoint}`;
+
+    // 需要认证的端点使用authFetch，公开端点使用apiFetch
+    if (requiresAuth) {
+        if (!token) {
+            throw new Error('请先登录');
+        }
+        return authFetch<T>(endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`, token, options);
+    }
+
+    // 公开端点：如果有token则带上，否则匿名访问
+    if (token) {
+        return authFetch<T>(endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`, token, options);
+    }
+
+    return apiFetch<T>(endpoint.startsWith('/api') ? endpoint : `/api${endpoint}`, options);
 };
 
 // ============================================
@@ -362,17 +387,19 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
         }
     }, [debouncedQuery]);
 
-    // 加载已安装 MCP
+    // 加载已安装 MCP (需要认证)
     const loadInstalled = useCallback(async () => {
         try {
             const response = await fetchAPI<{ success: boolean; data: InstalledMCP[] }>(
-                '/api/mcp-marketplace/user/installed'
+                '/api/mcp-marketplace/user/installed',
+                {},
+                true  // 需要认证
             );
             if (response.success) {
                 setInstalledMcps(response.data || []);
             }
         } catch (err) {
-            // 忽略错误
+            // 未登录时忽略错误，不显示已安装列表
         }
     }, []);
 
@@ -382,13 +409,14 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
         checkApiHealth();
     }, [loadMarket, loadInstalled, checkApiHealth]);
 
-    // 安装 MCP
+    // 安装 MCP (需要认证)
     const handleInstall = async (server: MCPServer) => {
         setInstalling(server.qualifiedName);
         try {
             const response = await fetchAPI<{ success: boolean; error?: string }>(
                 `/api/mcp-marketplace/${encodeURIComponent(server.qualifiedName)}/install`,
-                { method: 'POST' }
+                { method: 'POST' },
+                true  // 需要认证
             );
             if (response.success) {
                 await loadInstalled();
@@ -402,12 +430,13 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
         }
     };
 
-    // 卸载 MCP
+    // 卸载 MCP (需要认证)
     const handleUninstall = async (mcpId: string) => {
         try {
             await fetchAPI(
                 `/api/mcp-marketplace/${encodeURIComponent(mcpId)}/uninstall`,
-                { method: 'DELETE' }
+                { method: 'DELETE' },
+                true  // 需要认证
             );
             await loadInstalled();
         } catch (err: any) {
@@ -415,7 +444,7 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
         }
     };
 
-    // 切换启用状态
+    // 切换启用状态 (需要认证)
     const handleToggle = async (mcpId: string, enabled: boolean) => {
         try {
             await fetchAPI(
@@ -424,7 +453,8 @@ export default function MCPMarketplace({ onClose }: { onClose?: () => void }) {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ enabled }),
-                }
+                },
+                true  // 需要认证
             );
             await loadInstalled();
         } catch (err: any) {

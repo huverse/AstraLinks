@@ -107,18 +107,6 @@ router.get('/:id', async (req: Request, res: Response) => {
     }
 });
 
-/**
- * 检查 API 健康状态
- * GET /api/mcp-marketplace/health
- */
-router.get('/health/check', async (req: Request, res: Response) => {
-    const isHealthy = await smithery.checkApiHealth();
-    res.json({
-        success: true,
-        smitheryApi: isHealthy ? 'available' : 'unavailable',
-    });
-});
-
 // ============================================
 // 需要登录的 API
 // ============================================
