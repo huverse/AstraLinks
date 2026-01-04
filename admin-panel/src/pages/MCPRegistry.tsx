@@ -247,7 +247,7 @@ export default function MCPRegistry() {
     const loadMarketplace = async () => {
         setMarketplaceLoading(true);
         try {
-            const res = await fetchAPI(`/mcp-marketplace/search?q=${encodeURIComponent(searchQuery)}&pageSize=30`);
+            const res = await fetchAPI(`/api/mcp-marketplace/search?q=${encodeURIComponent(searchQuery)}&pageSize=30`);
             if (res.success && res.data) {
                 // 检查是否返回的是内置工具 (降级模式)
                 const isFallback = res.data.some((m: any) => m.isBuiltin === true);
@@ -272,7 +272,7 @@ export default function MCPRegistry() {
     // 检查市场健康状态
     const checkMarketplaceHealth = async () => {
         try {
-            const res = await fetchAPI('/mcp-marketplace/health');
+            const res = await fetchAPI('/api/mcp-marketplace/health');
             if (res.success) {
                 setMarketplaceHealth({
                     checked: true,
