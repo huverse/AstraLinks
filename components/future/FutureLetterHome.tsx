@@ -41,20 +41,34 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
     const loadHomeData = useCallback(async () => {
         setIsLoading(true);
         try {
-            // 加载最近信件
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            const response = await fetch(`${API_BASE}/api/future/letters?limit=5&sort=created_at&order=desc`, {
-                credentials: 'include',
-                headers,
-            });
-            if (response.ok) {
-                const data: LetterListResponse = await response.json();
+            // 并行加载最近信件和统计数据
+            const [lettersRes, statsRes] = await Promise.all([
+                fetch(`${API_BASE}/api/future/letters?limit=5&sort=created_at&order=desc`, {
+                    credentials: 'include',
+                    headers,
+                }),
+                fetch(`${API_BASE}/api/future/stats`, {
+                    credentials: 'include',
+                    headers,
+                }),
+            ]);
+
+            if (lettersRes.ok) {
+                const data: LetterListResponse = await lettersRes.json();
                 setRecentLetters(data.letters);
             }
 
-            // TODO: 加载统计数据
+            if (statsRes.ok) {
+                const statsData = await statsRes.json();
+                setStats({
+                    drafts: statsData.drafts || 0,
+                    scheduled: (statsData.sent || 0) + (statsData.scheduled || 0),
+                    delivered: statsData.received || 0,
+                });
+            }
         } catch (error) {
             console.error('Failed to load home data:', error);
         } finally {

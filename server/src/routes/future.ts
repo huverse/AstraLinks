@@ -97,6 +97,17 @@ function handleUploadError(res: Response, error: unknown): void {
 // ============================================
 
 /**
+ * GET /api/future/stats - 获取用户信件统计数据
+ */
+router.get('/stats', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const userEmail = req.user!.email || '';
+
+    const stats = await letterService.getUserStats(userId, userEmail);
+    res.json(stats);
+}));
+
+/**
  * POST /api/future/letters - 创建信件
  */
 router.post('/letters', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {

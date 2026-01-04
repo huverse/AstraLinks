@@ -728,3 +728,60 @@ export async function updateSetting(key: string, value: string): Promise<void> {
         [key, value, value]
     );
 }
+
+// ============================================
+// User Statistics
+// ============================================
+
+export interface UserStats {
+    sent: number;
+    received: number;
+    drafts: number;
+    pending: number;
+    scheduled: number;
+}
+
+export async function getUserStats(userId: number, userEmail: string): Promise<UserStats> {
+    // 已发送/投递的信件数量
+    const [[sentRow]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM future_letters
+         WHERE sender_id = ? AND status IN ('approved', 'delivered') AND deleted_at IS NULL`,
+        [userId]
+    );
+
+    // 收到的信件数量 (已投递的)
+    const [[receivedRow]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM future_letters
+         WHERE recipient_email = ? AND status = 'delivered' AND deleted_at IS NULL`,
+        [userEmail]
+    );
+
+    // 草稿数量
+    const [[draftsRow]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM future_letters
+         WHERE sender_id = ? AND status = 'draft' AND deleted_at IS NULL`,
+        [userId]
+    );
+
+    // 待审核数量
+    const [[pendingRow]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM future_letters
+         WHERE sender_id = ? AND status = 'pending_review' AND deleted_at IS NULL`,
+        [userId]
+    );
+
+    // 已排期数量 (approved但还没到投递时间)
+    const [[scheduledRow]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM future_letters
+         WHERE sender_id = ? AND status = 'approved' AND deliver_at > NOW() AND deleted_at IS NULL`,
+        [userId]
+    );
+
+    return {
+        sent: sentRow?.count || 0,
+        received: receivedRow?.count || 0,
+        drafts: draftsRow?.count || 0,
+        pending: pendingRow?.count || 0,
+        scheduled: scheduledRow?.count || 0,
+    };
+}
