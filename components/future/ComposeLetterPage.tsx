@@ -86,15 +86,19 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
     const contentRef = useRef<HTMLTextAreaElement>(null);
     const bottomBarRef = useRef<HTMLDivElement>(null);
-    const [bottomPadding, setBottomPadding] = useState(120);
+    const [bottomPadding, setBottomPadding] = useState(200);
 
     useLayoutEffect(() => {
         const updateBottomPadding = () => {
-            const height = bottomBarRef.current?.offsetHeight ?? 0;
-            setBottomPadding(height + 24);
+            if (bottomBarRef.current) {
+                const height = bottomBarRef.current.getBoundingClientRect().height;
+                // 底部栏高度 + 额外安全距离
+                setBottomPadding(Math.max(height + 32, 200));
+            }
         };
 
-        updateBottomPadding();
+        // 延迟执行确保 DOM 完全渲染
+        const timer = setTimeout(updateBottomPadding, 100);
 
         if (typeof window !== 'undefined') {
             window.addEventListener('resize', updateBottomPadding);
@@ -107,12 +111,11 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
         }
 
         return () => {
+            clearTimeout(timer);
             if (typeof window !== 'undefined') {
                 window.removeEventListener('resize', updateBottomPadding);
             }
-            if (ro && bottomBarRef.current) {
-                ro.disconnect();
-            }
+            ro?.disconnect();
         };
     }, []);
 
@@ -392,7 +395,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             </header>
 
             <main
-                className="max-w-4xl mx-auto px-4 py-6 pb-24"
+                className="max-w-4xl mx-auto px-4 py-6"
                 style={{ paddingBottom: bottomPadding }}
             >
                 {/* Error Message */}
