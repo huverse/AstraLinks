@@ -2,7 +2,7 @@
  * Future Letters - Compose Letter Page
  */
 
-import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     ArrowLeft,
     Save,
@@ -86,38 +86,6 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
     const contentRef = useRef<HTMLTextAreaElement>(null);
     const bottomBarRef = useRef<HTMLDivElement>(null);
-    const [bottomPadding, setBottomPadding] = useState(200);
-
-    useLayoutEffect(() => {
-        const updateBottomPadding = () => {
-            if (bottomBarRef.current) {
-                const height = bottomBarRef.current.getBoundingClientRect().height;
-                // 底部栏高度 + 额外安全距离
-                setBottomPadding(Math.max(height + 32, 200));
-            }
-        };
-
-        // 延迟执行确保 DOM 完全渲染
-        const timer = setTimeout(updateBottomPadding, 100);
-
-        if (typeof window !== 'undefined') {
-            window.addEventListener('resize', updateBottomPadding);
-        }
-
-        let ro: ResizeObserver | undefined;
-        if (typeof ResizeObserver !== 'undefined' && bottomBarRef.current) {
-            ro = new ResizeObserver(() => updateBottomPadding());
-            ro.observe(bottomBarRef.current);
-        }
-
-        return () => {
-            clearTimeout(timer);
-            if (typeof window !== 'undefined') {
-                window.removeEventListener('resize', updateBottomPadding);
-            }
-            ro?.disconnect();
-        };
-    }, []);
 
     // 加载草稿或初始化
     useEffect(() => {
@@ -366,9 +334,9 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     };
 
     return (
-        <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+        <div className="h-[100dvh] flex flex-col bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white overflow-hidden">
             {/* Header */}
-            <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
+            <header className="flex-shrink-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
                 <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
                     <button
                         onClick={onBack}
@@ -394,10 +362,8 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 </div>
             </header>
 
-            <main
-                className="max-w-4xl mx-auto px-4 py-6"
-                style={{ paddingBottom: bottomPadding }}
-            >
+            <main className="flex-1 overflow-y-auto">
+                <div className="max-w-4xl mx-auto px-4 py-6 pb-8">
                 {/* Error Message */}
                 {error && (
                     <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center gap-3">
@@ -735,12 +701,13 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                         disabled={state.isSubmitting}
                     />
                 </section>
+                </div>
             </main>
 
-            {/* Bottom Actions - 使用z-40避免与全局元素冲突 */}
+            {/* Bottom Actions */}
             <div
                 ref={bottomBarRef}
-                className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
+                className="flex-shrink-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
             >
                 <div className="max-w-4xl mx-auto flex gap-3">
                     <button
