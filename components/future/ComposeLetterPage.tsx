@@ -2,7 +2,7 @@
  * Future Letters - Compose Letter Page
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import {
     ArrowLeft,
     Save,
@@ -85,6 +85,36 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
     const contentRef = useRef<HTMLTextAreaElement>(null);
+    const bottomBarRef = useRef<HTMLDivElement>(null);
+    const [bottomPadding, setBottomPadding] = useState(120);
+
+    useLayoutEffect(() => {
+        const updateBottomPadding = () => {
+            const height = bottomBarRef.current?.offsetHeight ?? 0;
+            setBottomPadding(height + 24);
+        };
+
+        updateBottomPadding();
+
+        if (typeof window !== 'undefined') {
+            window.addEventListener('resize', updateBottomPadding);
+        }
+
+        let ro: ResizeObserver | undefined;
+        if (typeof ResizeObserver !== 'undefined' && bottomBarRef.current) {
+            ro = new ResizeObserver(() => updateBottomPadding());
+            ro.observe(bottomBarRef.current);
+        }
+
+        return () => {
+            if (typeof window !== 'undefined') {
+                window.removeEventListener('resize', updateBottomPadding);
+            }
+            if (ro && bottomBarRef.current) {
+                ro.disconnect();
+            }
+        };
+    }, []);
 
     // 加载草稿或初始化
     useEffect(() => {
@@ -361,7 +391,10 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 </div>
             </header>
 
-            <main className="max-w-4xl mx-auto px-4 py-6 pb-[calc(10rem+env(safe-area-inset-bottom,0px))]">
+            <main
+                className="max-w-4xl mx-auto px-4 py-6 pb-24"
+                style={{ paddingBottom: bottomPadding }}
+            >
                 {/* Error Message */}
                 {error && (
                     <div className="mb-6 p-4 bg-red-500/20 border border-red-500/30 rounded-xl flex items-center gap-3">
@@ -702,7 +735,10 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             </main>
 
             {/* Bottom Actions - 使用z-40避免与全局元素冲突 */}
-            <div className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]">
+            <div
+                ref={bottomBarRef}
+                className="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur-xl border-t border-white/10 p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
+            >
                 <div className="max-w-4xl mx-auto flex gap-3">
                     <button
                         onClick={saveDraft}
