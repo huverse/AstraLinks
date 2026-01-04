@@ -48,6 +48,7 @@ import { registerDiscussionLoopLauncher } from './isolation-mode/orchestrator/Di
 import { validateConfig, isProductionLike } from './config/world-engine.config';
 import { appLogger, logStartup } from './services/world-engine-logger';
 import { warnEnvDuplicates, warnInsecureTlsSetting } from './config/env.guard';
+import { startDeliveryWorker, runScheduler, processOverdueLetters } from './services/future/deliveryService';
 
 dotenv.config();
 warnEnvDuplicates();
@@ -166,6 +167,31 @@ async function startServer() {
                 appLogger.info('workflow_scheduler_initialized');
             } else {
                 appLogger.warn('workflow_queue_disabled_redis_unavailable');
+            }
+
+            // 时光信邮件发送系统
+            try {
+                startDeliveryWorker();
+                appLogger.info('future_letter_delivery_worker_started');
+
+                // 每小时运行一次调度器，检查即将到期的信件
+                cron.schedule('0 * * * *', async () => {
+                    appLogger.info('running_future_letter_scheduler');
+                    try {
+                        await runScheduler();
+                        await processOverdueLetters();
+                        appLogger.info('future_letter_scheduler_completed');
+                    } catch (error) {
+                        appLogger.error({ error: (error as Error).message }, 'future_letter_scheduler_failed');
+                    }
+                });
+
+                // 启动时立即运行一次
+                await runScheduler();
+                await processOverdueLetters();
+                appLogger.info('future_letter_scheduler_initialized');
+            } catch (error) {
+                appLogger.error({ error: (error as Error).message }, 'future_letter_delivery_worker_failed');
             }
         });
     } catch (error) {
