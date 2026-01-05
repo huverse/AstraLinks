@@ -1523,6 +1523,230 @@ router.get('/admin/stats', requireAuth, requireAdmin, asyncHandler(async (_req: 
 }));
 
 // ============================================
+// Admin Routes - Physical Orders (实体信订单管理)
+// ============================================
+
+/**
+ * GET /api/future/admin/physical/orders - 获取所有实体信订单(管理员)
+ */
+router.get('/admin/physical/orders', requireAuth, requireAdmin, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const status = req.query.status as string | undefined;
+    const shippingStatus = req.query.shippingStatus as string | undefined;
+    const page = Math.max(parseInt(req.query.page as string, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 20, 1), 100);
+    const offset = (page - 1) * limit;
+
+    let whereClause = 'WHERE l.deleted_at IS NULL';
+    const params: (string | number)[] = [];
+
+    if (status) {
+        whereClause += ' AND p.order_status = ?';
+        params.push(status);
+    }
+    if (shippingStatus) {
+        whereClause += ' AND p.shipping_status = ?';
+        params.push(shippingStatus);
+    }
+
+    // 获取总数
+    const [[{ total }]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as total
+         FROM future_letter_physical p
+         JOIN future_letters l ON p.letter_id = l.id
+         ${whereClause}`,
+        params
+    );
+
+    // 获取订单列表（含信件和用户信息）
+    const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT p.*, l.title as letter_title, l.sender_user_id,
+                u.username as sender_username, u.email as sender_email
+         FROM future_letter_physical p
+         JOIN future_letters l ON p.letter_id = l.id
+         LEFT JOIN users u ON l.sender_user_id = u.id
+         ${whereClause}
+         ORDER BY p.created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+    );
+
+    const orders = rows.map((row) => ({
+        id: row.id,
+        letterId: row.letter_id,
+        letterTitle: row.letter_title,
+        senderUsername: row.sender_username,
+        senderEmail: row.sender_email,
+        recipientName: row.recipient_name || undefined,
+        postalCode: row.postal_code || undefined,
+        country: row.country || 'CN',
+        paperType: row.paper_type || undefined,
+        envelopeType: row.envelope_type || undefined,
+        orderStatus: row.order_status || 'pending',
+        shippingStatus: row.shipping_status || 'pending',
+        shippingFee: row.shipping_fee ? parseFloat(row.shipping_fee) : undefined,
+        paid: Boolean(row.paid),
+        trackingNumber: row.tracking_number || undefined,
+        carrier: row.carrier || undefined,
+        adminNote: row.admin_note || undefined,
+        createdAt: row.created_at?.toISOString() || '',
+        updatedAt: row.updated_at?.toISOString() || '',
+    }));
+
+    res.json({
+        orders,
+        total: Number(total),
+        page,
+        totalPages: Math.ceil(Number(total) / limit),
+    });
+}));
+
+/**
+ * PUT /api/future/admin/physical/orders/:id - 更新实体信订单(管理员)
+ */
+router.put('/admin/physical/orders/:id', requireAuth, requireAdmin, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const orderId = parseInt(req.params.id, 10);
+    if (isNaN(orderId)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的订单ID' }
+        });
+        return;
+    }
+
+    const { orderStatus, shippingStatus, trackingNumber, carrier, adminNote } = req.body;
+
+    // 检查订单是否存在
+    const [[order]] = await pool.execute<RowDataPacket[]>(
+        'SELECT id FROM future_letter_physical WHERE id = ?',
+        [orderId]
+    );
+
+    if (!order) {
+        res.status(404).json({
+            error: { code: 'NOT_FOUND', message: '订单不存在' }
+        });
+        return;
+    }
+
+    // 验证状态值
+    const validOrderStatuses = ['pending', 'processing', 'completed', 'cancelled'];
+    const validShippingStatuses = ['pending', 'printing', 'shipped', 'in_transit', 'delivered', 'returned'];
+
+    if (orderStatus && !validOrderStatuses.includes(orderStatus)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的订单状态', details: { field: 'orderStatus', valid: validOrderStatuses } }
+        });
+        return;
+    }
+    if (shippingStatus && !validShippingStatuses.includes(shippingStatus)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的物流状态', details: { field: 'shippingStatus', valid: validShippingStatuses } }
+        });
+        return;
+    }
+
+    // 构建更新语句
+    const updates: string[] = [];
+    const updateParams: (string | null)[] = [];
+
+    if (orderStatus !== undefined) {
+        updates.push('order_status = ?');
+        updateParams.push(orderStatus);
+    }
+    if (shippingStatus !== undefined) {
+        updates.push('shipping_status = ?');
+        updateParams.push(shippingStatus);
+        // 如果设置为shipped，记录发货时间
+        if (shippingStatus === 'shipped') {
+            updates.push('shipped_at = NOW()');
+        }
+        // 如果设置为delivered，记录送达时间
+        if (shippingStatus === 'delivered') {
+            updates.push('delivered_at = NOW()');
+        }
+    }
+    if (trackingNumber !== undefined) {
+        updates.push('tracking_number = ?');
+        updateParams.push(trackingNumber || null);
+    }
+    if (carrier !== undefined) {
+        updates.push('carrier = ?');
+        updateParams.push(carrier || null);
+    }
+    if (adminNote !== undefined) {
+        updates.push('admin_note = ?');
+        updateParams.push(adminNote || null);
+    }
+
+    if (updates.length === 0) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '没有要更新的字段' }
+        });
+        return;
+    }
+
+    updates.push('updated_at = NOW()');
+
+    await pool.execute(
+        `UPDATE future_letter_physical SET ${updates.join(', ')} WHERE id = ?`,
+        [...updateParams, orderId]
+    );
+
+    // 返回更新后的订单
+    const [[updatedOrder]] = await pool.execute<RowDataPacket[]>(
+        'SELECT * FROM future_letter_physical WHERE id = ?',
+        [orderId]
+    );
+
+    res.json(mapPhysicalOrderRow(updatedOrder));
+}));
+
+/**
+ * GET /api/future/admin/physical/stats - 获取实体信统计(管理员)
+ */
+router.get('/admin/physical/stats', requireAuth, requireAdmin, asyncHandler(async (_req: AuthRequest, res: Response) => {
+    // 总订单数
+    const [[{ totalOrders }]] = await pool.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) as totalOrders FROM future_letter_physical'
+    );
+
+    // 待处理订单
+    const [[{ pendingOrders }]] = await pool.execute<RowDataPacket[]>(
+        "SELECT COUNT(*) as pendingOrders FROM future_letter_physical WHERE order_status = 'pending'"
+    );
+
+    // 处理中订单
+    const [[{ processingOrders }]] = await pool.execute<RowDataPacket[]>(
+        "SELECT COUNT(*) as processingOrders FROM future_letter_physical WHERE order_status = 'processing'"
+    );
+
+    // 已完成订单
+    const [[{ completedOrders }]] = await pool.execute<RowDataPacket[]>(
+        "SELECT COUNT(*) as completedOrders FROM future_letter_physical WHERE order_status = 'completed'"
+    );
+
+    // 本月订单数
+    const [[{ ordersThisMonth }]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as ordersThisMonth FROM future_letter_physical
+         WHERE MONTH(created_at) = MONTH(NOW()) AND YEAR(created_at) = YEAR(NOW())`
+    );
+
+    // 本月收入
+    const [[{ revenueThisMonth }]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COALESCE(SUM(shipping_fee), 0) as revenueThisMonth FROM future_letter_physical
+         WHERE order_status = 'completed' AND MONTH(created_at) = MONTH(NOW()) AND YEAR(created_at) = YEAR(NOW())`
+    );
+
+    res.json({
+        totalOrders: Number(totalOrders),
+        pendingOrders: Number(pendingOrders),
+        processingOrders: Number(processingOrders),
+        completedOrders: Number(completedOrders),
+        ordersThisMonth: Number(ordersThisMonth),
+        revenueThisMonth: parseFloat(revenueThisMonth) || 0,
+    });
+}));
+
+// ============================================
 // Webhook Routes
 // ============================================
 
