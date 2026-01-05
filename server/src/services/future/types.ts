@@ -29,6 +29,12 @@ export type ShippingStatus =
     | 'delivered'
     | 'returned';
 
+export type OrderStatus =
+    | 'pending'
+    | 'processing'
+    | 'completed'
+    | 'cancelled';
+
 export type AttachmentType = 'image' | 'audio';
 export type ScanStatus = 'pending' | 'scanning' | 'clean' | 'infected' | 'error';
 export type QueueAction = 'send_email' | 'ai_process' | 'timetrace' | 'scan_attachment' | 'generate_pdf';
@@ -129,11 +135,15 @@ export interface FutureLetterPhysical {
     id: number;
     letterId: string;
 
+    recipientName?: string;
     recipientAddressEncrypted: string;
     recipientPhoneEncrypted?: string;
     postalCode?: string;
     country: string;
+    paperType?: string;
+    envelopeType?: string;
 
+    orderStatus: OrderStatus;
     shippingStatus: ShippingStatus;
     trackingNumber?: string;
     carrier?: string;
@@ -144,6 +154,7 @@ export interface FutureLetterPhysical {
     paid: boolean;
     paidAt?: Date;
     paymentId?: string;
+    adminNote?: string;
 
     createdAt: Date;
     updatedAt: Date;
@@ -396,7 +407,73 @@ export interface FutureLetterSummary {
 export interface FutureLetterDetail extends FutureLetter {
     attachmentsList: FutureLetterAttachment[];
     template?: FutureLetterTemplate;
-    physicalInfo?: FutureLetterPhysical;
+    physicalOrder?: FutureLetterPhysical;
+}
+
+// ============================================
+// Physical Letter Types
+// ============================================
+
+export interface PhysicalOptionItem {
+    value: string;
+    label: string;
+    price?: number;
+}
+
+export interface PhysicalOptionsResponse {
+    paperTypes: PhysicalOptionItem[];
+    envelopeTypes: PhysicalOptionItem[];
+}
+
+export interface PhysicalOrderRequest {
+    letterId: string;
+    recipientName: string;
+    recipientAddress: string;
+    recipientPhone?: string;
+    postalCode?: string;
+    country?: string;
+    paperType: string;
+    envelopeType: string;
+}
+
+export interface PhysicalOrderResponse {
+    id: number;
+    letterId: string;
+    recipientName?: string;
+    postalCode?: string;
+    country: string;
+    paperType?: string;
+    envelopeType?: string;
+    orderStatus: OrderStatus;
+    shippingStatus: ShippingStatus;
+    shippingFee?: number;
+    paid: boolean;
+    trackingNumber?: string;
+    carrier?: string;
+    adminNote?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PricingRequest {
+    country?: string;
+    paperType?: string;
+    envelopeType?: string;
+}
+
+export interface PricingResponse {
+    baseFee: number;
+    paperFee: number;
+    envelopeFee: number;
+    totalFee: number;
+    currency: string;
+}
+
+export interface PhysicalOrderListResponse {
+    orders: PhysicalOrderResponse[];
+    total: number;
+    page: number;
+    totalPages: number;
 }
 
 // ============================================

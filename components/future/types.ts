@@ -92,6 +92,7 @@ export interface FutureLetterSummary {
 export interface FutureLetterDetail extends FutureLetter {
     attachmentsList: FutureLetterAttachment[];
     template?: FutureLetterTemplate;
+    physicalOrder?: PhysicalOrderResponse;
 }
 
 // ============================================
@@ -253,7 +254,7 @@ export interface SuggestTimeResponse {
 // View State Types
 // ============================================
 
-export type FutureView = 'home' | 'compose' | 'sent' | 'received' | 'drafts' | 'detail' | 'settings' | 'public';
+export type FutureView = 'home' | 'compose' | 'sent' | 'received' | 'drafts' | 'detail' | 'settings' | 'public' | 'physical';
 
 export interface FutureLetterState {
     view: FutureView;
@@ -347,6 +348,89 @@ export const TEMPLATE_CATEGORY_LABELS: Record<TemplateCategory, string> = {
     festival: '节日',
     romantic: '浪漫',
     business: '商务',
+};
+
+// ============================================
+// Physical Letter Types
+// ============================================
+
+export type ShippingStatus =
+    | 'pending'
+    | 'printing'
+    | 'shipped'
+    | 'in_transit'
+    | 'delivered'
+    | 'returned';
+
+export type OrderStatus =
+    | 'pending'
+    | 'processing'
+    | 'completed'
+    | 'cancelled';
+
+export interface PhysicalOptionItem {
+    value: string;
+    label: string;
+    price?: number;
+}
+
+export interface PhysicalOptionsResponse {
+    paperTypes: PhysicalOptionItem[];
+    envelopeTypes: PhysicalOptionItem[];
+}
+
+export interface PhysicalOrderRequest {
+    letterId: string;
+    recipientName: string;
+    recipientAddress: string;
+    recipientPhone?: string;
+    postalCode?: string;
+    country?: string;
+    paperType: string;
+    envelopeType: string;
+}
+
+export interface PhysicalOrderResponse {
+    id: number;
+    letterId: string;
+    recipientName?: string;
+    postalCode?: string;
+    country: string;
+    paperType?: string;
+    envelopeType?: string;
+    orderStatus: OrderStatus;
+    shippingStatus: ShippingStatus;
+    shippingFee?: number;
+    paid: boolean;
+    trackingNumber?: string;
+    carrier?: string;
+    adminNote?: string;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface PricingResponse {
+    baseFee: number;
+    paperFee: number;
+    envelopeFee: number;
+    totalFee: number;
+    currency: string;
+}
+
+export const SHIPPING_STATUS_LABELS: Record<ShippingStatus, string> = {
+    pending: '待处理',
+    printing: '打印中',
+    shipped: '已发货',
+    in_transit: '运输中',
+    delivered: '已送达',
+    returned: '已退回',
+};
+
+export const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
+    pending: '待处理',
+    processing: '处理中',
+    completed: '已完成',
+    cancelled: '已取消',
 };
 
 // ============================================

@@ -171,23 +171,21 @@ export async function getLetterDetail(
         }
     }
 
-    // 获取实体信信息
-    let physicalInfo: FutureLetterPhysical | undefined;
-    if (letter.letterType === 'physical') {
-        const [physical] = await pool.execute<RowDataPacket[]>(
-            'SELECT * FROM future_letter_physical WHERE letter_id = ?',
-            [letterId]
-        );
-        if (physical.length > 0) {
-            physicalInfo = mapRowToPhysical(physical[0]);
-        }
+    // 获取实体信订单（任何已提交的信件都可能有实体信订单）
+    let physicalOrder: any | undefined;
+    const [physical] = await pool.execute<RowDataPacket[]>(
+        'SELECT * FROM future_letter_physical WHERE letter_id = ?',
+        [letterId]
+    );
+    if (physical.length > 0) {
+        physicalOrder = mapRowToPhysical(physical[0]);
     }
 
     return {
         ...letter,
         attachmentsList: attachments.map(mapRowToAttachment),
         template,
-        physicalInfo,
+        physicalOrder,
     };
 }
 
@@ -660,10 +658,14 @@ function mapRowToPhysical(row: RowDataPacket): FutureLetterPhysical {
     return {
         id: row.id,
         letterId: row.letter_id,
+        recipientName: row.recipient_name,
         recipientAddressEncrypted: row.recipient_address_encrypted,
         recipientPhoneEncrypted: row.recipient_phone_encrypted,
         postalCode: row.postal_code,
         country: row.country,
+        paperType: row.paper_type,
+        envelopeType: row.envelope_type,
+        orderStatus: row.order_status,
         shippingStatus: row.shipping_status,
         trackingNumber: row.tracking_number,
         carrier: row.carrier,
@@ -673,6 +675,7 @@ function mapRowToPhysical(row: RowDataPacket): FutureLetterPhysical {
         paid: Boolean(row.paid),
         paidAt: row.paid_at,
         paymentId: row.payment_id,
+        adminNote: row.admin_note,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
     };

@@ -11,6 +11,7 @@ import LetterListPage from './LetterListPage';
 import ViewLetterPage from './ViewLetterPage';
 import OpenLetterWall from './OpenLetterWall';
 import SettingsPage from './SettingsPage';
+import PhysicalLetterForm from './PhysicalLetterForm';
 import { ToastProvider } from './ToastProvider';
 import { ThemeProvider, useTheme } from './ThemeProvider';
 import ThemeBackground from './ThemeBackground';
@@ -112,6 +113,39 @@ function FutureLetterContent({ onBack }: FutureLetterContainerProps) {
                     <OpenLetterWall
                         onBack={handleBackToHome}
                     />
+                );
+
+            case 'physical':
+                if (!selectedLetterId) {
+                    return (
+                        <FutureLetterHome
+                            onBack={onBack}
+                            onNavigate={handleNavigate}
+                        />
+                    );
+                }
+                return (
+                    <div className="min-h-[100dvh] text-white relative z-10">
+                        <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
+                            <div className="max-w-4xl mx-auto px-4 py-4">
+                                <button
+                                    onClick={() => handleNavigate('detail', selectedLetterId)}
+                                    className="flex items-center gap-2 text-white/70 hover:text-white transition-colors"
+                                >
+                                    <span>← 返回信件</span>
+                                </button>
+                            </div>
+                        </header>
+                        <main className="max-w-4xl mx-auto px-4 py-8">
+                            <h1 className="text-2xl font-bold mb-6">实体信订单</h1>
+                            <PhysicalLetterForm
+                                letterId={selectedLetterId}
+                                onCreated={(order) => {
+                                    handleNavigate('detail', selectedLetterId);
+                                }}
+                            />
+                        </main>
+                    </div>
                 );
 
             default:

@@ -463,6 +463,351 @@ router.get('/music/parse', asyncHandler(async (req: AuthRequest, res: Response) 
 }));
 
 // ============================================
+// User Routes - Physical Letters (实体信)
+// ============================================
+
+import type {
+    PhysicalOptionItem,
+    PhysicalOptionsResponse,
+    PhysicalOrderRequest,
+    PhysicalOrderResponse,
+    PricingResponse,
+    PhysicalOrderListResponse,
+} from '../services/future/types';
+
+/**
+ * 解析物理选项 JSON 字符串
+ */
+function parsePhysicalOptions(raw: string | null): PhysicalOptionItem[] {
+    if (!raw) return [];
+    try {
+        const parsed = JSON.parse(raw);
+        if (!Array.isArray(parsed)) return [];
+        return parsed
+            .filter((item: unknown) =>
+                item &&
+                typeof (item as Record<string, unknown>).value === 'string' &&
+                typeof (item as Record<string, unknown>).label === 'string'
+            )
+            .map((item: Record<string, unknown>) => ({
+                value: String(item.value),
+                label: String(item.label),
+                price: Number.isFinite(Number(item.price)) ? Number(item.price) : 0,
+            }));
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * 获取选项价格
+ */
+function getOptionPrice(options: PhysicalOptionItem[], value?: string): number {
+    if (!value) return 0;
+    const match = options.find((item) => item.value === value);
+    return match && Number.isFinite(match.price) ? match.price! : 0;
+}
+
+/**
+ * 加载纸张和信封选项
+ */
+async function loadPhysicalOptions(): Promise<PhysicalOptionsResponse> {
+    const [paperTypesRaw, envelopeTypesRaw] = await Promise.all([
+        letterService.getSetting('paper_types'),
+        letterService.getSetting('envelope_types'),
+    ]);
+    return {
+        paperTypes: parsePhysicalOptions(paperTypesRaw),
+        envelopeTypes: parsePhysicalOptions(envelopeTypesRaw),
+    };
+}
+
+/**
+ * 检查实体信功能是否启用
+ */
+async function requirePhysicalEnabled(res: Response): Promise<boolean> {
+    const enabled = await letterService.getSetting('physical_letter_enabled');
+    if (enabled !== 'true') {
+        res.status(403).json({
+            error: { code: 'FEATURE_DISABLED', message: '实体信功能暂未开放' }
+        });
+        return false;
+    }
+    return true;
+}
+
+/**
+ * 映射数据库行到响应对象
+ */
+function mapPhysicalOrderRow(row: RowDataPacket): PhysicalOrderResponse {
+    return {
+        id: row.id,
+        letterId: row.letter_id,
+        recipientName: row.recipient_name || undefined,
+        postalCode: row.postal_code || undefined,
+        country: row.country || 'CN',
+        paperType: row.paper_type || undefined,
+        envelopeType: row.envelope_type || undefined,
+        orderStatus: row.order_status || 'pending',
+        shippingStatus: row.shipping_status || 'pending',
+        shippingFee: row.shipping_fee ? parseFloat(row.shipping_fee) : undefined,
+        paid: Boolean(row.paid),
+        trackingNumber: row.tracking_number || undefined,
+        carrier: row.carrier || undefined,
+        adminNote: row.admin_note || undefined,
+        createdAt: row.created_at?.toISOString() || '',
+        updatedAt: row.updated_at?.toISOString() || '',
+    };
+}
+
+/**
+ * GET /api/future/physical/options - 获取纸张/信封选项
+ */
+router.get('/physical/options', requireAuth, asyncHandler(async (_req: AuthRequest, res: Response) => {
+    if (!await requirePhysicalEnabled(res)) return;
+    const options = await loadPhysicalOptions();
+    res.json(options);
+}));
+
+/**
+ * GET /api/future/physical/pricing - 计算费用
+ */
+router.get('/physical/pricing', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!await requirePhysicalEnabled(res)) return;
+
+    const paperType = req.query.paperType as string | undefined;
+    const envelopeType = req.query.envelopeType as string | undefined;
+
+    const options = await loadPhysicalOptions();
+
+    // 验证选项有效性
+    if (paperType && !options.paperTypes.some((item) => item.value === paperType)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的纸张类型', details: { field: 'paperType' } }
+        });
+        return;
+    }
+    if (envelopeType && !options.envelopeTypes.some((item) => item.value === envelopeType)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的信封类型', details: { field: 'envelopeType' } }
+        });
+        return;
+    }
+
+    const baseFeeSetting = await letterService.getSetting('physical_letter_base_fee');
+    const baseFee = parseFloat(baseFeeSetting || '15') || 15;
+    const paperFee = getOptionPrice(options.paperTypes, paperType);
+    const envelopeFee = getOptionPrice(options.envelopeTypes, envelopeType);
+    const totalFee = baseFee + paperFee + envelopeFee;
+
+    const response: PricingResponse = {
+        baseFee,
+        paperFee,
+        envelopeFee,
+        totalFee,
+        currency: 'CNY',
+    };
+    res.json(response);
+}));
+
+/**
+ * POST /api/future/physical/orders - 创建实体信订单
+ */
+router.post('/physical/orders', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!await requirePhysicalEnabled(res)) return;
+
+    const userId = req.user!.id;
+    const data: PhysicalOrderRequest = req.body;
+
+    // 验证必填字段
+    if (!data.letterId?.trim()) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '缺少信件ID', details: { field: 'letterId' } }
+        });
+        return;
+    }
+    if (!data.recipientName?.trim()) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '收件人姓名必填', details: { field: 'recipientName' } }
+        });
+        return;
+    }
+    if (!data.recipientAddress?.trim()) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '收件地址必填', details: { field: 'recipientAddress' } }
+        });
+        return;
+    }
+    if (!data.paperType?.trim()) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '纸张类型必选', details: { field: 'paperType' } }
+        });
+        return;
+    }
+    if (!data.envelopeType?.trim()) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '信封类型必选', details: { field: 'envelopeType' } }
+        });
+        return;
+    }
+
+    // 验证信件存在且属于当前用户
+    const [letters] = await pool.execute<RowDataPacket[]>(
+        `SELECT id, letter_type FROM future_letters
+         WHERE id = ? AND sender_user_id = ? AND deleted_at IS NULL`,
+        [data.letterId, userId]
+    );
+    if (letters.length === 0) {
+        res.status(404).json({
+            error: { code: 'NOT_FOUND', message: '信件不存在' }
+        });
+        return;
+    }
+    if (letters[0].letter_type !== 'physical') {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '此信件不是实体信类型' }
+        });
+        return;
+    }
+
+    // 检查是否已有订单
+    const [existing] = await pool.execute<RowDataPacket[]>(
+        'SELECT id FROM future_letter_physical WHERE letter_id = ?',
+        [data.letterId]
+    );
+    if (existing.length > 0) {
+        res.status(409).json({
+            error: { code: 'CONFLICT', message: '该信件已有实体信订单' }
+        });
+        return;
+    }
+
+    // 验证选项并计算费用
+    const options = await loadPhysicalOptions();
+    if (!options.paperTypes.some((item) => item.value === data.paperType)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的纸张类型', details: { field: 'paperType' } }
+        });
+        return;
+    }
+    if (!options.envelopeTypes.some((item) => item.value === data.envelopeType)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的信封类型', details: { field: 'envelopeType' } }
+        });
+        return;
+    }
+
+    const baseFeeSetting = await letterService.getSetting('physical_letter_base_fee');
+    const baseFee = parseFloat(baseFeeSetting || '15') || 15;
+    const paperFee = getOptionPrice(options.paperTypes, data.paperType);
+    const envelopeFee = getOptionPrice(options.envelopeTypes, data.envelopeType);
+    const totalFee = baseFee + paperFee + envelopeFee;
+
+    // 创建订单
+    await pool.execute(
+        `INSERT INTO future_letter_physical
+         (letter_id, recipient_name, recipient_address_encrypted, recipient_phone_encrypted,
+          postal_code, country, paper_type, envelope_type, order_status, shipping_status,
+          shipping_fee, paid, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 'pending', ?, FALSE, NOW(), NOW())`,
+        [
+            data.letterId,
+            data.recipientName.trim(),
+            data.recipientAddress.trim(),  // TODO: 实际应加密
+            data.recipientPhone?.trim() || null,
+            data.postalCode?.trim() || null,
+            data.country?.trim() || 'CN',
+            data.paperType,
+            data.envelopeType,
+            totalFee,
+        ]
+    );
+
+    // 返回创建的订单
+    const [rows] = await pool.execute<RowDataPacket[]>(
+        'SELECT * FROM future_letter_physical WHERE letter_id = ?',
+        [data.letterId]
+    );
+    res.status(201).json(mapPhysicalOrderRow(rows[0]));
+}));
+
+/**
+ * GET /api/future/physical/orders - 获取订单列表
+ */
+router.get('/physical/orders', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!await requirePhysicalEnabled(res)) return;
+
+    const userId = req.user!.id;
+    const status = req.query.status as string | undefined;
+    const page = Math.max(parseInt(req.query.page as string, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string, 10) || 20, 1), 100);
+    const offset = (page - 1) * limit;
+
+    let whereClause = 'WHERE l.sender_user_id = ? AND l.deleted_at IS NULL';
+    const params: (string | number)[] = [userId];
+
+    if (status) {
+        whereClause += ' AND p.order_status = ?';
+        params.push(status);
+    }
+
+    // 获取总数
+    const [[{ total }]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as total
+         FROM future_letter_physical p
+         JOIN future_letters l ON p.letter_id = l.id
+         ${whereClause}`,
+        params
+    );
+
+    // 获取订单列表
+    const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT p.*
+         FROM future_letter_physical p
+         JOIN future_letters l ON p.letter_id = l.id
+         ${whereClause}
+         ORDER BY p.created_at DESC
+         LIMIT ? OFFSET ?`,
+        [...params, limit, offset]
+    );
+
+    const response: PhysicalOrderListResponse = {
+        orders: rows.map(mapPhysicalOrderRow),
+        total: Number(total),
+        page,
+        totalPages: Math.ceil(Number(total) / limit),
+    };
+    res.json(response);
+}));
+
+/**
+ * GET /api/future/physical/orders/:letterId - 获取单个订单详情
+ */
+router.get('/physical/orders/:letterId', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    if (!await requirePhysicalEnabled(res)) return;
+
+    const userId = req.user!.id;
+    const { letterId } = req.params;
+
+    const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT p.*
+         FROM future_letter_physical p
+         JOIN future_letters l ON p.letter_id = l.id
+         WHERE p.letter_id = ? AND l.sender_user_id = ? AND l.deleted_at IS NULL`,
+        [letterId, userId]
+    );
+
+    if (rows.length === 0) {
+        res.status(404).json({
+            error: { code: 'NOT_FOUND', message: '订单不存在' }
+        });
+        return;
+    }
+
+    res.json(mapPhysicalOrderRow(rows[0]));
+}));
+
+// ============================================
 // User Routes - AI 辅助写作
 // ============================================
 

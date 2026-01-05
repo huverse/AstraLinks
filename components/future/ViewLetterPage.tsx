@@ -22,9 +22,10 @@ import {
     Pause,
     Eye,
     EyeOff,
+    Package,
 } from 'lucide-react';
-import type { FutureLetterDetail, FutureView } from './types';
-import { STATUS_LABELS, STATUS_COLORS } from './types';
+import type { FutureLetterDetail, FutureView, PhysicalOrderResponse } from './types';
+import { STATUS_LABELS, STATUS_COLORS, SHIPPING_STATUS_LABELS, ORDER_STATUS_LABELS } from './types';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE } from '../../utils/api';
 
@@ -461,6 +462,69 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
                 {letter.template && (
                     <div className="text-sm text-white/50 text-center">
                         使用模板：{letter.template.name}
+                    </div>
+                )}
+
+                {/* Physical Letter Order Section */}
+                {['approved', 'scheduled', 'delivering', 'delivered'].includes(letter.status) && (
+                    <div className="mt-8 p-6 bg-white/5 rounded-2xl border border-white/10">
+                        <div className="flex items-center gap-3 mb-4">
+                            <Package className="w-6 h-6 text-emerald-400" />
+                            <h3 className="text-lg font-semibold">实体信服务</h3>
+                        </div>
+
+                        {letter.physicalOrder ? (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <span className="text-white/50">订单状态</span>
+                                        <p className="font-medium">
+                                            {ORDER_STATUS_LABELS[letter.physicalOrder.orderStatus]}
+                                        </p>
+                                    </div>
+                                    <div>
+                                        <span className="text-white/50">物流状态</span>
+                                        <p className="font-medium">
+                                            {SHIPPING_STATUS_LABELS[letter.physicalOrder.shippingStatus]}
+                                        </p>
+                                    </div>
+                                    {letter.physicalOrder.trackingNumber && (
+                                        <div className="col-span-2">
+                                            <span className="text-white/50">快递单号</span>
+                                            <p className="font-medium font-mono">
+                                                {letter.physicalOrder.carrier && `${letter.physicalOrder.carrier}: `}
+                                                {letter.physicalOrder.trackingNumber}
+                                            </p>
+                                        </div>
+                                    )}
+                                    {letter.physicalOrder.shippingFee && (
+                                        <div>
+                                            <span className="text-white/50">费用</span>
+                                            <p className="font-medium">¥{letter.physicalOrder.shippingFee.toFixed(2)}</p>
+                                        </div>
+                                    )}
+                                </div>
+                                {letter.physicalOrder.adminNote && (
+                                    <div className="p-3 bg-white/5 rounded-lg text-sm">
+                                        <span className="text-white/50">备注：</span>
+                                        {letter.physicalOrder.adminNote}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="text-center">
+                                <p className="text-white/60 mb-4">
+                                    将这封信制作成实体信件，通过邮寄送达收件人
+                                </p>
+                                <button
+                                    onClick={() => onNavigate('physical', letter.id)}
+                                    className="px-6 py-3 bg-gradient-to-r from-emerald-500 to-teal-500 rounded-xl font-medium hover:shadow-lg hover:shadow-emerald-500/30 transition-all flex items-center gap-2 mx-auto"
+                                >
+                                    <Package className="w-5 h-5" />
+                                    创建实体信订单
+                                </button>
+                            </div>
+                        )}
                     </div>
                 )}
 
