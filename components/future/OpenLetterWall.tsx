@@ -180,7 +180,7 @@ export default function OpenLetterWall({ onBack }: OpenLetterWallProps) {
     const isDetailView = selectedLetterId !== null;
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+        <div className="min-h-screen text-white relative z-10">
             {/* Header */}
             <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
                 <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">

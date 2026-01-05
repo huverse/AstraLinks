@@ -411,7 +411,9 @@ export interface WritingAssistRequest {
 
 export interface WritingAssistResponse {
     suggestion: string;
-    changes: TextChange[];
+    changes?: TextChange[];
+    provider?: string;
+    modelName?: string;
 }
 
 export interface TextChange {

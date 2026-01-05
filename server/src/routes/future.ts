@@ -10,6 +10,7 @@ import { authMiddleware, AuthenticatedRequest } from '../middleware/auth';
 import * as letterService from '../services/future/letterService';
 import * as deliveryService from '../services/future/deliveryService';
 import * as uploadService from '../services/future/uploadService';
+import * as aiService from '../services/future/aiService';
 import type {
     CreateLetterRequest,
     UpdateLetterRequest,
@@ -462,6 +463,76 @@ router.get('/music/parse', asyncHandler(async (req: AuthRequest, res: Response) 
 }));
 
 // ============================================
+// User Routes - AI 辅助写作
+// ============================================
+
+/**
+ * POST /api/future/ai/compose - AI 辅助写信
+ * 使用用户配置中心的 LLM 配置，或系统默认配置
+ */
+router.post('/ai/compose', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const { content, assistType, context } = req.body;
+
+    // 检查 AI 功能是否启用
+    const aiEnabled = await letterService.getSetting('ai_writing_enabled');
+    if (aiEnabled === 'false') {
+        res.status(403).json({
+            error: { code: 'AI_DISABLED', message: 'AI 辅助写作功能暂未开放' }
+        });
+        return;
+    }
+
+    // 验证
+    if (!content?.trim()) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '内容不能为空', details: { field: 'content' } }
+        });
+        return;
+    }
+
+    const validTypes = ['improve', 'expand', 'simplify', 'emotional'];
+    if (!assistType || !validTypes.includes(assistType)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的辅助类型', details: { field: 'assistType', validTypes } }
+        });
+        return;
+    }
+
+    try {
+        const result = await aiService.composeWritingAssist(userId, {
+            content,
+            assistType,
+            context,
+        });
+        res.json(result);
+    } catch (error: unknown) {
+        if (error instanceof aiService.WritingAssistError) {
+            const statusMap: Record<string, number> = {
+                'NO_CONFIG': 400,
+                'INVALID_CONFIG': 400,
+                'EMPTY_RESPONSE': 400,
+                'MODEL_UNAVAILABLE': 503,
+                'LLM_ERROR': 500,
+                'NO_MODEL': 400,
+            };
+            res.status(statusMap[error.code] || 500).json({
+                error: {
+                    code: error.code,
+                    message: error.message,
+                    // 不暴露 details，避免泄露敏感信息
+                }
+            });
+            return;
+        }
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({
+            error: { code: 'INTERNAL_ERROR', message }
+        });
+    }
+}));
+
+// ============================================
 // User Routes - Attachments
 // ============================================
 
@@ -581,6 +652,124 @@ router.get('/received', requireAuth, asyncHandler(async (req: AuthRequest, res: 
 
     const result = await letterService.getLetterList(userId, query);
     res.json(result);
+}));
+
+// ============================================
+// User Routes - Settings
+// ============================================
+
+/**
+ * GET /api/future/user-settings - 获取用户设置
+ */
+router.get('/user-settings', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const [[settings]] = await pool.execute<RowDataPacket[]>(
+        `SELECT default_email, notify_on_delivery, timezone, theme, dark_mode
+         FROM future_user_settings WHERE user_id = ?`,
+        [userId]
+    );
+
+    if (!settings) {
+        res.json({
+            defaultEmail: req.user!.email || '',
+            notifyOnDelivery: true,
+            timezone: 'Asia/Shanghai',
+            theme: 'purple',
+            darkMode: false,
+        });
+        return;
+    }
+
+    res.json({
+        defaultEmail: settings.default_email || req.user!.email || '',
+        notifyOnDelivery: settings.notify_on_delivery ?? true,
+        timezone: settings.timezone || 'Asia/Shanghai',
+        theme: settings.theme || 'purple',
+        darkMode: settings.dark_mode ?? false,
+    });
+}));
+
+/**
+ * PUT /api/future/user-settings - 更新用户设置
+ */
+router.put('/user-settings', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const { defaultEmail, notifyOnDelivery, timezone, theme, darkMode } = req.body;
+
+    // Validate theme
+    const validThemes = ['purple', 'starry', 'ocean', 'cloud'];
+    if (theme && !validThemes.includes(theme)) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '无效的主题' }
+        });
+        return;
+    }
+
+    await pool.execute(
+        `INSERT INTO future_user_settings (user_id, default_email, notify_on_delivery, timezone, theme, dark_mode)
+         VALUES (?, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+         default_email = VALUES(default_email),
+         notify_on_delivery = VALUES(notify_on_delivery),
+         timezone = VALUES(timezone),
+         theme = VALUES(theme),
+         dark_mode = VALUES(dark_mode),
+         updated_at = NOW()`,
+        [
+            userId,
+            defaultEmail || null,
+            notifyOnDelivery ?? true,
+            timezone || 'Asia/Shanghai',
+            theme || 'purple',
+            darkMode ?? false,
+        ]
+    );
+
+    res.json({ success: true });
+}));
+
+/**
+ * DELETE /api/future/user-data - 删除用户所有时光信数据
+ */
+router.delete('/user-data', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const connection = await pool.getConnection();
+
+    try {
+        await connection.beginTransaction();
+
+        // Delete attachments
+        await connection.execute(
+            'DELETE FROM future_letter_attachments WHERE letter_id IN (SELECT id FROM future_letters WHERE sender_user_id = ?)',
+            [userId]
+        );
+
+        // Delete events
+        await connection.execute(
+            'DELETE FROM future_letter_events WHERE letter_id IN (SELECT id FROM future_letters WHERE sender_user_id = ?)',
+            [userId]
+        );
+
+        // Delete queue entries
+        await connection.execute(
+            'DELETE FROM future_letter_queue WHERE letter_id IN (SELECT id FROM future_letters WHERE sender_user_id = ?)',
+            [userId]
+        );
+
+        // Delete letters
+        await connection.execute('DELETE FROM future_letters WHERE sender_user_id = ?', [userId]);
+
+        // Delete settings
+        await connection.execute('DELETE FROM future_user_settings WHERE user_id = ?', [userId]);
+
+        await connection.commit();
+        res.json({ success: true });
+    } catch (error) {
+        await connection.rollback();
+        throw error;
+    } finally {
+        connection.release();
+    }
 }));
 
 // ============================================

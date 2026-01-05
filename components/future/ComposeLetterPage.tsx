@@ -31,6 +31,8 @@ import type {
     CreateLetterRequest,
     UpdateLetterRequest,
     MusicInfo,
+    WritingAssistRequest,
+    WritingAssistResponse,
 } from './types';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE } from '../../utils/api';
@@ -81,6 +83,10 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     const [showTemplates, setShowTemplates] = useState(false);
     const [showMusicSearch, setShowMusicSearch] = useState(false);
     const [showAIAssist, setShowAIAssist] = useState(false);
+    const [aiAssistType, setAiAssistType] = useState<'improve' | 'expand' | 'simplify' | 'emotional'>('improve');
+    const [aiLoading, setAiLoading] = useState(false);
+    const [aiResult, setAiResult] = useState<WritingAssistResponse | null>(null);
+    const [aiError, setAiError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
     const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
@@ -326,6 +332,53 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
         }
     };
 
+    // AI 辅助写作
+    const handleAIAssist = async () => {
+        if (!state.content.trim()) {
+            setAiError('请先输入内容');
+            return;
+        }
+
+        setAiLoading(true);
+        setAiError(null);
+        setAiResult(null);
+
+        try {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/ai/compose`, {
+                method: 'POST',
+                headers,
+                credentials: 'include',
+                body: JSON.stringify({
+                    content: state.content,
+                    assistType: aiAssistType,
+                }),
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error?.message || 'AI 生成失败');
+            }
+
+            setAiResult(data);
+        } catch (err) {
+            setAiError(err instanceof Error ? err.message : 'AI 生成失败');
+        } finally {
+            setAiLoading(false);
+        }
+    };
+
+    const applyAISuggestion = () => {
+        if (aiResult?.suggestion) {
+            updateState('content', aiResult.suggestion);
+            setShowAIAssist(false);
+            setAiResult(null);
+        }
+    };
+
     // 获取最小日期时间（当前时间+1小时）
     const getMinDateTime = () => {
         const now = new Date();
@@ -334,7 +387,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     };
 
     return (
-        <div className="h-[100dvh] flex flex-col bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white overflow-hidden">
+        <div className="h-[100dvh] flex flex-col text-white overflow-hidden relative z-10">
             {/* Header */}
             <header className="flex-shrink-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
                 <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
@@ -746,7 +799,131 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 currentMusic={state.musicInfo}
             />
 
-            {/* AI Assist Panel - TODO */}
+            {/* AI Assist Panel */}
+            {showAIAssist && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="w-full max-w-2xl bg-slate-900 rounded-2xl border border-white/10 shadow-2xl overflow-hidden">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-4 border-b border-white/10">
+                            <div className="flex items-center gap-2">
+                                <Sparkles className="w-5 h-5 text-purple-400" />
+                                <h3 className="text-lg font-semibold">AI 助写</h3>
+                            </div>
+                            <button
+                                onClick={() => {
+                                    setShowAIAssist(false);
+                                    setAiResult(null);
+                                    setAiError(null);
+                                }}
+                                className="p-1.5 text-white/60 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="p-4 space-y-4">
+                            {/* Assist Type Selection */}
+                            <div>
+                                <label className="block text-sm text-white/70 mb-2">选择辅助类型</label>
+                                <div className="grid grid-cols-2 gap-2">
+                                    {[
+                                        { type: 'improve' as const, label: '润色', desc: '提升表达质量' },
+                                        { type: 'expand' as const, label: '扩写', desc: '丰富内容细节' },
+                                        { type: 'simplify' as const, label: '精简', desc: '简洁明了' },
+                                        { type: 'emotional' as const, label: '增情', desc: '增强情感表达' },
+                                    ].map(({ type, label, desc }) => (
+                                        <button
+                                            key={type}
+                                            onClick={() => setAiAssistType(type)}
+                                            className={`p-3 rounded-xl text-left transition-all ${
+                                                aiAssistType === type
+                                                    ? 'bg-purple-500/30 border-purple-500 border'
+                                                    : 'bg-white/5 border-white/10 border hover:bg-white/10'
+                                            }`}
+                                        >
+                                            <div className="font-medium">{label}</div>
+                                            <div className="text-xs text-white/50">{desc}</div>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Generate Button */}
+                            <button
+                                onClick={handleAIAssist}
+                                disabled={aiLoading || !state.content.trim()}
+                                className="w-full py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium flex items-center justify-center gap-2 hover:shadow-lg hover:shadow-purple-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {aiLoading ? (
+                                    <>
+                                        <Loader2 className="w-5 h-5 animate-spin" />
+                                        AI 正在思考...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="w-5 h-5" />
+                                        生成建议
+                                    </>
+                                )}
+                            </button>
+
+                            {/* Error */}
+                            {aiError && (
+                                <div className="p-3 bg-red-500/20 border border-red-500/30 rounded-xl text-red-300 text-sm">
+                                    {aiError}
+                                </div>
+                            )}
+
+                            {/* Result */}
+                            {aiResult && (
+                                <div className="space-y-3">
+                                    {/* Model Info */}
+                                    {(aiResult.provider || aiResult.modelName) && (
+                                        <div className="flex items-center gap-2 text-xs text-white/50">
+                                            <Info className="w-3 h-3" />
+                                            <span>
+                                                使用模型: {aiResult.provider}{aiResult.modelName ? ` / ${aiResult.modelName}` : ''}
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {/* Suggestion Content */}
+                                    <div className="p-4 bg-white/5 rounded-xl border border-white/10 max-h-64 overflow-y-auto">
+                                        <div className="whitespace-pre-wrap text-sm leading-relaxed">
+                                            {aiResult.suggestion}
+                                        </div>
+                                    </div>
+
+                                    {/* Actions */}
+                                    <div className="flex gap-3">
+                                        <button
+                                            onClick={handleAIAssist}
+                                            disabled={aiLoading}
+                                            className="flex-1 py-2.5 bg-white/10 rounded-xl text-sm font-medium hover:bg-white/20 transition-colors disabled:opacity-50"
+                                        >
+                                            重新生成
+                                        </button>
+                                        <button
+                                            onClick={applyAISuggestion}
+                                            className="flex-1 py-2.5 bg-gradient-to-r from-green-500 to-emerald-500 rounded-xl text-sm font-medium hover:shadow-lg hover:shadow-green-500/30 transition-all"
+                                        >
+                                            采用建议
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Tip */}
+                            {!aiResult && !aiLoading && (
+                                <div className="text-xs text-white/40 text-center">
+                                    提示：AI 将基于你当前的信件内容生成优化建议
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

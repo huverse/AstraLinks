@@ -237,6 +237,8 @@ export interface WritingAssistRequest {
 
 export interface WritingAssistResponse {
     suggestion: string;
+    provider?: string;
+    modelName?: string;
 }
 
 export interface SuggestTimeResponse {

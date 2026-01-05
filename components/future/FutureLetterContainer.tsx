@@ -10,12 +10,19 @@ import ComposeLetterPage from './ComposeLetterPage';
 import LetterListPage from './LetterListPage';
 import ViewLetterPage from './ViewLetterPage';
 import OpenLetterWall from './OpenLetterWall';
+import SettingsPage from './SettingsPage';
+import { ToastProvider } from './ToastProvider';
+import { ThemeProvider, useTheme } from './ThemeProvider';
+import ThemeBackground from './ThemeBackground';
+import GlobalMusicPlayer from '../GlobalMusicPlayer';
 
 interface FutureLetterContainerProps {
     onBack: () => void;
 }
 
-export default function FutureLetterContainer({ onBack }: FutureLetterContainerProps) {
+// Inner component that can access theme context
+function FutureLetterContent({ onBack }: FutureLetterContainerProps) {
+    const { theme, darkMode } = useTheme();
     const [view, setView] = useState<FutureView>('home');
     const [selectedLetterId, setSelectedLetterId] = useState<string | undefined>();
 
@@ -94,19 +101,10 @@ export default function FutureLetterContainer({ onBack }: FutureLetterContainerP
                 );
 
             case 'settings':
-                // TODO: Implement settings page
                 return (
-                    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white flex items-center justify-center">
-                        <div className="text-center">
-                            <p className="text-xl mb-4">设置页面开发中...</p>
-                            <button
-                                onClick={handleBackToHome}
-                                className="px-6 py-2 bg-purple-500 rounded-lg hover:bg-purple-600 transition-colors"
-                            >
-                                返回首页
-                            </button>
-                        </div>
-                    </div>
+                    <SettingsPage
+                        onBack={handleBackToHome}
+                    />
                 );
 
             case 'public':
@@ -121,5 +119,22 @@ export default function FutureLetterContainer({ onBack }: FutureLetterContainerP
         }
     };
 
-    return renderView();
+    return (
+        <>
+            <ThemeBackground theme={theme} darkMode={darkMode} />
+            <ToastProvider>
+                {renderView()}
+                <GlobalMusicPlayer />
+            </ToastProvider>
+        </>
+    );
+}
+
+// Main container with theme provider wrapper
+export default function FutureLetterContainer({ onBack }: FutureLetterContainerProps) {
+    return (
+        <ThemeProvider>
+            <FutureLetterContent onBack={onBack} />
+        </ThemeProvider>
+    );
 }

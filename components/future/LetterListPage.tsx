@@ -22,6 +22,7 @@ import {
 import type { FutureView, FutureLetterSummary, LetterListResponse, LetterStatus } from './types';
 import { STATUS_LABELS, STATUS_COLORS } from './types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from './ToastProvider';
 import { API_BASE } from '../../utils/api';
 
 type ListType = 'sent' | 'received' | 'drafts';
@@ -55,6 +56,7 @@ const LIST_CONFIG: Record<ListType, { title: string; icon: React.ElementType; em
 
 export default function LetterListPage({ type, onBack, onNavigate }: LetterListPageProps) {
     const { token } = useAuth();
+    const toast = useToast();
     const [letters, setLetters] = useState<FutureLetterSummary[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -143,8 +145,9 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
 
             setLetters(prev => prev.filter(l => l.id !== letterId));
             setTotal(prev => prev - 1);
+            toast.success('删除成功');
         } catch (err) {
-            alert(err instanceof Error ? err.message : '删除失败');
+            toast.error(err instanceof Error ? err.message : '删除失败');
         } finally {
             setDeletingId(null);
         }
@@ -156,10 +159,12 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
     };
 
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('zh-CN', {
+        return new Date(dateStr).toLocaleString('zh-CN', {
             year: 'numeric',
             month: 'short',
             day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
         });
     };
 
@@ -174,7 +179,7 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
     };
 
     return (
-        <div className="min-h-[100dvh] bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 text-white">
+        <div className="min-h-[100dvh] text-white relative z-10">
             {/* Header */}
             <header className="sticky top-0 z-40 backdrop-blur-xl bg-slate-900/70 border-b border-white/10">
                 <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
