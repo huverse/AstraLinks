@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { fetchAPI } from '../services/api';
-import { Mail, Clock, CheckCircle, XCircle, Eye, RefreshCw, Filter, Calendar, User, Globe, Package, Truck, Printer, Edit2, Save, X } from 'lucide-react';
+import { Mail, Clock, CheckCircle, XCircle, Eye, RefreshCw, Filter, Calendar, User, Globe, Package, Truck, Printer, Edit2, Save, X, Search, Trash2 } from 'lucide-react';
 
 interface Letter {
     id: string;
@@ -135,6 +135,9 @@ export default function FutureLetters() {
     const [rejectReason, setRejectReason] = useState('');
     const [reviewNote, setReviewNote] = useState('');
     const [actionLoading, setActionLoading] = useState(false);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+    const [deleteLoading, setDeleteLoading] = useState(false);
 
     // Physical orders state
     const [physicalOrders, setPhysicalOrders] = useState<PhysicalOrder[]>([]);
@@ -312,6 +315,36 @@ export default function FutureLetters() {
         setReviewNote('');
     };
 
+    const handleDelete = async (letterId: string) => {
+        setDeleteLoading(true);
+        try {
+            await fetchAPI(`/api/future/admin/letters/${letterId}`, {
+                method: 'DELETE',
+            });
+            setDeleteConfirm(null);
+            loadLetters();
+            loadStats();
+        } catch (error) {
+            console.error('Failed to delete:', error);
+            alert('删除失败: ' + (error as Error).message);
+        } finally {
+            setDeleteLoading(false);
+        }
+    };
+
+    // Filter letters by search query
+    const filteredLetters = letters.filter(letter => {
+        if (!searchQuery.trim()) return true;
+        const query = searchQuery.toLowerCase();
+        return (
+            letter.title.toLowerCase().includes(query) ||
+            letter.sender_username.toLowerCase().includes(query) ||
+            letter.sender_email.toLowerCase().includes(query) ||
+            (letter.recipient_email && letter.recipient_email.toLowerCase().includes(query)) ||
+            letter.id.toLowerCase().includes(query)
+        );
+    });
+
     const formatDate = (dateStr: string | null, timezone?: string) => {
         if (!dateStr) return '-';
         return new Date(dateStr).toLocaleString('zh-CN', {
@@ -454,32 +487,62 @@ export default function FutureLetters() {
             )}
 
             {/* Filter */}
-            <div className="flex items-center gap-2">
-                <Filter size={16} className="text-gray-500" />
-                <span className="text-sm text-gray-600 dark:text-gray-400">筛选:</span>
-                {['pending_review', 'approved', 'rejected', 'delivered', 'all'].map(f => (
-                    <button
-                        key={f}
-                        onClick={() => { setFilter(f); setPage(1); }}
-                        className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
-                            filter === f
-                                ? 'bg-blue-500 text-white'
-                                : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
-                        }`}
-                    >
-                        {f === 'all' ? '全部' : STATUS_LABELS[f] || f}
-                    </button>
-                ))}
+            <div className="flex flex-wrap items-center gap-4">
+                {/* Search Input */}
+                <div className="relative">
+                    <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                    <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        placeholder="搜索标题、发件人、收件人..."
+                        className="pl-9 pr-4 py-2 w-64 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    {searchQuery && (
+                        <button
+                            onClick={() => setSearchQuery('')}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                        >
+                            <X size={14} />
+                        </button>
+                    )}
+                </div>
+
+                {/* Status Filter */}
+                <div className="flex items-center gap-2">
+                    <Filter size={16} className="text-gray-500" />
+                    <span className="text-sm text-gray-600 dark:text-gray-400">筛选:</span>
+                    {['pending_review', 'approved', 'rejected', 'delivered', 'all'].map(f => (
+                        <button
+                            key={f}
+                            onClick={() => { setFilter(f); setPage(1); }}
+                            className={`px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                                filter === f
+                                    ? 'bg-blue-500 text-white'
+                                    : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
+                            }`}
+                        >
+                            {f === 'all' ? '全部' : STATUS_LABELS[f] || f}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Search Results Count */}
+                {searchQuery && (
+                    <span className="text-sm text-gray-500 dark:text-gray-400">
+                        找到 {filteredLetters.length} 条结果
+                    </span>
+                )}
             </div>
 
             {/* Letters Table */}
             <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-200 dark:border-slate-700 overflow-hidden">
                 {loading ? (
                     <div className="p-8 text-center text-gray-500">加载中...</div>
-                ) : letters.length === 0 ? (
+                ) : filteredLetters.length === 0 ? (
                     <div className="p-8 text-center text-gray-500">
                         <Mail size={48} className="mx-auto mb-4 opacity-50" />
-                        <p>暂无{STATUS_LABELS[filter] || ''}信件</p>
+                        <p>{searchQuery ? '没有找到匹配的信件' : `暂无${STATUS_LABELS[filter] || ''}信件`}</p>
                     </div>
                 ) : (
                     <table className="w-full">
@@ -494,7 +557,7 @@ export default function FutureLetters() {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 dark:divide-slate-700">
-                            {letters.map(letter => (
+                            {filteredLetters.map(letter => (
                                 <tr key={letter.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50">
                                     <td className="px-4 py-3">
                                         <div className="flex items-center gap-2">
@@ -554,6 +617,13 @@ export default function FutureLetters() {
                                                     </button>
                                                 </>
                                             )}
+                                            <button
+                                                onClick={() => setDeleteConfirm(letter.id)}
+                                                className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded transition-colors"
+                                                title="删除"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
                                         </div>
                                     </td>
                                 </tr>
@@ -1021,6 +1091,46 @@ export default function FutureLetters() {
                                     {actionLoading ? '处理中...' : '确认拒绝'}
                                 </button>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Confirmation Modal */}
+            {deleteConfirm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl max-w-md w-full">
+                        <div className="p-6">
+                            <div className="flex items-center gap-3 mb-4">
+                                <div className="p-2 bg-red-100 dark:bg-red-900/30 rounded-full">
+                                    <Trash2 className="text-red-600 dark:text-red-400" size={24} />
+                                </div>
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white">确认删除</h2>
+                            </div>
+                            <p className="text-gray-600 dark:text-gray-400 mb-6">
+                                确定要删除这封信件吗？此操作不可恢复。
+                            </p>
+                            <div className="flex justify-end gap-3">
+                                <button
+                                    onClick={() => setDeleteConfirm(null)}
+                                    className="px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg transition-colors"
+                                    disabled={deleteLoading}
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    onClick={() => handleDelete(deleteConfirm)}
+                                    disabled={deleteLoading}
+                                    className="px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {deleteLoading ? (
+                                        <RefreshCw size={16} className="animate-spin" />
+                                    ) : (
+                                        <Trash2 size={16} />
+                                    )}
+                                    {deleteLoading ? '删除中...' : '确认删除'}
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>

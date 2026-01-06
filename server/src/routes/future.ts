@@ -1530,6 +1530,32 @@ router.post('/admin/letters/:id/reject', requireAuth, requireAdmin, asyncHandler
 }));
 
 /**
+ * DELETE /api/future/admin/letters/:id - 管理员删除信件(软删除)
+ */
+router.delete('/admin/letters/:id', requireAuth, requireAdmin, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const letterId = req.params.id;
+
+    // 检查信件是否存在
+    const [[letter]] = await pool.execute<RowDataPacket[]>(
+        'SELECT id FROM future_letters WHERE id = ? AND deleted_at IS NULL',
+        [letterId]
+    );
+
+    if (!letter) {
+        res.status(404).json({ error: { code: 'NOT_FOUND', message: '信件不存在' } });
+        return;
+    }
+
+    // 软删除信件
+    await pool.execute(
+        'UPDATE future_letters SET deleted_at = NOW() WHERE id = ?',
+        [letterId]
+    );
+
+    res.json({ success: true, message: '信件已删除' });
+}));
+
+/**
  * GET /api/future/admin/settings - 获取设置
  */
 router.get('/admin/settings', requireAuth, requireAdmin, asyncHandler(async (_req: AuthRequest, res: Response) => {
