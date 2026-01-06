@@ -10,7 +10,6 @@ import MultimodalCenter from './components/MultimodalCenter';
 import VotingPanel from './components/VotingPanel';
 import LoginModal from './components/LoginModal';
 import FeedbackWidget from './components/FeedbackWidget';
-import GlobalMusicPlayer from './components/GlobalMusicPlayer';
 import ProfileCenter from './components/ProfileCenter';
 import AnnouncementBanner from './components/AnnouncementBanner';
 import TurnstileGate from './components/TurnstileGate';
@@ -1630,17 +1629,15 @@ const App: React.FC = () => {
     return (
       <div
         className={`h-[100dvh] transition-transform duration-600 ${futureModeFlipping ? 'animate-flip-in' : ''}`}
-        style={{ perspective: '1000px' }}
       >
         <FutureLetterContainer onBack={toggleFutureMode} />
-        {/* Global Background Music Player - Only shown in Future Letters Mode */}
-        <GlobalMusicPlayer />
+        {/* GlobalMusicPlayer is rendered inside FutureLetterContainer */}
         <style>{`
           @keyframes flip-in {
             0% { transform: rotateY(180deg); opacity: 0; }
             100% { transform: rotateY(0deg); opacity: 1; }
           }
-          .animate-flip-in { animation: flip-in 0.6s ease-out; }
+          .animate-flip-in { animation: flip-in 0.6s ease-out; transform-style: preserve-3d; perspective: 1000px; }
         `}</style>
       </div>
     );
@@ -1651,7 +1648,6 @@ const App: React.FC = () => {
     return (
       <div
         className={`h-[100dvh] transition-transform duration-600 ${isolationModeFlipping ? 'animate-flip-in' : ''}`}
-        style={{ perspective: '1000px' }}
       >
         <IsolationModeContainer onExit={toggleIsolationMode} participants={participants} />
         <style>{`
@@ -1659,7 +1655,7 @@ const App: React.FC = () => {
             0% { transform: rotateY(180deg); opacity: 0; }
             100% { transform: rotateY(0deg); opacity: 1; }
           }
-          .animate-flip-in { animation: flip-in 0.6s ease-out; }
+          .animate-flip-in { animation: flip-in 0.6s ease-out; transform-style: preserve-3d; perspective: 1000px; }
         `}</style>
       </div>
     );
