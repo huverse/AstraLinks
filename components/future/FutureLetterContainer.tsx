@@ -26,6 +26,8 @@ function FutureLetterContent({ onBack }: FutureLetterContainerProps) {
     const { theme, darkMode } = useTheme();
     const [view, setView] = useState<FutureView>('home');
     const [selectedLetterId, setSelectedLetterId] = useState<string | undefined>();
+    // Key to force home page refresh when returning from detail/received views
+    const [homeRefreshKey, setHomeRefreshKey] = useState(0);
 
     const handleNavigate = useCallback((newView: FutureView, letterId?: string) => {
         setView(newView);
@@ -33,6 +35,8 @@ function FutureLetterContent({ onBack }: FutureLetterContainerProps) {
     }, []);
 
     const handleBackToHome = useCallback(() => {
+        // Increment key to force FutureLetterHome to re-mount and refresh stats
+        setHomeRefreshKey(k => k + 1);
         setView('home');
         setSelectedLetterId(undefined);
     }, []);
@@ -43,6 +47,7 @@ function FutureLetterContent({ onBack }: FutureLetterContainerProps) {
             case 'home':
                 return (
                     <FutureLetterHome
+                        key={homeRefreshKey}
                         onBack={onBack}
                         onNavigate={handleNavigate}
                     />

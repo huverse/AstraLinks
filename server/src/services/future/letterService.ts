@@ -252,7 +252,7 @@ export async function getLetterList(
         whereClause += ' AND sender_user_id = ?';
         params.push(userId);
     } else if (query.type === 'received') {
-        whereClause += ' AND (recipient_user_id = ? OR recipient_email_hash = (SELECT recipient_email_hash FROM users WHERE id = ?))';
+        whereClause += ' AND (recipient_user_id = ? OR recipient_email_hash = (SELECT recipient_email_hash FROM users WHERE id = ?)) AND recipient_deleted_at IS NULL';
         params.push(userId, userId);
     } else if (query.type === 'drafts') {
         whereClause += ' AND sender_user_id = ? AND status = "draft"';
@@ -477,6 +477,70 @@ export async function deleteLetter(
     );
 
     await logEvent(letterId, userId, 'user', 'deleted', 'draft', null);
+
+    return true;
+}
+
+/**
+ * 撤回已提交审核的信件 (pending_review -> draft)
+ */
+export async function withdrawLetter(
+    letterId: string,
+    userId: number
+): Promise<FutureLetter | null> {
+    const letter = await getLetter(letterId, userId);
+    if (!letter) return null;
+
+    if (letter.status !== 'pending_review') {
+        throw new Error('Can only withdraw pending_review letters');
+    }
+
+    await pool.execute(
+        `UPDATE future_letters
+         SET status = 'draft', submitted_at = NULL, turnstile_verified = FALSE
+         WHERE id = ? AND sender_user_id = ?`,
+        [letterId, userId]
+    );
+
+    await logEvent(letterId, userId, 'user', 'withdrawn', 'draft', '用户撤回了信件');
+
+    return getLetter(letterId, userId);
+}
+
+/**
+ * 删除收到的信件 (软删除，仅从收件人视角)
+ */
+export async function deleteReceivedLetter(
+    letterId: string,
+    userId: number
+): Promise<boolean> {
+    // 获取用户邮箱
+    const [userRows] = await pool.execute<RowDataPacket[]>(
+        'SELECT email FROM users WHERE id = ?',
+        [userId]
+    );
+    if (userRows.length === 0) return false;
+    const userEmail = userRows[0].email;
+
+    // 检查用户是否是收件人
+    const [letterRows] = await pool.execute<RowDataPacket[]>(
+        `SELECT id FROM future_letters
+         WHERE id = ? AND (
+             (recipient_type = 'self' AND sender_user_id = ?)
+             OR (recipient_type = 'other' AND recipient_email = ?)
+         ) AND deleted_at IS NULL`,
+        [letterId, userId, userEmail]
+    );
+
+    if (letterRows.length === 0) return false;
+
+    // 软删除：设置收件人删除时间 (不影响发件人)
+    await pool.execute(
+        'UPDATE future_letters SET recipient_deleted_at = ? WHERE id = ?',
+        [new Date(), letterId]
+    );
+
+    await logEvent(letterId, userId, 'user', 'recipient_deleted', null, '收件人删除了信件');
 
     return true;
 }
@@ -802,14 +866,14 @@ export async function getUserStats(userId: number, userEmail: string): Promise<U
     // 收到的信件数量 (已投递的)
     const [[receivedRow]] = await pool.execute<RowDataPacket[]>(
         `SELECT COUNT(*) as count FROM future_letters
-         WHERE recipient_email_normalized = ? AND status = 'delivered' AND deleted_at IS NULL`,
+         WHERE recipient_email_normalized = ? AND status = 'delivered' AND deleted_at IS NULL AND recipient_deleted_at IS NULL`,
         [normalizedEmail]
     );
 
     // 未读的收到信件数量
     const [[receivedUnreadRow]] = await pool.execute<RowDataPacket[]>(
         `SELECT COUNT(*) as count FROM future_letters
-         WHERE recipient_email_normalized = ? AND status = 'delivered' AND recipient_read_at IS NULL AND deleted_at IS NULL`,
+         WHERE recipient_email_normalized = ? AND status = 'delivered' AND recipient_read_at IS NULL AND deleted_at IS NULL AND recipient_deleted_at IS NULL`,
         [normalizedEmail]
     );
 

@@ -408,7 +408,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                                 保存中...
                             </span>
                         )}
-                        {!state.isSaving && state.draftId && !state.isDirty && (
+                        {!state.isSaving && state.draftId && !state.isDirty && !error && (
                             <span className="text-sm text-green-400">已保存</span>
                         )}
                     </div>

@@ -11,6 +11,7 @@ interface Letter {
     recipient_email: string | null;
     scheduled_local: string;
     scheduled_at_utc: string;
+    scheduled_tz: string;
     delivered_at: string | null;
     created_at: string;
     submitted_at: string | null;
@@ -311,7 +312,7 @@ export default function FutureLetters() {
         setReviewNote('');
     };
 
-    const formatDate = (dateStr: string | null) => {
+    const formatDate = (dateStr: string | null, timezone?: string) => {
         if (!dateStr) return '-';
         return new Date(dateStr).toLocaleString('zh-CN', {
             year: 'numeric',
@@ -319,6 +320,7 @@ export default function FutureLetters() {
             day: '2-digit',
             hour: '2-digit',
             minute: '2-digit',
+            timeZone: timezone || 'Asia/Shanghai',
         });
     };
 
@@ -518,7 +520,7 @@ export default function FutureLetters() {
                                         {letter.recipient_type === 'self' ? '自己' : letter.recipient_email || '-'}
                                     </td>
                                     <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400">
-                                        {formatDate(letter.scheduled_local)}
+                                        {formatDate(letter.scheduled_at_utc, letter.scheduled_tz)}
                                     </td>
                                     <td className="px-4 py-3">
                                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${STATUS_COLORS[letter.status] || ''}`}>
@@ -939,13 +941,13 @@ export default function FutureLetters() {
                                 <div>
                                     <label className="text-sm font-medium text-gray-500 dark:text-gray-400">排期时间</label>
                                     <p className="text-gray-900 dark:text-white mt-1">
-                                        {formatDate(selectedLetter.scheduled_local)}
+                                        {formatDate(selectedLetter.scheduled_at_utc, selectedLetter.scheduled_tz)}
                                     </p>
                                 </div>
                                 <div>
                                     <label className="text-sm font-medium text-gray-500 dark:text-gray-400">提交时间</label>
                                     <p className="text-gray-900 dark:text-white mt-1">
-                                        {formatDate(selectedLetter.submitted_at)}
+                                        {formatDate(selectedLetter.submitted_at, selectedLetter.scheduled_tz)}
                                     </p>
                                 </div>
                             </div>

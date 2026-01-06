@@ -24,6 +24,7 @@ import { STATUS_LABELS, STATUS_COLORS } from './types';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from './ToastProvider';
 import { API_BASE } from '../../utils/api';
+import { formatDate } from '../../utils/dateFormat';
 
 interface FutureLetterHomeProps {
     onBack: () => void;
@@ -273,12 +274,7 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
                                                 </span>
                                                 <span>·</span>
                                                 <span>
-                                                    {new Date(letter.scheduledAtUtc).toLocaleString('zh-CN', {
-                                                        month: 'short',
-                                                        day: 'numeric',
-                                                        hour: '2-digit',
-                                                        minute: '2-digit',
-                                                    })}
+                                                    {formatDate(letter.scheduledAtUtc, { style: 'short', timezone: letter.scheduledTz })}
                                                 </span>
                                             </div>
                                         </button>

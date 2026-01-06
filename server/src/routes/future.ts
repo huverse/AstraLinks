@@ -404,6 +404,66 @@ router.post('/letters/:id/submit', requireAuth, asyncHandler(async (req: AuthReq
     }
 }));
 
+/**
+ * POST /api/future/letters/:id/withdraw - 撤回提交的信件 (pending_review -> draft)
+ */
+router.post('/letters/:id/withdraw', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const letterId = req.params.id;
+
+    try {
+        const letter = await letterService.withdrawLetter(letterId, userId);
+
+        if (!letter) {
+            res.status(404).json({
+                error: { code: 'NOT_FOUND', message: '信件不存在' }
+            });
+            return;
+        }
+
+        res.json(letter);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+
+        if (message.includes('only withdraw pending_review')) {
+            res.status(400).json({
+                error: { code: 'VALIDATION_ERROR', message: '只能撤回待审核状态的信件' }
+            });
+            return;
+        }
+
+        res.status(500).json({
+            error: { code: 'INTERNAL_ERROR', message }
+        });
+    }
+}));
+
+/**
+ * DELETE /api/future/received/:id - 删除收到的信件 (软删除，仅从收件人视角)
+ */
+router.delete('/received/:id', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const letterId = req.params.id;
+
+    try {
+        const deleted = await letterService.deleteReceivedLetter(letterId, userId);
+
+        if (!deleted) {
+            res.status(404).json({
+                error: { code: 'NOT_FOUND', message: '信件不存在或您不是收件人' }
+            });
+            return;
+        }
+
+        res.status(204).send();
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        res.status(500).json({
+            error: { code: 'INTERNAL_ERROR', message }
+        });
+    }
+}));
+
 // ============================================
 // User Routes - Templates
 // ============================================
@@ -1347,9 +1407,9 @@ router.get('/admin/letters', requireAuth, requireAdmin, asyncHandler(async (req:
     const [rows] = await pool.execute<RowDataPacket[]>(
         `SELECT
             fl.id, fl.title, fl.content, fl.status, fl.recipient_type,
-            fl.recipient_email, fl.scheduled_local, fl.scheduled_at_utc,
+            fl.recipient_email, fl.scheduled_local, fl.scheduled_at_utc, fl.scheduled_tz,
             fl.delivered_at, fl.created_at, fl.is_public, fl.review_note,
-            fl.rejected_reason, fl.reviewed_at,
+            fl.rejected_reason, fl.reviewed_at, fl.submitted_at,
             u.username as sender_username, u.email as sender_email
          FROM future_letters fl
          LEFT JOIN users u ON fl.sender_user_id = u.id
@@ -1374,7 +1434,7 @@ router.get('/admin/letters/pending-review', requireAuth, requireAdmin, asyncHand
     const [rows] = await pool.execute<RowDataPacket[]>(
         `SELECT
             fl.id, fl.title, fl.content, fl.status, fl.recipient_type,
-            fl.recipient_email, fl.scheduled_local, fl.scheduled_at_utc,
+            fl.recipient_email, fl.scheduled_local, fl.scheduled_at_utc, fl.scheduled_tz,
             fl.created_at, fl.is_public, fl.submitted_at,
             u.username as sender_username, u.email as sender_email
          FROM future_letters fl

@@ -23,11 +23,19 @@ import {
     Eye,
     EyeOff,
     Package,
+    Trash2,
+    Undo2,
+    ChevronDown,
+    ChevronUp,
+    FileCheck,
+    AlertCircle,
+    Info,
 } from 'lucide-react';
 import type { FutureLetterDetail, FutureView, PhysicalOrderResponse } from './types';
 import { STATUS_LABELS, STATUS_COLORS, SHIPPING_STATUS_LABELS, ORDER_STATUS_LABELS } from './types';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE } from '../../utils/api';
+import { formatDate as formatDateUtil, formatTimeRemaining, maskEmail } from '../../utils/dateFormat';
 
 interface ViewLetterPageProps {
     letterId: string;
@@ -50,6 +58,13 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
     // Music player state
     const [isPlaying, setIsPlaying] = useState(false);
     const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
+
+    // Action states
+    const [isWithdrawing, setIsWithdrawing] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+
+    // Details panel state
+    const [showDetails, setShowDetails] = useState(false);
 
     const loadLetter = useCallback(async () => {
         setIsLoading(true);
@@ -150,16 +165,9 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
         }
     };
 
+    // Use unified formatDate utility with proper timezone support
     const formatDate = (dateStr: string, tz?: string) => {
-        const date = new Date(dateStr);
-        return date.toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-            timeZone: tz || 'Asia/Shanghai',
-        });
+        return formatDateUtil(dateStr, { timezone: tz || letter?.scheduledTz || 'Asia/Shanghai' });
     };
 
     const handleShare = async () => {
@@ -180,6 +188,67 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
         } else {
             await navigator.clipboard.writeText(window.location.href);
             alert('链接已复制到剪贴板');
+        }
+    };
+
+    // Withdraw pending_review letter back to draft
+    const handleWithdraw = async () => {
+        if (!letter || letter.status !== 'pending_review') return;
+        if (!confirm('确定要撤回这封信吗？撤回后将变回草稿状态。')) return;
+
+        setIsWithdrawing(true);
+        try {
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}/withdraw`, {
+                method: 'POST',
+                credentials: 'include',
+                headers,
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error?.message || '撤回失败');
+            }
+
+            // Reload letter data
+            await loadLetter();
+            alert('信件已撤回为草稿状态');
+        } catch (err) {
+            alert(err instanceof Error ? err.message : '撤回失败');
+        } finally {
+            setIsWithdrawing(false);
+        }
+    };
+
+    // Delete received letter (soft delete from recipient's view)
+    const handleDeleteReceived = async () => {
+        if (!letter) return;
+        if (!confirm('确定要删除这封收到的信件吗？删除后将无法恢复。')) return;
+
+        setIsDeleting(true);
+        try {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/received/${letterId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+                headers,
+            });
+
+            if (!response.ok && response.status !== 204) {
+                const data = await response.json();
+                throw new Error(data.error?.message || '删除失败');
+            }
+
+            alert('信件已删除');
+            onBack();
+        } catch (err) {
+            alert(err instanceof Error ? err.message : '删除失败');
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -362,6 +431,78 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
                     </div>
                 </div>
 
+                {/* Enhanced Metadata Panel */}
+                <div className="mb-6">
+                    <button
+                        onClick={() => setShowDetails(!showDetails)}
+                        className="flex items-center gap-2 text-white/60 hover:text-white/80 transition-colors text-sm"
+                    >
+                        <Info className="w-4 h-4" />
+                        <span>详细信息</span>
+                        {showDetails ? (
+                            <ChevronUp className="w-4 h-4" />
+                        ) : (
+                            <ChevronDown className="w-4 h-4" />
+                        )}
+                    </button>
+                    {showDetails && (
+                        <div className="mt-3 bg-white/5 rounded-xl p-4 border border-white/10 space-y-3 text-sm">
+                            {/* Status Timeline */}
+                            <div className="space-y-2">
+                                <div className="flex items-center gap-2 text-white/60">
+                                    <Calendar className="w-4 h-4" />
+                                    <span>创建时间: {formatDate(letter.createdAt)}</span>
+                                </div>
+                                {letter.submittedAt && (
+                                    <div className="flex items-center gap-2 text-amber-400/80">
+                                        <Clock className="w-4 h-4" />
+                                        <span>提交审核: {formatDate(letter.submittedAt)}</span>
+                                    </div>
+                                )}
+                                {letter.reviewedAt && (
+                                    <div className="flex items-center gap-2 text-green-400/80">
+                                        <FileCheck className="w-4 h-4" />
+                                        <span>审核时间: {formatDate(letter.reviewedAt)}</span>
+                                    </div>
+                                )}
+                                {letter.deliveredAt && (
+                                    <div className="flex items-center gap-2 text-blue-400/80">
+                                        <Mail className="w-4 h-4" />
+                                        <span>送达时间: {formatDate(letter.deliveredAt)}</span>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Rejection reason if rejected */}
+                            {letter.status === 'rejected' && letter.rejectedReason && (
+                                <div className="flex items-start gap-2 text-red-400/80 bg-red-500/10 rounded-lg p-3">
+                                    <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                                    <span>拒绝原因: {letter.rejectedReason}</span>
+                                </div>
+                            )}
+
+                            {/* Recipient Info */}
+                            {letter.recipientType === 'other' && letter.recipientEmail && (
+                                <div className="flex items-center gap-2 text-white/60">
+                                    <Mail className="w-4 h-4" />
+                                    <span>收件邮箱: {maskEmail(letter.recipientEmail)}</span>
+                                </div>
+                            )}
+
+                            {/* Technical Info */}
+                            <div className="flex items-center gap-4 text-white/40 text-xs pt-2 border-t border-white/10">
+                                <span>ID: {letter.id.slice(0, 8)}...</span>
+                                <span>版本: v{letter.version}</span>
+                                {letter.isEncrypted && (
+                                    <span className="flex items-center gap-1">
+                                        <Lock className="w-3 h-3" />加密
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
                 {/* Music Player */}
                 {letter.musicUrl && (
                     <div className="mb-6 bg-gradient-to-r from-pink-500/20 to-purple-500/20 rounded-xl p-4 border border-pink-500/30">
@@ -536,6 +677,43 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
                             className="px-8 py-3 bg-gradient-to-r from-purple-500 to-pink-500 rounded-xl font-medium hover:shadow-lg hover:shadow-purple-500/30 transition-all"
                         >
                             继续编辑
+                        </button>
+                    </div>
+                )}
+
+                {/* Withdraw Button for Pending Review */}
+                {letter.status === 'pending_review' && (
+                    <div className="mt-8 text-center space-y-3">
+                        <p className="text-white/60 text-sm">信件正在等待审核，您可以撤回并继续编辑</p>
+                        <button
+                            onClick={handleWithdraw}
+                            disabled={isWithdrawing}
+                            className="px-8 py-3 bg-gradient-to-r from-amber-500 to-orange-500 rounded-xl font-medium hover:shadow-lg hover:shadow-amber-500/30 transition-all disabled:opacity-50 flex items-center gap-2 mx-auto"
+                        >
+                            {isWithdrawing ? (
+                                <Loader2 className="w-5 h-5 animate-spin" />
+                            ) : (
+                                <Undo2 className="w-5 h-5" />
+                            )}
+                            {isWithdrawing ? '撤回中...' : '撤回信件'}
+                        </button>
+                    </div>
+                )}
+
+                {/* Delete Button for Received Letters */}
+                {letter.status === 'delivered' && (
+                    <div className="mt-8 text-center">
+                        <button
+                            onClick={handleDeleteReceived}
+                            disabled={isDeleting}
+                            className="px-6 py-2 bg-red-500/20 text-red-400 border border-red-500/30 rounded-xl hover:bg-red-500/30 transition-all disabled:opacity-50 flex items-center gap-2 mx-auto"
+                        >
+                            {isDeleting ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Trash2 className="w-4 h-4" />
+                            )}
+                            {isDeleting ? '删除中...' : '从我的收件箱删除'}
                         </button>
                     </div>
                 )}
