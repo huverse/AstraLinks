@@ -119,28 +119,33 @@ export default function GlobalMusicPlayer() {
         return null;
     }
 
-    // Hidden player iframe - keeps playing when panel is hidden or collapsed
-    const hiddenPlayer = !isMuted && (
-        <div
-            className="absolute w-px h-px overflow-hidden opacity-0 pointer-events-none"
-            aria-hidden="true"
-        >
-            <iframe
-                src={generateWidgetUrl(settings.songId, settings.autoplay)}
-                width="330"
-                height="86"
-                frameBorder="0"
-                allow="autoplay"
-                title="网易云音乐播放器 (后台)"
-            />
-        </div>
-    );
+    // 使用单一iframe实例，通过CSS控制可见性，避免重复播放
+    // 只有在非静音时才渲染iframe
+    const playerIframe = !isMuted ? (
+        <iframe
+            src={generateWidgetUrl(settings.songId, settings.autoplay)}
+            width="100%"
+            height="86"
+            frameBorder="0"
+            allow="autoplay"
+            title="网易云音乐播放器"
+            className="w-full"
+        />
+    ) : null;
 
     // Only show the collapsed button when player is hidden
     if (!isVisible) {
         return (
             <>
-                {hiddenPlayer}
+                {/* 隐藏状态下的后台播放器 */}
+                {!isMuted && (
+                    <div
+                        className="fixed w-px h-px overflow-hidden opacity-0 pointer-events-none"
+                        aria-hidden="true"
+                    >
+                        {playerIframe}
+                    </div>
+                )}
                 <button
                     onClick={toggleVisible}
                     className="fixed bottom-24 right-4 md:bottom-24 md:right-6 z-40 p-3 rounded-full shadow-lg bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:shadow-pink-500/30 hover:scale-105 transition-all"
@@ -194,32 +199,21 @@ export default function GlobalMusicPlayer() {
                     )}
                 </div>
 
-                {/* Player Content */}
-                {isExpanded ? (
-                    <div className="px-2 pb-2">
-                        {isMuted ? (
+                {/* Player Content - 单一iframe，展开时可见，收起时隐藏但继续播放 */}
+                <div className={`px-2 pb-2 ${isExpanded ? '' : 'h-0 overflow-hidden'}`}>
+                    {isMuted ? (
+                        isExpanded && (
                             <div className="text-center py-6 text-sm text-slate-500 dark:text-slate-400">
                                 <VolumeX className="w-8 h-8 mx-auto mb-2 opacity-50" />
                                 已静音
                             </div>
-                        ) : (
-                            <div className="rounded-lg overflow-hidden bg-slate-100/50 dark:bg-white/5">
-                                <iframe
-                                    src={generateWidgetUrl(settings.songId, settings.autoplay)}
-                                    width="100%"
-                                    height="86"
-                                    frameBorder="0"
-                                    allow="autoplay"
-                                    title="网易云音乐播放器"
-                                    className="w-full"
-                                />
-                            </div>
-                        )}
-                    </div>
-                ) : (
-                    // Collapsed state - keep hidden player for background playback
-                    hiddenPlayer
-                )}
+                        )
+                    ) : (
+                        <div className="rounded-lg overflow-hidden bg-slate-100/50 dark:bg-white/5">
+                            {playerIframe}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );

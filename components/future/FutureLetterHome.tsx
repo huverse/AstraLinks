@@ -13,14 +13,16 @@ import {
     Clock,
     Lock,
     Music,
-    Sparkles,
     ChevronRight,
     ArrowLeft,
     Globe,
+    Trash2,
+    Loader2,
 } from 'lucide-react';
 import type { FutureView, FutureLetterSummary, LetterListResponse } from './types';
 import { STATUS_LABELS, STATUS_COLORS } from './types';
 import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from './ToastProvider';
 import { API_BASE } from '../../utils/api';
 
 interface FutureLetterHomeProps {
@@ -30,13 +32,16 @@ interface FutureLetterHomeProps {
 
 export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHomeProps) {
     const { token } = useAuth();
+    const toast = useToast();
     const [recentLetters, setRecentLetters] = useState<FutureLetterSummary[]>([]);
     const [stats, setStats] = useState({
         drafts: 0,
         scheduled: 0,
         delivered: 0,
+        receivedUnread: 0,  // 未读的收到信件数
     });
     const [isLoading, setIsLoading] = useState(true);
+    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const loadHomeData = useCallback(async () => {
         setIsLoading(true);
@@ -67,6 +72,7 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
                     drafts: statsData.drafts || 0,
                     scheduled: (statsData.sent || 0) + (statsData.scheduled || 0),
                     delivered: statsData.received || 0,
+                    receivedUnread: statsData.receivedUnread || 0,
                 });
             }
         } catch (error) {
@@ -79,6 +85,38 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
     useEffect(() => {
         loadHomeData();
     }, [loadHomeData]);
+
+    // 删除信件（只能删除草稿）
+    const handleDelete = async (letterId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('确定要删除这封信吗？')) return;
+
+        setDeletingId(letterId);
+        try {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}`, {
+                method: 'DELETE',
+                credentials: 'include',
+                headers,
+            });
+
+            if (!response.ok) {
+                const data = await response.json().catch(() => ({}));
+                throw new Error(data.error?.message || '删除失败');
+            }
+
+            setRecentLetters(prev => prev.filter(l => l.id !== letterId));
+            // 更新草稿数统计
+            setStats(prev => ({ ...prev, drafts: Math.max(0, prev.drafts - 1) }));
+            toast.success('删除成功');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : '删除失败');
+        } finally {
+            setDeletingId(null);
+        }
+    };
 
     const menuItems = [
         {
@@ -101,7 +139,7 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
             label: '已收到',
             description: '来自过去的信件',
             color: 'from-green-500 to-emerald-500',
-            count: stats.delivered,
+            count: stats.receivedUnread,
             onClick: () => onNavigate('received'),
         },
         {
@@ -217,15 +255,17 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
                     ) : (
                         <div className="space-y-3">
                             {recentLetters.map((letter) => (
-                                <button
+                                <div
                                     key={letter.id}
-                                    onClick={() => onNavigate('detail', letter.id)}
-                                    className="w-full bg-white/5 hover:bg-white/10 rounded-xl p-4 text-left transition-colors border border-white/10 hover:border-white/20"
+                                    className="w-full bg-white/5 hover:bg-white/10 rounded-xl p-4 text-left transition-colors border border-white/10 hover:border-white/20 group"
                                 >
                                     <div className="flex items-start justify-between gap-4">
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="font-medium truncate mb-1">
-                                                {letter.title}
+                                        <button
+                                            onClick={() => onNavigate('detail', letter.id)}
+                                            className="flex-1 min-w-0 text-left"
+                                        >
+                                            <h4 className="font-medium truncate mb-1 group-hover:text-purple-300 transition-colors">
+                                                {letter.title || '无标题'}
                                             </h4>
                                             <div className="flex items-center gap-2 text-sm text-white/50">
                                                 <span>
@@ -241,7 +281,7 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
                                                     })}
                                                 </span>
                                             </div>
-                                        </div>
+                                        </button>
                                         <div className="flex items-center gap-2">
                                             {letter.isEncrypted && (
                                                 <Lock className="w-4 h-4 text-amber-400" />
@@ -252,39 +292,34 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
                                             <span className={`text-xs px-2 py-1 rounded-full bg-${STATUS_COLORS[letter.status]}-500/20 text-${STATUS_COLORS[letter.status]}-400`}>
                                                 {STATUS_LABELS[letter.status]}
                                             </span>
+                                            {/* 草稿状态显示删除按钮 */}
+                                            {letter.status === 'draft' && (
+                                                <button
+                                                    onClick={(e) => handleDelete(letter.id, e)}
+                                                    disabled={deletingId === letter.id}
+                                                    className="p-1.5 hover:bg-white/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
+                                                    title="删除草稿"
+                                                >
+                                                    {deletingId === letter.id ? (
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="w-4 h-4 text-red-400" />
+                                                    )}
+                                                </button>
+                                            )}
+                                            <ChevronRight className="w-5 h-5 text-white/30 group-hover:text-white/60 transition-colors" />
                                         </div>
                                     </div>
-                                </button>
+                                </div>
                             ))}
                         </div>
                     )}
                 </section>
 
-                {/* Features */}
-                <section className="mt-12">
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <Sparkles className="w-5 h-5 text-amber-400" />
-                        特色功能
-                    </h3>
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="bg-white/5 rounded-xl p-4 text-center">
-                            <Lock className="w-8 h-8 mx-auto mb-2 text-amber-400" />
-                            <h4 className="font-medium text-sm">加密保护</h4>
-                            <p className="text-xs text-white/50 mt-1">端到端加密</p>
-                        </div>
-                        <div className="bg-white/5 rounded-xl p-4 text-center">
-                            <Music className="w-8 h-8 mx-auto mb-2 text-pink-400" />
-                            <h4 className="font-medium text-sm">音乐相伴</h4>
-                            <p className="text-xs text-white/50 mt-1">网易云音乐</p>
-                        </div>
-                        <div className="bg-white/5 rounded-xl p-4 text-center">
-                            <Sparkles className="w-8 h-8 mx-auto mb-2 text-purple-400" />
-                            <h4 className="font-medium text-sm">AI助写</h4>
-                            <p className="text-xs text-white/50 mt-1">智能润色</p>
-                        </div>
-                    </div>
-                </section>
             </main>
+
+            {/* 底部安全区域 */}
+            <div className="pb-24" />
         </div>
     );
 }

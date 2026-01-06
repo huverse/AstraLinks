@@ -198,9 +198,19 @@ router.get('/letters', requireAuth, asyncHandler(async (req: AuthRequest, res: R
  */
 router.get('/letters/:id', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
     const userId = req.user!.id;
+    const userEmail = req.user!.email || '';
+    const normalizedEmail = userEmail.toLowerCase().trim();
     const letterId = req.params.id;
 
-    const letter = await letterService.getLetterDetail(letterId, userId);
+    // 先尝试作为发件人获取
+    let letter = await letterService.getLetterDetail(letterId, userId);
+    let isRecipient = false;
+
+    // 如果作为发件人找不到，尝试作为收件人获取已投递的信件
+    if (!letter && normalizedEmail) {
+        letter = await letterService.getReceivedLetterDetail(letterId, normalizedEmail);
+        isRecipient = !!letter;
+    }
 
     if (!letter) {
         // 返回404而非403，避免枚举攻击
@@ -208,6 +218,12 @@ router.get('/letters/:id', requireAuth, asyncHandler(async (req: AuthRequest, re
             error: { code: 'NOT_FOUND', message: '信件不存在' }
         });
         return;
+    }
+
+    // 如果是已投递的信件且当前用户是收件人，自动标记为已读
+    // 这包括：1)纯收件人 2)自己写给自己的情况
+    if (letter.status === 'delivered' && letter.recipientEmailNormalized === normalizedEmail) {
+        await letterService.markAsRead(letterId, normalizedEmail);
     }
 
     res.json(letter);

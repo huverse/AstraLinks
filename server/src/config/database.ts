@@ -13,15 +13,16 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   queueLimit: 0,
-  timezone: 'local' // Use server local timezone
+  timezone: '+00:00', // 使用UTC时区，避免时区转换问题
+  dateStrings: false, // 返回Date对象以便toISOString()正确工作
 });
 
 // Initialize timezone on startup
 export async function initTimezone(): Promise<void> {
   try {
-    // Set session timezone to China Standard Time
-    await pool.execute("SET time_zone = '+08:00'");
-    console.log('✅ MySQL timezone set to +08:00 (CST)');
+    // Set session timezone to UTC to match pool config
+    await pool.execute("SET time_zone = '+00:00'");
+    console.log('✅ MySQL timezone set to +00:00 (UTC)');
   } catch (error) {
     console.error('Failed to set MySQL timezone:', error);
   }

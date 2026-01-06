@@ -190,6 +190,50 @@ export async function getLetterDetail(
 }
 
 /**
+ * 获取收件人的信件详情（仅限已投递状态）
+ */
+export async function getReceivedLetterDetail(
+    letterId: string,
+    recipientEmail: string
+): Promise<FutureLetterDetail | null> {
+    const normalizedEmail = recipientEmail.toLowerCase().trim();
+
+    // 只能查看已投递的信件
+    const [rows] = await pool.execute<RowDataPacket[]>(
+        `SELECT * FROM future_letters
+         WHERE id = ? AND recipient_email_normalized = ? AND status = 'delivered' AND deleted_at IS NULL`,
+        [letterId, normalizedEmail]
+    );
+    if (rows.length === 0) return null;
+
+    const letter = mapRowToLetter(rows[0]);
+
+    // 获取附件
+    const [attachments] = await pool.execute<RowDataPacket[]>(
+        'SELECT * FROM future_letter_attachments WHERE letter_id = ? ORDER BY sort_order',
+        [letterId]
+    );
+
+    // 获取模板
+    let template: FutureLetterTemplate | undefined;
+    if (letter.templateId) {
+        const [templates] = await pool.execute<RowDataPacket[]>(
+            'SELECT * FROM future_letter_templates WHERE id = ?',
+            [letter.templateId]
+        );
+        if (templates.length > 0) {
+            template = mapRowToTemplate(templates[0]);
+        }
+    }
+
+    return {
+        ...letter,
+        attachmentsList: attachments.map(mapRowToAttachment),
+        template,
+    };
+}
+
+/**
  * 获取信件列表
  */
 export async function getLetterList(
@@ -739,12 +783,15 @@ export async function updateSetting(key: string, value: string): Promise<void> {
 export interface UserStats {
     sent: number;
     received: number;
+    receivedUnread: number;  // 未读的收到信件数
     drafts: number;
     pending: number;
     scheduled: number;
 }
 
 export async function getUserStats(userId: number, userEmail: string): Promise<UserStats> {
+    const normalizedEmail = userEmail.toLowerCase().trim();
+
     // 已发送/投递的信件数量
     const [[sentRow]] = await pool.execute<RowDataPacket[]>(
         `SELECT COUNT(*) as count FROM future_letters
@@ -755,8 +802,15 @@ export async function getUserStats(userId: number, userEmail: string): Promise<U
     // 收到的信件数量 (已投递的)
     const [[receivedRow]] = await pool.execute<RowDataPacket[]>(
         `SELECT COUNT(*) as count FROM future_letters
-         WHERE recipient_email = ? AND status = 'delivered' AND deleted_at IS NULL`,
-        [userEmail]
+         WHERE recipient_email_normalized = ? AND status = 'delivered' AND deleted_at IS NULL`,
+        [normalizedEmail]
+    );
+
+    // 未读的收到信件数量
+    const [[receivedUnreadRow]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM future_letters
+         WHERE recipient_email_normalized = ? AND status = 'delivered' AND recipient_read_at IS NULL AND deleted_at IS NULL`,
+        [normalizedEmail]
     );
 
     // 草稿数量
@@ -783,8 +837,23 @@ export async function getUserStats(userId: number, userEmail: string): Promise<U
     return {
         sent: sentRow?.count || 0,
         received: receivedRow?.count || 0,
+        receivedUnread: receivedUnreadRow?.count || 0,
         drafts: draftsRow?.count || 0,
         pending: pendingRow?.count || 0,
         scheduled: scheduledRow?.count || 0,
     };
+}
+
+/**
+ * 标记信件为已读（收件人视角）
+ */
+export async function markAsRead(letterId: string, userEmail: string): Promise<boolean> {
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    const [result] = await pool.execute<ResultSetHeader>(
+        `UPDATE future_letters
+         SET recipient_read_at = NOW()
+         WHERE id = ? AND recipient_email_normalized = ? AND status = 'delivered' AND recipient_read_at IS NULL`,
+        [letterId, normalizedEmail]
+    );
+    return result.affectedRows > 0;
 }
