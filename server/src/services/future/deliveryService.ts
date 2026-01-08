@@ -172,7 +172,8 @@ export async function deliverLetter(letterId: string): Promise<void> {
     // 确定收件邮箱
     let recipientEmail: string;
     if (letterRow.recipient_type === 'self') {
-        recipientEmail = letterRow.sender_email;
+        // self 类型优先使用 recipient_email（保存时记录的邮箱），否则用发送者邮箱
+        recipientEmail = letterRow.recipient_email || letterRow.sender_email;
     } else if (letterRow.recipient_email) {
         recipientEmail = letterRow.recipient_email;
     } else if (letterRow.recipient_user_id) {
@@ -186,6 +187,12 @@ export async function deliverLetter(letterId: string): Promise<void> {
         recipientEmail = users[0].email;
     } else {
         throw new Error(`No recipient email for letter: ${letterId}`);
+    }
+
+    // 防护：确保 recipientEmail 有效
+    if (!recipientEmail) {
+        await updateLetterStatus(letterId, 'failed', 'Recipient email is missing');
+        throw new Error(`Recipient email is missing for letter: ${letterId}`);
     }
 
     // 检查抑制列表
