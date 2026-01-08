@@ -22,6 +22,9 @@ import {
     Info,
     X,
     Loader2,
+    Check,
+    Grid,
+    List,
 } from 'lucide-react';
 import type {
     RecipientType,
@@ -33,7 +36,9 @@ import type {
     MusicInfo,
     WritingAssistRequest,
     WritingAssistResponse,
+    TemplateCategory,
 } from './types';
+import { TEMPLATE_CATEGORY_LABELS } from './types';
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE } from '../../utils/api';
 
@@ -81,6 +86,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     const [attachmentItems, setAttachmentItems] = useState<AttachmentItem[]>([]);
     const [templates, setTemplates] = useState<FutureLetterTemplate[]>([]);
     const [showTemplates, setShowTemplates] = useState(false);
+    const [templateCategory, setTemplateCategory] = useState<TemplateCategory | null>(null);
     const [showMusicSearch, setShowMusicSearch] = useState(false);
     const [showAIAssist, setShowAIAssist] = useState(false);
     const [aiAssistType, setAiAssistType] = useState<'improve' | 'expand' | 'simplify' | 'emotional'>('improve');
@@ -920,6 +926,170 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                                     提示：AI 将基于你当前的信件内容生成优化建议
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Template Selector Modal */}
+            {showTemplates && (
+                <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 rounded-2xl border border-white/10 w-full max-w-4xl max-h-[85vh] flex flex-col">
+                        {/* Header */}
+                        <div className="flex items-center justify-between p-6 border-b border-white/10">
+                            <div>
+                                <h2 className="text-xl font-bold">选择信纸模板</h2>
+                                <p className="text-sm text-white/50 mt-1">为你的信件选择一个漂亮的信纸</p>
+                            </div>
+                            <button
+                                onClick={() => setShowTemplates(false)}
+                                className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        {/* Category Tabs */}
+                        <div className="flex items-center gap-2 p-4 border-b border-white/10 overflow-x-auto">
+                            <button
+                                onClick={() => setTemplateCategory(null)}
+                                className={`px-4 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                                    !templateCategory
+                                        ? 'bg-blue-500 text-white'
+                                        : 'bg-white/5 hover:bg-white/10 text-white/70'
+                                }`}
+                            >
+                                全部
+                            </button>
+                            {(Object.keys(TEMPLATE_CATEGORY_LABELS) as TemplateCategory[]).map(cat => (
+                                <button
+                                    key={cat}
+                                    onClick={() => setTemplateCategory(cat)}
+                                    className={`px-4 py-2 rounded-lg text-sm whitespace-nowrap transition-colors ${
+                                        templateCategory === cat
+                                            ? 'bg-blue-500 text-white'
+                                            : 'bg-white/5 hover:bg-white/10 text-white/70'
+                                    }`}
+                                >
+                                    {TEMPLATE_CATEGORY_LABELS[cat]}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Template Grid */}
+                        <div className="flex-1 overflow-y-auto p-4">
+                            {templates.length === 0 ? (
+                                <div className="text-center py-12 text-white/50">
+                                    <FileText className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                                    <p>暂无可用模板</p>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                                    {/* No Template Option */}
+                                    <button
+                                        onClick={() => {
+                                            updateState('templateId', undefined);
+                                            setShowTemplates(false);
+                                        }}
+                                        className={`relative aspect-[3/4] rounded-xl border-2 transition-all overflow-hidden group ${
+                                            !state.templateId
+                                                ? 'border-blue-500 ring-2 ring-blue-500/30'
+                                                : 'border-white/10 hover:border-white/30'
+                                        }`}
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800 flex items-center justify-center">
+                                            <div className="text-center p-4">
+                                                <FileText className="w-8 h-8 mx-auto mb-2 text-white/50" />
+                                                <span className="text-sm text-white/70">纯文本</span>
+                                            </div>
+                                        </div>
+                                        {!state.templateId && (
+                                            <div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                                <Check className="w-4 h-4" />
+                                            </div>
+                                        )}
+                                    </button>
+
+                                    {/* Template Options */}
+                                    {templates
+                                        .filter(t => !templateCategory || t.category === templateCategory)
+                                        .map(template => (
+                                            <button
+                                                key={template.id}
+                                                onClick={() => {
+                                                    updateState('templateId', template.id);
+                                                    setShowTemplates(false);
+                                                }}
+                                                className={`relative aspect-[3/4] rounded-xl border-2 transition-all overflow-hidden group ${
+                                                    state.templateId === template.id
+                                                        ? 'border-blue-500 ring-2 ring-blue-500/30'
+                                                        : 'border-white/10 hover:border-white/30'
+                                                }`}
+                                            >
+                                                {/* Template Preview */}
+                                                {template.thumbnailUrl || template.previewUrl ? (
+                                                    <img
+                                                        src={template.thumbnailUrl || template.previewUrl}
+                                                        alt={template.name}
+                                                        className="absolute inset-0 w-full h-full object-cover"
+                                                    />
+                                                ) : template.backgroundUrl ? (
+                                                    <div
+                                                        className="absolute inset-0"
+                                                        style={{
+                                                            backgroundImage: `url(${template.backgroundUrl})`,
+                                                            backgroundSize: 'cover',
+                                                            backgroundPosition: 'center',
+                                                        }}
+                                                    />
+                                                ) : (
+                                                    <div
+                                                        className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800"
+                                                        style={template.cssStyles ? { cssText: template.cssStyles } : undefined}
+                                                    />
+                                                )}
+
+                                                {/* Overlay */}
+                                                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+
+                                                {/* Template Info */}
+                                                <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-black/80 to-transparent">
+                                                    <div className="font-medium text-sm truncate">{template.name}</div>
+                                                    <div className="text-xs text-white/50 flex items-center gap-2">
+                                                        <span>{TEMPLATE_CATEGORY_LABELS[template.category]}</span>
+                                                        {template.isPremium && (
+                                                            <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">
+                                                                高级
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+
+                                                {/* Selected Indicator */}
+                                                {state.templateId === template.id && (
+                                                    <div className="absolute top-2 right-2 w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center">
+                                                        <Check className="w-4 h-4" />
+                                                    </div>
+                                                )}
+                                            </button>
+                                        ))}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="flex items-center justify-between p-4 border-t border-white/10">
+                            <div className="text-sm text-white/50">
+                                {state.templateId
+                                    ? `已选择: ${templates.find(t => t.id === state.templateId)?.name || '模板'}`
+                                    : '未选择模板'}
+                            </div>
+                            <button
+                                onClick={() => setShowTemplates(false)}
+                                className="px-6 py-2 bg-blue-500 hover:bg-blue-600 rounded-lg font-medium transition-colors"
+                            >
+                                确定
+                            </button>
                         </div>
                     </div>
                 </div>
