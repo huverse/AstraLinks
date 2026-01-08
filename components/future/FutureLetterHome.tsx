@@ -10,21 +10,13 @@ import {
     FileText,
     Settings,
     Plus,
-    Clock,
-    Lock,
-    Music,
     ChevronRight,
     ArrowLeft,
     Globe,
-    Trash2,
-    Loader2,
 } from 'lucide-react';
-import type { FutureView, FutureLetterSummary, LetterListResponse } from './types';
-import { STATUS_LABELS, STATUS_COLORS } from './types';
+import type { FutureView } from './types';
 import { useAuth } from '../../contexts/AuthContext';
-import { useToast } from './ToastProvider';
 import { API_BASE } from '../../utils/api';
-import { formatDate } from '../../utils/dateFormat';
 
 interface FutureLetterHomeProps {
     onBack: () => void;
@@ -33,16 +25,13 @@ interface FutureLetterHomeProps {
 
 export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHomeProps) {
     const { token } = useAuth();
-    const toast = useToast();
-    const [recentLetters, setRecentLetters] = useState<FutureLetterSummary[]>([]);
     const [stats, setStats] = useState({
         drafts: 0,
         scheduled: 0,
         delivered: 0,
-        receivedUnread: 0,  // 未读的收到信件数
+        receivedUnread: 0,
     });
     const [isLoading, setIsLoading] = useState(true);
-    const [deletingId, setDeletingId] = useState<string | null>(null);
 
     const loadHomeData = useCallback(async () => {
         setIsLoading(true);
@@ -50,22 +39,10 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
             const headers: Record<string, string> = {};
             if (token) headers['Authorization'] = `Bearer ${token}`;
 
-            // 并行加载最近信件和统计数据
-            const [lettersRes, statsRes] = await Promise.all([
-                fetch(`${API_BASE}/api/future/letters?limit=5&sort=created_at&order=desc`, {
-                    credentials: 'include',
-                    headers,
-                }),
-                fetch(`${API_BASE}/api/future/stats`, {
-                    credentials: 'include',
-                    headers,
-                }),
-            ]);
-
-            if (lettersRes.ok) {
-                const data: LetterListResponse = await lettersRes.json();
-                setRecentLetters(data.letters);
-            }
+            const statsRes = await fetch(`${API_BASE}/api/future/stats`, {
+                credentials: 'include',
+                headers,
+            });
 
             if (statsRes.ok) {
                 const statsData = await statsRes.json();
@@ -86,38 +63,6 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
     useEffect(() => {
         loadHomeData();
     }, [loadHomeData]);
-
-    // 删除信件（只能删除草稿）
-    const handleDelete = async (letterId: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (!confirm('确定要删除这封信吗？')) return;
-
-        setDeletingId(letterId);
-        try {
-            const headers: Record<string, string> = {};
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-
-            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}`, {
-                method: 'DELETE',
-                credentials: 'include',
-                headers,
-            });
-
-            if (!response.ok) {
-                const data = await response.json().catch(() => ({}));
-                throw new Error(data.error?.message || '删除失败');
-            }
-
-            setRecentLetters(prev => prev.filter(l => l.id !== letterId));
-            // 更新草稿数统计
-            setStats(prev => ({ ...prev, drafts: Math.max(0, prev.drafts - 1) }));
-            toast.success('删除成功');
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : '删除失败');
-        } finally {
-            setDeletingId(null);
-        }
-    };
 
     const menuItems = [
         {
@@ -230,87 +175,6 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
                         </button>
                     ))}
                 </div>
-
-                {/* Recent Letters */}
-                <section>
-                    <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                        <Clock className="w-5 h-5 text-purple-400" />
-                        最近的信件
-                    </h3>
-
-                    {isLoading ? (
-                        <div className="text-center py-8 text-white/50">
-                            加载中...
-                        </div>
-                    ) : recentLetters.length === 0 ? (
-                        <div className="text-center py-12 bg-white/5 rounded-2xl border border-white/10">
-                            <Mail className="w-12 h-12 mx-auto mb-4 text-white/30" />
-                            <p className="text-white/50 mb-4">还没有写过信</p>
-                            <button
-                                onClick={() => onNavigate('compose')}
-                                className="px-6 py-2 bg-gradient-to-r from-purple-500 to-pink-500 rounded-full font-medium hover:shadow-lg hover:shadow-purple-500/30 transition-shadow"
-                            >
-                                写第一封信
-                            </button>
-                        </div>
-                    ) : (
-                        <div className="space-y-3">
-                            {recentLetters.map((letter) => (
-                                <div
-                                    key={letter.id}
-                                    className="w-full bg-white/5 hover:bg-white/10 rounded-xl p-4 text-left transition-colors border border-white/10 hover:border-white/20 group"
-                                >
-                                    <div className="flex items-start justify-between gap-4">
-                                        <button
-                                            onClick={() => onNavigate('detail', letter.id)}
-                                            className="flex-1 min-w-0 text-left"
-                                        >
-                                            <h4 className="font-medium truncate mb-1 group-hover:text-purple-300 transition-colors">
-                                                {letter.title || '无标题'}
-                                            </h4>
-                                            <div className="flex items-center gap-2 text-sm text-white/50">
-                                                <span>
-                                                    {letter.recipientType === 'self' ? '给自己' : letter.recipientName || '给他人'}
-                                                </span>
-                                                <span>·</span>
-                                                <span>
-                                                    {formatDate(letter.scheduledAtUtc, { style: 'short', timezone: letter.scheduledTz })}
-                                                </span>
-                                            </div>
-                                        </button>
-                                        <div className="flex items-center gap-2">
-                                            {letter.isEncrypted && (
-                                                <Lock className="w-4 h-4 text-amber-400" />
-                                            )}
-                                            {letter.hasMusic && (
-                                                <Music className="w-4 h-4 text-pink-400" />
-                                            )}
-                                            <span className={`text-xs px-2 py-1 rounded-full bg-${STATUS_COLORS[letter.status]}-500/20 text-${STATUS_COLORS[letter.status]}-400`}>
-                                                {STATUS_LABELS[letter.status]}
-                                            </span>
-                                            {/* 草稿状态显示删除按钮 */}
-                                            {letter.status === 'draft' && (
-                                                <button
-                                                    onClick={(e) => handleDelete(letter.id, e)}
-                                                    disabled={deletingId === letter.id}
-                                                    className="p-1.5 hover:bg-white/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100 disabled:opacity-50"
-                                                    title="删除草稿"
-                                                >
-                                                    {deletingId === letter.id ? (
-                                                        <Loader2 className="w-4 h-4 animate-spin" />
-                                                    ) : (
-                                                        <Trash2 className="w-4 h-4 text-red-400" />
-                                                    )}
-                                                </button>
-                                            )}
-                                            <ChevronRight className="w-5 h-5 text-white/30 group-hover:text-white/60 transition-colors" />
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
-                    )}
-                </section>
 
             </main>
 

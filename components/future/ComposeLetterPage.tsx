@@ -1043,10 +1043,12 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                                                         }}
                                                     />
                                                 ) : (
-                                                    <div
-                                                        className="absolute inset-0 bg-gradient-to-br from-slate-700 to-slate-800"
-                                                        style={template.cssStyles ? { cssText: template.cssStyles } : undefined}
-                                                    />
+                                                    <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-slate-800 flex items-center justify-center">
+                                                        <div className="text-center p-2">
+                                                            <FileText className="w-8 h-8 mx-auto mb-1 text-white/50" />
+                                                            <span className="text-xs text-white/70 block truncate px-1">{template.name}</span>
+                                                        </div>
+                                                    </div>
                                                 )}
 
                                                 {/* Overlay */}

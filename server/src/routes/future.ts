@@ -230,6 +230,22 @@ router.get('/letters/:id', requireAuth, asyncHandler(async (req: AuthRequest, re
 }));
 
 /**
+ * POST /api/future/letters/mark-all-read - 标记所有收到的信件为已读
+ */
+router.post('/letters/mark-all-read', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userEmail = req.user!.email;
+    if (!userEmail) {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '用户邮箱不存在' }
+        });
+        return;
+    }
+
+    const count = await letterService.markAllAsRead(userEmail);
+    res.json({ success: true, count });
+}));
+
+/**
  * POST /api/future/letters/:id/unlock - 解锁加密信件
  */
 router.post('/letters/:id/unlock', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -1232,6 +1248,28 @@ function toIsoString(value: Date | string | null): string {
 }
 
 /**
+ * 脱敏邮箱地址: test@example.com → t***@example.com
+ */
+function maskEmail(email: string): string {
+    if (!email) return '';
+    const [local, domain] = email.split('@');
+    if (!domain) return email;
+    if (local.length <= 1) return `*@${domain}`;
+    return `${local[0]}***@${domain}`;
+}
+
+/**
+ * 脱敏姓名: 张三 → 张* / 王小明 → 王*明
+ */
+function maskName(name: string): string {
+    if (!name) return '';
+    const len = name.length;
+    if (len <= 1) return '*';
+    if (len === 2) return `${name[0]}*`;
+    return `${name[0]}${'*'.repeat(len - 2)}${name[len - 1]}`;
+}
+
+/**
  * GET /api/future/public/letters - 获取公开信列表 (无需登录)
  */
 router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -1250,23 +1288,22 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
     const limit = Math.min(Math.max(safeLimit, 1), PUBLIC_LETTER_MAX_LIMIT);
     const cursor = req.query.cursor as string | undefined;
 
-    // 基础查询条件(不含游标)
+    // 基础查询条件(不含游标) - 公开信发送后即显示，不等待送达
     const baseWhereClause = `
         WHERE fl.is_public = TRUE
             AND fl.deleted_at IS NULL
-            AND fl.status = 'delivered'
-            AND fl.delivered_at IS NOT NULL
+            AND fl.status NOT IN ('draft', 'cancelled')
     `;
 
     // 构建分页查询条件
     let whereClause = baseWhereClause;
     const params: (string | number)[] = [];
 
-    // 游标分页
+    // 游标分页 - 使用 created_at 代替 delivered_at
     if (cursor) {
         try {
             const cursorValue = Buffer.from(cursor, 'base64').toString('utf-8');
-            whereClause += ' AND fl.delivered_at < ?';
+            whereClause += ' AND fl.created_at < ?';
             params.push(cursorValue);
         } catch {
             // 无效游标，忽略
@@ -1278,7 +1315,7 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
     const [countRows] = await pool.execute<RowDataPacket[]>(countSql, []);
     const total = countRows[0]?.total || 0;
 
-    // 获取列表
+    // 获取列表 - 按创建时间排序
     const listSql = `
         SELECT
             fl.id,
@@ -1286,12 +1323,12 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
             SUBSTRING(fl.content, 1, 240) as content_preview,
             fl.public_anonymous,
             fl.public_alias,
-            fl.delivered_at,
+            fl.created_at,
             u.username as sender_username
         FROM future_letters fl
         LEFT JOIN users u ON fl.sender_user_id = u.id
         ${whereClause}
-        ORDER BY fl.delivered_at DESC
+        ORDER BY fl.created_at DESC
         LIMIT ?
     `;
     const [rows] = await pool.execute<RowDataPacket[]>(listSql, [...params, limit + 1]);
@@ -1303,7 +1340,7 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
         title: row.title || '无题',
         contentPreview: row.content_preview ? String(row.content_preview) : '',
         displayName: getPublicDisplayName(Boolean(row.public_anonymous), row.public_alias, row.sender_username),
-        publishedAt: toIsoString(row.delivered_at),
+        publishedAt: toIsoString(row.created_at),
     }));
 
     let nextCursor: string | undefined;
@@ -1337,7 +1374,7 @@ router.get('/public/letters/:id', asyncHandler(async (req: AuthRequest, res: Res
             fl.content_html_sanitized,
             fl.public_anonymous,
             fl.public_alias,
-            fl.delivered_at,
+            fl.created_at,
             fl.music_id,
             fl.music_name,
             fl.music_artist,
@@ -1348,8 +1385,7 @@ router.get('/public/letters/:id', asyncHandler(async (req: AuthRequest, res: Res
         WHERE fl.id = ?
             AND fl.is_public = TRUE
             AND fl.deleted_at IS NULL
-            AND fl.status = 'delivered'
-            AND fl.delivered_at IS NOT NULL
+            AND fl.status NOT IN ('draft', 'cancelled')
         LIMIT 1
     `;
     const [rows] = await pool.execute<RowDataPacket[]>(query, [letterId]);
@@ -1368,7 +1404,7 @@ router.get('/public/letters/:id', asyncHandler(async (req: AuthRequest, res: Res
         content: row.content,
         contentHtmlSanitized: row.content_html_sanitized || undefined,
         displayName: getPublicDisplayName(Boolean(row.public_anonymous), row.public_alias, row.sender_username),
-        publishedAt: toIsoString(row.delivered_at),
+        publishedAt: toIsoString(row.created_at),
         music: row.music_id ? {
             id: row.music_id,
             name: row.music_name,

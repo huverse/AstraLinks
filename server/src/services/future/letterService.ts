@@ -921,3 +921,17 @@ export async function markAsRead(letterId: string, userEmail: string): Promise<b
     );
     return result.affectedRows > 0;
 }
+
+/**
+ * 标记所有收到的信件为已读
+ */
+export async function markAllAsRead(userEmail: string): Promise<number> {
+    const normalizedEmail = userEmail.toLowerCase().trim();
+    const [result] = await pool.execute<ResultSetHeader>(
+        `UPDATE future_letters
+         SET recipient_read_at = NOW()
+         WHERE recipient_email_normalized = ? AND status = 'delivered' AND recipient_read_at IS NULL AND deleted_at IS NULL AND recipient_deleted_at IS NULL`,
+        [normalizedEmail]
+    );
+    return result.affectedRows;
+}

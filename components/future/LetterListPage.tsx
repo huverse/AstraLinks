@@ -116,7 +116,27 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
 
     useEffect(() => {
         loadLetters();
-    }, [loadLetters]);
+        // 进入已收到列表时，自动标记所有未读为已读
+        if (type === 'received') {
+            markAllAsRead();
+        }
+    }, [loadLetters, type]);
+
+    // 标记所有已收到信件为已读
+    const markAllAsRead = async () => {
+        try {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            await fetch(`${API_BASE}/api/future/letters/mark-all-read`, {
+                method: 'POST',
+                credentials: 'include',
+                headers,
+            });
+        } catch (error) {
+            console.error('Failed to mark all as read:', error);
+        }
+    };
 
     const handleLoadMore = () => {
         if (nextCursor && !isLoadingMore) {
