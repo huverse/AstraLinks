@@ -18,8 +18,6 @@ import {
     Loader2,
     Share2,
     Download,
-    Play,
-    Pause,
     Eye,
     EyeOff,
     Package,
@@ -36,6 +34,7 @@ import { STATUS_LABELS, STATUS_COLORS, SHIPPING_STATUS_LABELS, ORDER_STATUS_LABE
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE } from '../../utils/api';
 import { formatDate as formatDateUtil, formatTimeRemaining, maskEmail } from '../../utils/dateFormat';
+import { NeteasePlayer } from './components/MusicSelector';
 
 interface ViewLetterPageProps {
     letterId: string;
@@ -54,10 +53,6 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
     const [unlockPassword, setUnlockPassword] = useState('');
     const [isUnlocking, setIsUnlocking] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
-
-    // Music player state
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [audioRef, setAudioRef] = useState<HTMLAudioElement | null>(null);
 
     // Action states
     const [isWithdrawing, setIsWithdrawing] = useState(false);
@@ -141,27 +136,6 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
             alert(err instanceof Error ? err.message : '解锁失败，请检查密码');
         } finally {
             setIsUnlocking(false);
-        }
-    };
-
-    const toggleMusic = () => {
-        if (!letter?.musicUrl) return;
-
-        if (audioRef) {
-            if (isPlaying) {
-                audioRef.pause();
-            } else {
-                audioRef.play();
-            }
-            setIsPlaying(!isPlaying);
-        } else {
-            const audio = new Audio(letter.musicUrl);
-            audio.loop = true;
-            audio.play();
-            setAudioRef(audio);
-            setIsPlaying(true);
-
-            audio.addEventListener('ended', () => setIsPlaying(false));
         }
     };
 
@@ -504,37 +478,13 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
                 </div>
 
                 {/* Music Player */}
-                {letter.musicUrl && (
-                    <div className="mb-6 bg-gradient-to-r from-pink-500/20 to-purple-500/20 rounded-xl p-4 border border-pink-500/30">
-                        <div className="flex items-center gap-4">
-                            {letter.musicCoverUrl ? (
-                                <img
-                                    src={letter.musicCoverUrl}
-                                    alt="Album cover"
-                                    className="w-14 h-14 rounded-lg object-cover"
-                                />
-                            ) : (
-                                <div className="w-14 h-14 rounded-lg bg-white/10 flex items-center justify-center">
-                                    <Music className="w-6 h-6 text-pink-400" />
-                                </div>
-                            )}
-                            <div className="flex-1 min-w-0">
-                                <p className="font-medium truncate">{letter.musicName || '背景音乐'}</p>
-                                {letter.musicArtist && (
-                                    <p className="text-sm text-white/60 truncate">{letter.musicArtist}</p>
-                                )}
-                            </div>
-                            <button
-                                onClick={toggleMusic}
-                                className="w-12 h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-                            >
-                                {isPlaying ? (
-                                    <Pause className="w-5 h-5" />
-                                ) : (
-                                    <Play className="w-5 h-5 ml-0.5" />
-                                )}
-                            </button>
+                {letter.musicId && (
+                    <div className="mb-6">
+                        <div className="flex items-center gap-2 mb-2 text-sm text-white/60">
+                            <Music className="w-4 h-4 text-pink-400" />
+                            <span>{letter.musicName ? `${letter.musicName}${letter.musicArtist ? ` - ${letter.musicArtist}` : ''}` : '背景音乐'}</span>
                         </div>
+                        <NeteasePlayer songId={letter.musicId} autoplay={false} className="bg-white/5 border border-white/10" />
                     </div>
                 )}
 

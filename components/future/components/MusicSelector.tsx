@@ -270,12 +270,14 @@ export default function MusicSelector({
                     )}
 
                     {/* Help */}
-                    <div className="text-xs text-white/40 space-y-1">
-                        <p>💡 如何获取链接：</p>
-                        <p>1. 打开网易云音乐网页版或APP</p>
-                        <p>2. 找到想要的歌曲，点击分享或复制链接</p>
-                        <p>3. 粘贴到上方输入框</p>
-                    </div>
+                    {!previewSongId && (
+                        <div className="text-xs text-white/40 bg-white/5 rounded-lg p-3">
+                            <p className="font-medium text-white/60 mb-1">如何获取链接：</p>
+                            <p>1. 打开网易云音乐网页版或APP</p>
+                            <p>2. 找到想要的歌曲，点击分享或复制链接</p>
+                            <p>3. 粘贴到上方输入框</p>
+                        </div>
+                    )}
                 </div>
 
                 {/* Footer */}
