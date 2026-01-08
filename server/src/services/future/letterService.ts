@@ -252,8 +252,12 @@ export async function getLetterList(
         whereClause += ' AND sender_user_id = ?';
         params.push(userId);
     } else if (query.type === 'received') {
-        // 只显示已送达的信件，排除被驳回等状态
-        whereClause += ' AND (recipient_user_id = ? OR recipient_email_hash = (SELECT recipient_email_hash FROM users WHERE id = ?)) AND recipient_deleted_at IS NULL AND status = "delivered"';
+        // 只显示已送达的信件，通过 recipient_user_id 或用户邮箱 hash 匹配
+        // 使用子查询计算用户邮箱的 SHA256 hash
+        whereClause += ` AND (
+            recipient_user_id = ?
+            OR recipient_email_hash = (SELECT SHA2(LOWER(TRIM(email)), 256) FROM users WHERE id = ? AND email IS NOT NULL)
+        ) AND recipient_deleted_at IS NULL AND status = 'delivered'`;
         params.push(userId, userId);
     } else if (query.type === 'drafts') {
         whereClause += ' AND sender_user_id = ? AND status = "draft"';
