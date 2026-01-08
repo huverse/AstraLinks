@@ -42,6 +42,7 @@ export type QueueStatus = 'pending' | 'processing' | 'completed' | 'failed' | 'c
 export type DeliveryResult = 'success' | 'bounce' | 'complaint' | 'failed' | 'deferred';
 export type SuppressionReason = 'bounce' | 'complaint' | 'unsubscribe' | 'manual';
 export type TemplateCategory = 'classic' | 'modern' | 'festival' | 'romantic' | 'business';
+export type LetterCategory = 'love' | 'family' | 'friendship' | 'growth' | 'gratitude' | 'time';
 export type ActorType = 'user' | 'admin' | 'system';
 
 // ============================================
@@ -62,6 +63,7 @@ export interface FutureLetter {
 
     // 内容
     title: string;
+    category?: LetterCategory | null;
     content: string;
     contentHtmlSanitized?: string;
     contentSha256?: string;
@@ -320,6 +322,7 @@ export interface CreateLetterRequest {
     recipientName?: string;
 
     title: string;
+    category?: LetterCategory;
     content: string;
     templateId?: number;
 
@@ -357,6 +360,7 @@ export interface UpdateLetterRequest {
     scheduledTz?: string;
 
     aiOptIn?: boolean;
+    category?: LetterCategory;
 
     // 公开信选项
     isPublic?: boolean;
