@@ -97,15 +97,6 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
         loadLetter();
     }, [loadLetter]);
 
-    // Cleanup audio on unmount
-    useEffect(() => {
-        return () => {
-            if (audioRef) {
-                audioRef.pause();
-                audioRef.src = '';
-            }
-        };
-    }, [audioRef]);
 
     const handleUnlock = async (e: React.FormEvent) => {
         e.preventDefault();
