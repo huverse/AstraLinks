@@ -3,7 +3,7 @@
  * Handles image and audio file uploads with preview
  */
 
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
     Image,
     Mic,
@@ -30,10 +30,21 @@ export interface AttachmentItem {
     durationMs?: number;
 }
 
+// 暂存待上传的文件
+export interface PendingFile {
+    id: string;
+    file: File;
+    type: 'image' | 'audio';
+    preview?: string;  // 图片预览 URL
+    durationMs?: number;  // 音频时长
+}
+
 interface AttachmentUploaderProps {
     letterId?: string;
     attachments: AttachmentItem[];
     onAttachmentsChange: (attachments: AttachmentItem[]) => void;
+    pendingFiles?: PendingFile[];
+    onPendingFilesChange?: (files: PendingFile[]) => void;
     maxImages?: number;
     maxAudio?: number;
     disabled?: boolean;
@@ -58,6 +69,8 @@ export default function AttachmentUploader({
     letterId,
     attachments,
     onAttachmentsChange,
+    pendingFiles = [],
+    onPendingFilesChange,
     maxImages = 2,
     maxAudio = 1,
     disabled = false,
@@ -70,11 +83,38 @@ export default function AttachmentUploader({
     const imageInputRef = useRef<HTMLInputElement>(null);
     const audioInputRef = useRef<HTMLInputElement>(null);
 
-    const imageCount = attachments.filter(a => a.attachmentType === 'image').length;
-    const audioCount = attachments.filter(a => a.attachmentType === 'audio').length;
+    const imageCount = attachments.filter(a => a.attachmentType === 'image').length + pendingFiles.filter(f => f.type === 'image').length;
+    const audioCount = attachments.filter(a => a.attachmentType === 'audio').length + pendingFiles.filter(f => f.type === 'audio').length;
 
     const canAddImage = imageCount < maxImages;
     const canAddAudio = audioCount < maxAudio;
+
+    // 当有 letterId 时，自动上传暂存的文件
+    useEffect(() => {
+        if (letterId && pendingFiles.length > 0 && onPendingFilesChange) {
+            uploadPendingFiles();
+        }
+    }, [letterId]);
+
+    const uploadPendingFiles = async () => {
+        if (!letterId || pendingFiles.length === 0) return;
+
+        for (const pending of pendingFiles) {
+            try {
+                setUploading(prev => [...prev, { id: pending.id, file: pending.file, type: pending.type, progress: 50 }]);
+                const attachment = await uploadFile(pending.file, pending.type);
+                if (attachment) {
+                    onAttachmentsChange([...attachments, attachment]);
+                }
+                // 从暂存列表移除
+                onPendingFilesChange?.(pendingFiles.filter(f => f.id !== pending.id));
+                setUploading(prev => prev.filter(u => u.id !== pending.id));
+            } catch (err) {
+                const message = err instanceof Error ? err.message : '上传失败';
+                setUploading(prev => prev.map(u => u.id === pending.id ? { ...u, error: message } : u));
+            }
+        }
+    };
 
     const fileToBase64 = (file: File): Promise<string> => {
         return new Promise((resolve, reject) => {
@@ -157,20 +197,50 @@ export default function AttachmentUploader({
         const allowedTypes = type === 'image' ? ALLOWED_IMAGE_TYPES : ALLOWED_AUDIO_TYPES;
         const maxCount = type === 'image' ? maxImages : maxAudio;
         const currentCount = type === 'image' ? imageCount : audioCount;
+        const maxSizeBytes = type === 'image' ? MAX_IMAGE_SIZE_MB * 1024 * 1024 : MAX_AUDIO_SIZE_MB * 1024 * 1024;
 
         const validFiles: File[] = [];
         for (let i = 0; i < files.length && validFiles.length + currentCount < maxCount; i++) {
             const file = files[i];
-            if (allowedTypes.includes(file.type)) {
-                validFiles.push(file);
-            } else {
+            if (!allowedTypes.includes(file.type)) {
                 setError(`不支持的文件格式：${file.name}`);
+                continue;
             }
+            if (file.size > maxSizeBytes) {
+                setError(`文件大小超过限制（最大 ${type === 'image' ? MAX_IMAGE_SIZE_MB : MAX_AUDIO_SIZE_MB}MB）`);
+                continue;
+            }
+            validFiles.push(file);
         }
 
         if (validFiles.length === 0) return;
 
-        // Add to uploading list
+        // 没有 letterId 时，暂存文件等待后续上传
+        if (!letterId) {
+            const newPendingFiles: PendingFile[] = [];
+            for (const file of validFiles) {
+                const id = `pending-${Date.now()}-${Math.random()}`;
+                let preview: string | undefined;
+                let durationMs: number | undefined;
+
+                if (type === 'image') {
+                    preview = URL.createObjectURL(file);
+                } else {
+                    durationMs = await getAudioDuration(file);
+                    if (durationMs > MAX_AUDIO_DURATION_SEC * 1000) {
+                        setError(`音频时长超过限制（最大 ${MAX_AUDIO_DURATION_SEC} 秒）`);
+                        continue;
+                    }
+                }
+                newPendingFiles.push({ id, file, type, preview, durationMs });
+            }
+            if (newPendingFiles.length > 0 && onPendingFilesChange) {
+                onPendingFilesChange([...pendingFiles, ...newPendingFiles]);
+            }
+            return;
+        }
+
+        // 有 letterId，直接上传
         const uploadingItems: UploadingFile[] = validFiles.map(file => ({
             id: `${Date.now()}-${Math.random()}`,
             file,
@@ -180,7 +250,6 @@ export default function AttachmentUploader({
 
         setUploading(prev => [...prev, ...uploadingItems]);
 
-        // Upload files
         for (const item of uploadingItems) {
             try {
                 setUploading(prev =>
@@ -193,7 +262,6 @@ export default function AttachmentUploader({
                     onAttachmentsChange([...attachments, attachment]);
                 }
 
-                // Remove from uploading
                 setUploading(prev => prev.filter(u => u.id !== item.id));
             } catch (err) {
                 const message = err instanceof Error ? err.message : '上传失败';
@@ -202,7 +270,7 @@ export default function AttachmentUploader({
                 );
             }
         }
-    }, [letterId, attachments, onAttachmentsChange, disabled, maxImages, maxAudio, imageCount, audioCount]);
+    }, [letterId, attachments, onAttachmentsChange, disabled, maxImages, maxAudio, imageCount, audioCount, pendingFiles, onPendingFilesChange]);
 
     const handleDelete = async (attachment: AttachmentItem) => {
         if (!letterId || disabled) return;
@@ -296,7 +364,7 @@ export default function AttachmentUploader({
                     />
                     <button
                         onClick={() => imageInputRef.current?.click()}
-                        disabled={disabled || !canAddImage || !letterId}
+                        disabled={disabled || !canAddImage}
                         className="w-full p-4 border-2 border-dashed border-white/20 rounded-xl flex flex-col items-center gap-2 hover:border-purple-500/50 hover:bg-purple-500/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Image className="w-6 h-6 text-purple-400" />
@@ -320,7 +388,7 @@ export default function AttachmentUploader({
                     />
                     <button
                         onClick={() => audioInputRef.current?.click()}
-                        disabled={disabled || !canAddAudio || !letterId}
+                        disabled={disabled || !canAddAudio}
                         className="w-full p-4 border-2 border-dashed border-white/20 rounded-xl flex flex-col items-center gap-2 hover:border-pink-500/50 hover:bg-pink-500/5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         <Mic className="w-6 h-6 text-pink-400" />
@@ -333,10 +401,60 @@ export default function AttachmentUploader({
                 </div>
             </div>
 
-            {/* No letterId hint */}
-            {!letterId && (attachments.length === 0) && (
-                <div className="text-center text-sm text-white/50 py-2">
-                    请先填写标题后自动保存，即可添加附件
+            {/* Pending Files (waiting for letterId to upload) */}
+            {pendingFiles.length > 0 && (
+                <div className="space-y-3">
+                    {/* Pending Images */}
+                    {pendingFiles.filter(f => f.type === 'image').length > 0 && (
+                        <div className="grid grid-cols-2 gap-3">
+                            {pendingFiles.filter(f => f.type === 'image').map(pending => (
+                                <div key={pending.id} className="relative group aspect-square rounded-lg overflow-hidden bg-white/5 border-2 border-dashed border-purple-500/30">
+                                    {pending.preview && (
+                                        <img src={pending.preview} alt={pending.file.name} className="w-full h-full object-cover opacity-70" />
+                                    )}
+                                    <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+                                        <div className="text-center">
+                                            <Loader2 className="w-6 h-6 animate-spin text-purple-400 mx-auto mb-1" />
+                                            <div className="text-xs text-white/70">待上传</div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => {
+                                            if (pending.preview) URL.revokeObjectURL(pending.preview);
+                                            onPendingFilesChange?.(pendingFiles.filter(f => f.id !== pending.id));
+                                        }}
+                                        className="absolute top-2 right-2 p-1 bg-red-500/70 rounded-full hover:bg-red-500 transition-colors"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                    <div className="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/70 to-transparent">
+                                        <div className="text-xs truncate">{pending.file.name}</div>
+                                        <div className="text-xs text-white/50">{formatFileSize(pending.file.size)}</div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    {/* Pending Audio */}
+                    {pendingFiles.filter(f => f.type === 'audio').map(pending => (
+                        <div key={pending.id} className="flex items-center gap-3 p-3 bg-white/5 rounded-lg border-2 border-dashed border-pink-500/30">
+                            <div className="w-10 h-10 flex items-center justify-center bg-pink-500/20 rounded-full">
+                                <Loader2 className="w-5 h-5 animate-spin text-pink-400" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="text-sm truncate">{pending.file.name}</div>
+                                <div className="text-xs text-white/50">
+                                    {formatDuration(pending.durationMs)} · {formatFileSize(pending.file.size)} · 待上传
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => onPendingFilesChange?.(pendingFiles.filter(f => f.id !== pending.id))}
+                                className="p-2 text-white/50 hover:text-red-400 transition-colors"
+                            >
+                                <X className="w-4 h-4" />
+                            </button>
+                        </div>
+                    ))}
                 </div>
             )}
 

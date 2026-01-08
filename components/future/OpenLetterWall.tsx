@@ -206,13 +206,44 @@ export default function OpenLetterWall({ onBack }: OpenLetterWallProps) {
     };
 
     /**
-     * Format date for display
+     * Format date for display - 人性化日期时间格式
      */
     const formatDate = (dateStr: string) => {
-        return new Date(dateStr).toLocaleDateString('zh-CN', {
+        const date = new Date(dateStr);
+        const now = new Date();
+        const diffMs = now.getTime() - date.getTime();
+        const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+        // 今天内显示时间
+        if (diffDays === 0 && date.toDateString() === now.toDateString()) {
+            return `今天 ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+        // 昨天
+        const yesterday = new Date(now);
+        yesterday.setDate(yesterday.getDate() - 1);
+        if (date.toDateString() === yesterday.toDateString()) {
+            return `昨天 ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
+        }
+        // 7天内显示几天前
+        if (diffDays < 7 && diffDays > 0) {
+            return `${diffDays}天前`;
+        }
+        // 同年显示月日时分
+        if (date.getFullYear() === now.getFullYear()) {
+            return date.toLocaleString('zh-CN', {
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+            });
+        }
+        // 不同年显示完整日期时间
+        return date.toLocaleString('zh-CN', {
             year: 'numeric',
-            month: 'long',
-            day: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
         });
     };
 

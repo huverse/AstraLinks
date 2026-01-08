@@ -57,7 +57,7 @@ interface UserInfo {
     email?: string;
     username?: string;
 }
-import AttachmentUploader, { type AttachmentItem } from './components/AttachmentUploader';
+import AttachmentUploader, { type AttachmentItem, type PendingFile } from './components/AttachmentUploader';
 import MusicSelector from './components/MusicSelector';
 import { COMMON_TIMEZONES } from './types';
 
@@ -95,6 +95,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
     const { token } = useAuth();
     const [state, setState] = useState<ComposeState>(INITIAL_STATE);
     const [attachmentItems, setAttachmentItems] = useState<AttachmentItem[]>([]);
+    const [pendingFiles, setPendingFiles] = useState<PendingFile[]>([]);
     const [templates, setTemplates] = useState<FutureLetterTemplate[]>([]);
     const [showTemplates, setShowTemplates] = useState(false);
     const [templateCategory, setTemplateCategory] = useState<TemplateCategory | null>(null);
@@ -223,8 +224,8 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
         }));
     };
 
-    const saveDraft = async () => {
-        if (state.isSaving) return;
+    const saveDraft = async (): Promise<string | null> => {
+        if (state.isSaving) return state.draftId;
 
         setState(prev => ({ ...prev, isSaving: true }));
         setError(null);
@@ -232,7 +233,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
         try {
             const payload: CreateLetterRequest | UpdateLetterRequest = {
                 recipientType: state.recipientType,
-                recipientEmail: state.recipientEmail || undefined,  // 所有类型都需要邮箱
+                recipientEmail: state.recipientEmail || undefined,
                 recipientName: state.recipientName || undefined,
                 title: state.title,
                 content: state.content,
@@ -244,7 +245,6 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 musicUrl: state.musicUrl || undefined,
                 letterType: state.letterType,
                 aiOptIn: state.aiOptIn,
-                // 公开信选项
                 isPublic: state.isPublic,
                 publicAnonymous: state.publicAnonymous,
                 publicAlias: state.publicAlias || undefined,
@@ -283,9 +283,11 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 version: savedLetter.version,
                 isDirty: false,
             }));
+            return savedLetter.id;
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown error';
             setError(message);
+            return null;
         } finally {
             setState(prev => ({ ...prev, isSaving: false }));
         }
@@ -305,19 +307,8 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
             setError('请选择送达时间');
             return;
         }
-        // 所有类型都需要邮箱
         if (!state.recipientEmail.trim()) {
             setError(state.recipientType === 'self' ? '请填写你的邮箱' : '请填写收件人邮箱');
-            return;
-        }
-
-        // 先保存
-        if (state.isDirty || !state.draftId) {
-            await saveDraft();
-        }
-
-        if (!state.draftId) {
-            setError('保存失败，请重试');
             return;
         }
 
@@ -325,10 +316,23 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
         setError(null);
 
         try {
+            // 先保存草稿，获取 letterId
+            let letterId = state.draftId;
+            if (state.isDirty || !letterId) {
+                letterId = await saveDraft();
+            }
+
+            if (!letterId) {
+                setError('保存失败，请重试');
+                setState(prev => ({ ...prev, isSubmitting: false }));
+                return;
+            }
+
+            // 提交信件
             const submitHeaders: Record<string, string> = { 'Content-Type': 'application/json' };
             if (token) submitHeaders['Authorization'] = `Bearer ${token}`;
 
-            const response = await fetch(`${API_BASE}/api/future/letters/${state.draftId}/submit`, {
+            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}/submit`, {
                 method: 'POST',
                 headers: submitHeaders,
                 credentials: 'include',
@@ -795,6 +799,8 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                         letterId={state.draftId}
                         attachments={attachmentItems}
                         onAttachmentsChange={setAttachmentItems}
+                        pendingFiles={pendingFiles}
+                        onPendingFilesChange={setPendingFiles}
                         maxImages={2}
                         maxAudio={1}
                         disabled={state.isSubmitting}

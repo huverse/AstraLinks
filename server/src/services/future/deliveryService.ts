@@ -38,10 +38,12 @@ interface LetterEmailData {
     senderName: string;
     templateCss?: string;
     unlockUrl?: string;
+    viewUrl?: string;  // 网站查看链接
+    hasAttachments?: boolean;  // 是否有附件
 }
 
 function renderLetterHtml(data: LetterEmailData): string {
-    const { letter, senderName, templateCss, unlockUrl } = data;
+    const { letter, senderName, templateCss, unlockUrl, viewUrl, hasAttachments } = data;
 
     // 加密信使用门户链接
     if (letter.isEncrypted && unlockUrl) {
@@ -100,6 +102,8 @@ function renderLetterHtml(data: LetterEmailData): string {
         .content img { max-width: 100%; height: auto; }
         .music { background: linear-gradient(135deg, #ff6b6b, #ee5a5a); color: white; padding: 15px; border-radius: 12px; margin: 20px 0; }
         .music a { color: white; }
+        .attachment-hint { background: linear-gradient(135deg, #667eea, #764ba2); color: white; padding: 15px; border-radius: 12px; margin: 20px 0; text-align: center; }
+        .attachment-hint a { color: white; text-decoration: underline; }
         .footer { text-align: center; color: #999; font-size: 12px; margin-top: 40px; border-top: 1px solid #eee; padding-top: 20px; }
         ${templateCss || ''}
     </style>
@@ -120,9 +124,15 @@ function renderLetterHtml(data: LetterEmailData): string {
             ${letter.musicArtist ? ` - ${letter.musicArtist}` : ''}
             ${letter.musicUrl ? `<br><a href="${letter.musicUrl}" target="_blank">在网易云音乐收听</a>` : ''}
         </div>` : ''}
+        ${hasAttachments && viewUrl ? `
+        <div class="attachment-hint">
+            📎 这封信包含图片/音频附件<br>
+            <a href="${viewUrl}" target="_blank">点击查看完整内容</a>
+        </div>` : ''}
         <div class="footer">
             <p>这是一封来自过去的时光信</p>
             <p>由 AstraLinks 时光信 在 ${formatDate(letter.scheduledAtUtc)} 送达</p>
+            ${viewUrl ? `<p><a href="${viewUrl}" style="color: #666;">在网站上查看此信</a></p>` : ''}
         </div>
     </div>
 </body>
@@ -275,12 +285,25 @@ export async function deliverLetter(letterId: string): Promise<void> {
         updatedAt: letterRow.updated_at,
     };
 
+    // 查询是否有附件
+    const [attachmentRows] = await pool.execute<RowDataPacket[]>(
+        'SELECT COUNT(*) as count FROM future_letter_attachments WHERE letter_id = ? AND deleted_at IS NULL',
+        [letterId]
+    );
+    const hasAttachments = attachmentRows[0]?.count > 0;
+
+    // 生成网站查看链接（用于普通信和含附件信件）
+    const baseUrl = process.env.APP_URL || 'https://astralinks.xyz';
+    const viewUrl = `${baseUrl}/future?view=detail&id=${letterId}`;
+
     // 渲染邮件HTML
     const html = renderLetterHtml({
         letter,
         senderName: letterRow.sender_username,
         templateCss,
         unlockUrl,
+        viewUrl,
+        hasAttachments,
     });
 
     // 获取发件设置
