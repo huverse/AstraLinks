@@ -39,6 +39,16 @@ import type {
     TemplateCategory,
 } from './types';
 import { TEMPLATE_CATEGORY_LABELS } from './types';
+
+// 模板预览样式配置
+const TEMPLATE_PREVIEW_STYLES: Record<string, string> = {
+    'template-classic': 'bg-gradient-to-br from-amber-100/30 to-amber-50/20',
+    'template-kraft': 'bg-gradient-to-br from-[#c4a77d]/40 to-[#a08060]/30',
+    'template-starry': 'bg-gradient-to-br from-indigo-600/40 via-purple-700/30 to-blue-800/40',
+    'template-sakura': 'bg-gradient-to-br from-pink-300/40 via-rose-200/30 to-pink-400/40',
+    'template-newyear': 'bg-gradient-to-br from-red-700/40 via-amber-600/30 to-red-800/40',
+    'template-business': 'bg-gradient-to-br from-slate-600/40 to-slate-700/40',
+};
 import { useAuth } from '../../contexts/AuthContext';
 import { API_BASE } from '../../utils/api';
 
@@ -1043,10 +1053,14 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                                                         }}
                                                     />
                                                 ) : (
-                                                    <div className="absolute inset-0 bg-gradient-to-br from-purple-900/50 to-slate-800 flex items-center justify-center">
+                                                    <div className={`absolute inset-0 flex items-center justify-center ${
+                                                        template.cssClass && TEMPLATE_PREVIEW_STYLES[template.cssClass]
+                                                            ? TEMPLATE_PREVIEW_STYLES[template.cssClass]
+                                                            : 'bg-gradient-to-br from-purple-900/50 to-slate-800'
+                                                    }`}>
                                                         <div className="text-center p-2">
-                                                            <FileText className="w-8 h-8 mx-auto mb-1 text-white/50" />
-                                                            <span className="text-xs text-white/70 block truncate px-1">{template.name}</span>
+                                                            <FileText className="w-8 h-8 mx-auto mb-1 text-white/70" />
+                                                            <span className="text-sm text-white font-medium block truncate px-1">{template.name}</span>
                                                         </div>
                                                     </div>
                                                 )}

@@ -125,6 +125,10 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
         if (type === 'received') {
             markAllAsRead();
         }
+        // 进入已发送列表时，自动标记所有未查看的状态变化为已查看
+        if (type === 'sent') {
+            markAllSentViewed();
+        }
     }, [loadLetters, type]);
 
     // 标记所有已收到信件为已读
@@ -140,6 +144,22 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
             });
         } catch (error) {
             console.error('Failed to mark all as read:', error);
+        }
+    };
+
+    // 标记所有已发送信件为已查看
+    const markAllSentViewed = async () => {
+        try {
+            const headers: Record<string, string> = {};
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            await fetch(`${API_BASE}/api/future/letters/mark-all-sent-viewed`, {
+                method: 'POST',
+                credentials: 'include',
+                headers,
+            });
+        } catch (error) {
+            console.error('Failed to mark all sent as viewed:', error);
         }
     };
 
@@ -456,6 +476,19 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
                                                         )}
                                                     </button>
                                                 )}
+                                                {/* 删除按钮 */}
+                                                <button
+                                                    onClick={(e) => handleDelete(letter.id, e)}
+                                                    disabled={deletingId === letter.id}
+                                                    className="p-1.5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+                                                    title="删除"
+                                                >
+                                                    {deletingId === letter.id ? (
+                                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                                    ) : (
+                                                        <Trash2 className="w-4 h-4 text-red-400" />
+                                                    )}
+                                                </button>
                                             </div>
                                         )}
 

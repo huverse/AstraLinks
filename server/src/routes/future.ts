@@ -226,6 +226,11 @@ router.get('/letters/:id', requireAuth, asyncHandler(async (req: AuthRequest, re
         await letterService.markAsRead(letterId, normalizedEmail);
     }
 
+    // 如果当前用户是发送者，且信件状态需要关注（被驳回/已送达/失败），自动标记为已查看
+    if (letter.senderUserId === userId && ['rejected', 'delivered', 'failed'].includes(letter.status)) {
+        await letterService.markSenderViewed(letterId, userId);
+    }
+
     res.json(letter);
 }));
 
@@ -242,6 +247,15 @@ router.post('/letters/mark-all-read', requireAuth, asyncHandler(async (req: Auth
     }
 
     const count = await letterService.markAllAsRead(userEmail);
+    res.json({ success: true, count });
+}));
+
+/**
+ * POST /api/future/letters/mark-all-sent-viewed - 标记所有已发送信件为已查看
+ */
+router.post('/letters/mark-all-sent-viewed', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const count = await letterService.markAllSenderViewed(userId);
     res.json({ success: true, count });
 }));
 
@@ -362,14 +376,6 @@ router.delete('/letters/:id', requireAuth, asyncHandler(async (req: AuthRequest,
         res.status(204).send();
     } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Unknown error';
-
-        if (message.includes('only delete draft')) {
-            res.status(400).json({
-                error: { code: 'VALIDATION_ERROR', message: '只能删除草稿状态的信件' }
-            });
-            return;
-        }
-
         res.status(500).json({
             error: { code: 'INTERNAL_ERROR', message }
         });

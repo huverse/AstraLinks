@@ -459,7 +459,8 @@ export async function updateLetter(
 }
 
 /**
- * 删除信件(软删除,仅草稿)
+ * 删除信件(软删除)
+ * 用户可以删除自己的信件（从列表中隐藏）
  */
 export async function deleteLetter(
     letterId: string,
@@ -468,16 +469,14 @@ export async function deleteLetter(
     const letter = await getLetter(letterId, userId);
     if (!letter) return false;
 
-    if (letter.status !== 'draft') {
-        throw new Error('Can only delete draft letters');
-    }
+    const previousStatus = letter.status;
 
     await pool.execute(
         'UPDATE future_letters SET deleted_at = ? WHERE id = ? AND sender_user_id = ?',
         [new Date(), letterId, userId]
     );
 
-    await logEvent(letterId, userId, 'user', 'deleted', 'draft', null);
+    await logEvent(letterId, userId, 'user', 'deleted', previousStatus, null);
 
     return true;
 }
@@ -920,6 +919,7 @@ export interface UserStats {
     sent: number;
     received: number;
     receivedUnread: number;  // 未读的收到信件数
+    sentUnviewed: number;    // 发送者未查看的状态变化数（被驳回/已送达/失败）
     drafts: number;
     pending: number;
     scheduled: number;
@@ -970,10 +970,18 @@ export async function getUserStats(userId: number, userEmail: string): Promise<U
         [userId]
     );
 
+    // 发送者未查看的状态变化数（被驳回/已送达/失败）
+    const [[sentUnviewedRow]] = await pool.execute<RowDataPacket[]>(
+        `SELECT COUNT(*) as count FROM future_letters
+         WHERE sender_user_id = ? AND status IN ('rejected', 'delivered', 'failed') AND sender_viewed_at IS NULL AND deleted_at IS NULL`,
+        [userId]
+    );
+
     return {
         sent: sentRow?.count || 0,
         received: receivedRow?.count || 0,
         receivedUnread: receivedUnreadRow?.count || 0,
+        sentUnviewed: sentUnviewedRow?.count || 0,
         drafts: draftsRow?.count || 0,
         pending: pendingRow?.count || 0,
         scheduled: scheduledRow?.count || 0,
@@ -1004,6 +1012,33 @@ export async function markAllAsRead(userEmail: string): Promise<number> {
          SET recipient_read_at = NOW()
          WHERE recipient_email_normalized = ? AND status = 'delivered' AND recipient_read_at IS NULL AND deleted_at IS NULL AND recipient_deleted_at IS NULL`,
         [normalizedEmail]
+    );
+    return result.affectedRows;
+}
+
+/**
+ * 标记信件为发送者已查看（发送者视角）
+ * 用于清除已发送板块的红点提示
+ */
+export async function markSenderViewed(letterId: string, userId: number): Promise<boolean> {
+    const [result] = await pool.execute<ResultSetHeader>(
+        `UPDATE future_letters
+         SET sender_viewed_at = NOW()
+         WHERE id = ? AND sender_user_id = ? AND status IN ('rejected', 'delivered', 'failed') AND sender_viewed_at IS NULL`,
+        [letterId, userId]
+    );
+    return result.affectedRows > 0;
+}
+
+/**
+ * 标记所有已发送信件为已查看
+ */
+export async function markAllSenderViewed(userId: number): Promise<number> {
+    const [result] = await pool.execute<ResultSetHeader>(
+        `UPDATE future_letters
+         SET sender_viewed_at = NOW()
+         WHERE sender_user_id = ? AND status IN ('rejected', 'delivered', 'failed') AND sender_viewed_at IS NULL AND deleted_at IS NULL`,
+        [userId]
     );
     return result.affectedRows;
 }

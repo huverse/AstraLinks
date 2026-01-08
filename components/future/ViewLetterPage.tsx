@@ -36,6 +36,40 @@ import { API_BASE } from '../../utils/api';
 import { formatDate as formatDateUtil, formatTimeRemaining, maskEmail } from '../../utils/dateFormat';
 import { NeteasePlayer } from './components/MusicSelector';
 
+// 模板样式配置
+const TEMPLATE_STYLES: Record<string, { bg: string; border: string; text: string }> = {
+    'template-classic': {
+        bg: 'bg-amber-50/10 backdrop-blur-sm',
+        border: 'border-amber-200/30',
+        text: 'text-amber-50',
+    },
+    'template-kraft': {
+        bg: 'bg-[#c4a77d]/15 backdrop-blur-sm',
+        border: 'border-[#8b7355]/40',
+        text: 'text-amber-100',
+    },
+    'template-starry': {
+        bg: 'bg-gradient-to-br from-indigo-900/40 via-purple-900/30 to-blue-900/40 backdrop-blur-sm',
+        border: 'border-indigo-400/30',
+        text: 'text-indigo-100',
+    },
+    'template-sakura': {
+        bg: 'bg-gradient-to-br from-pink-200/20 via-rose-100/15 to-pink-300/20 backdrop-blur-sm',
+        border: 'border-pink-300/40',
+        text: 'text-pink-100',
+    },
+    'template-newyear': {
+        bg: 'bg-gradient-to-br from-red-900/30 via-amber-900/20 to-red-800/30 backdrop-blur-sm',
+        border: 'border-red-500/40',
+        text: 'text-red-100',
+    },
+    'template-business': {
+        bg: 'bg-slate-800/50 backdrop-blur-sm',
+        border: 'border-slate-500/30',
+        text: 'text-slate-100',
+    },
+};
+
 interface ViewLetterPageProps {
     letterId: string;
     onBack: () => void;
@@ -480,18 +514,27 @@ export default function ViewLetterPage({ letterId, onBack, onNavigate }: ViewLet
                 )}
 
                 {/* Letter Content */}
-                <div className="bg-white/5 rounded-2xl p-6 md:p-8 border border-white/10 mb-6">
-                    {letter.contentHtmlSanitized ? (
-                        <div
-                            className="prose prose-invert prose-purple max-w-none"
-                            dangerouslySetInnerHTML={{ __html: letter.contentHtmlSanitized }}
-                        />
-                    ) : (
-                        <div className="whitespace-pre-wrap text-white/90 leading-relaxed">
-                            {letter.content}
+                {(() => {
+                    const templateStyle = letter.template?.cssClass ? TEMPLATE_STYLES[letter.template.cssClass] : null;
+                    return (
+                        <div className={`rounded-2xl p-6 md:p-8 border mb-6 ${
+                            templateStyle
+                                ? `${templateStyle.bg} ${templateStyle.border}`
+                                : 'bg-white/5 border-white/10'
+                        }`}>
+                            {letter.contentHtmlSanitized ? (
+                                <div
+                                    className={`prose prose-invert max-w-none ${templateStyle?.text || 'prose-purple'}`}
+                                    dangerouslySetInnerHTML={{ __html: letter.contentHtmlSanitized }}
+                                />
+                            ) : (
+                                <div className={`whitespace-pre-wrap leading-relaxed ${templateStyle?.text || 'text-white/90'}`}>
+                                    {letter.content}
+                                </div>
+                            )}
                         </div>
-                    )}
-                </div>
+                    );
+                })()}
 
                 {/* Attachments */}
                 {letter.attachmentsList && letter.attachmentsList.length > 0 && (

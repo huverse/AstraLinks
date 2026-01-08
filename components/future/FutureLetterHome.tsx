@@ -30,6 +30,7 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
         scheduled: 0,
         delivered: 0,
         receivedUnread: 0,
+        sentUnviewed: 0,
     });
     const [isLoading, setIsLoading] = useState(true);
 
@@ -51,6 +52,7 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
                     scheduled: (statsData.sent || 0) + (statsData.scheduled || 0),
                     delivered: statsData.received || 0,
                     receivedUnread: statsData.receivedUnread || 0,
+                    sentUnviewed: statsData.sentUnviewed || 0,
                 });
             }
         } catch (error) {
@@ -77,7 +79,7 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
             label: '已发送',
             description: '查看发出的信件',
             color: 'from-blue-500 to-cyan-500',
-            count: stats.scheduled,
+            count: stats.sentUnviewed,
             onClick: () => onNavigate('sent'),
         },
         {
@@ -93,7 +95,6 @@ export default function FutureLetterHome({ onBack, onNavigate }: FutureLetterHom
             label: '草稿箱',
             description: '未完成的信件',
             color: 'from-orange-500 to-amber-500',
-            count: stats.drafts,
             onClick: () => onNavigate('drafts'),
         },
         {
