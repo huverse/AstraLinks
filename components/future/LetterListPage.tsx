@@ -18,6 +18,9 @@ import {
     Trash2,
     Edit2,
     RefreshCw,
+    XCircle,
+    Globe,
+    GlobeLock,
 } from 'lucide-react';
 import type { FutureView, FutureLetterSummary, LetterListResponse, LetterStatus } from './types';
 import { STATUS_LABELS, STATUS_COLORS } from './types';
@@ -64,6 +67,8 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
     const [total, setTotal] = useState(0);
     const [error, setError] = useState<string | null>(null);
     const [deletingId, setDeletingId] = useState<string | null>(null);
+    const [cancellingId, setCancellingId] = useState<string | null>(null);
+    const [togglingPublicId, setTogglingPublicId] = useState<string | null>(null);
 
     const config = LIST_CONFIG[type];
     const Icon = config.icon;
@@ -176,6 +181,81 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
     const handleEdit = (letterId: string, e: React.MouseEvent) => {
         e.stopPropagation();
         onNavigate('compose', letterId);
+    };
+
+    // 取消已排期但未送达的信件
+    const handleCancel = async (letterId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('确定要取消发送这封信吗？取消后无法恢复。')) return;
+
+        setCancellingId(letterId);
+        try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}/cancel`, {
+                method: 'POST',
+                credentials: 'include',
+                headers,
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error?.message || '取消失败');
+            }
+
+            // 更新本地状态
+            setLetters(prev => prev.map(l =>
+                l.id === letterId ? { ...l, status: 'cancelled' as LetterStatus } : l
+            ));
+            toast.success('已取消发送');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : '取消失败');
+        } finally {
+            setCancellingId(null);
+        }
+    };
+
+    // 切换公开状态
+    const handleTogglePublic = async (letterId: string, currentIsPublic: boolean, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const newIsPublic = !currentIsPublic;
+        const confirmMsg = newIsPublic
+            ? '确定要将这封信设为公开吗？公开后会显示在公开信墙上。'
+            : '确定要将这封信设为非公开吗？设为非公开后将从公开信墙上移除。';
+        if (!confirm(confirmMsg)) return;
+
+        setTogglingPublicId(letterId);
+        try {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+            };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            const response = await fetch(`${API_BASE}/api/future/letters/${letterId}/public`, {
+                method: 'PATCH',
+                credentials: 'include',
+                headers,
+                body: JSON.stringify({ isPublic: newIsPublic }),
+            });
+
+            if (!response.ok) {
+                const data = await response.json();
+                throw new Error(data.error?.message || '操作失败');
+            }
+
+            // 更新本地状态
+            setLetters(prev => prev.map(l =>
+                l.id === letterId ? { ...l, isPublic: newIsPublic } : l
+            ));
+            toast.success(newIsPublic ? '已设为公开' : '已设为非公开');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : '操作失败');
+        } finally {
+            setTogglingPublicId(null);
+        }
     };
 
     const formatDate = (dateStr: string) => {
@@ -338,6 +418,44 @@ export default function LetterListPage({ type, onBack, onNavigate }: LetterListP
                                                         <Trash2 className="w-4 h-4 text-red-400" />
                                                     )}
                                                 </button>
+                                            </div>
+                                        )}
+
+                                        {/* Actions for sent letters */}
+                                        {type === 'sent' && (
+                                            <div className="flex items-center gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                {/* 公开状态切换 */}
+                                                {letter.status !== 'cancelled' && (
+                                                    <button
+                                                        onClick={(e) => handleTogglePublic(letter.id, letter.isPublic, e)}
+                                                        disabled={togglingPublicId === letter.id}
+                                                        className="p-1.5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+                                                        title={letter.isPublic ? '设为非公开' : '设为公开'}
+                                                    >
+                                                        {togglingPublicId === letter.id ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : letter.isPublic ? (
+                                                            <Globe className="w-4 h-4 text-green-400" />
+                                                        ) : (
+                                                            <GlobeLock className="w-4 h-4 text-gray-400" />
+                                                        )}
+                                                    </button>
+                                                )}
+                                                {/* 取消发送按钮 - 仅对可取消状态显示 */}
+                                                {['approved', 'scheduled', 'pending_review'].includes(letter.status) && (
+                                                    <button
+                                                        onClick={(e) => handleCancel(letter.id, e)}
+                                                        disabled={cancellingId === letter.id}
+                                                        className="p-1.5 hover:bg-white/10 rounded-lg transition-colors disabled:opacity-50"
+                                                        title="取消发送"
+                                                    >
+                                                        {cancellingId === letter.id ? (
+                                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                                        ) : (
+                                                            <XCircle className="w-4 h-4 text-red-400" />
+                                                        )}
+                                                    </button>
+                                                )}
                                             </div>
                                         )}
 

@@ -455,6 +455,82 @@ router.post('/letters/:id/withdraw', requireAuth, asyncHandler(async (req: AuthR
 }));
 
 /**
+ * POST /api/future/letters/:id/cancel - 取消排期信件 (approved/scheduled -> cancelled)
+ */
+router.post('/letters/:id/cancel', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const letterId = req.params.id;
+
+    try {
+        const letter = await letterService.cancelScheduledLetter(letterId, userId);
+
+        if (!letter) {
+            res.status(404).json({
+                error: { code: 'NOT_FOUND', message: '信件不存在' }
+            });
+            return;
+        }
+
+        res.json(letter);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+
+        if (message.includes('Cannot cancel')) {
+            res.status(400).json({
+                error: { code: 'VALIDATION_ERROR', message: '只能取消尚未送达的已排期信件' }
+            });
+            return;
+        }
+
+        res.status(500).json({
+            error: { code: 'INTERNAL_ERROR', message }
+        });
+    }
+}));
+
+/**
+ * PATCH /api/future/letters/:id/public - 切换信件公开状态
+ */
+router.patch('/letters/:id/public', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
+    const userId = req.user!.id;
+    const letterId = req.params.id;
+    const { isPublic } = req.body;
+
+    if (typeof isPublic !== 'boolean') {
+        res.status(400).json({
+            error: { code: 'VALIDATION_ERROR', message: '请提供有效的 isPublic 参数' }
+        });
+        return;
+    }
+
+    try {
+        const letter = await letterService.togglePublicStatus(letterId, userId, isPublic);
+
+        if (!letter) {
+            res.status(404).json({
+                error: { code: 'NOT_FOUND', message: '信件不存在' }
+            });
+            return;
+        }
+
+        res.json(letter);
+    } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Unknown error';
+
+        if (message.includes('Cannot')) {
+            res.status(400).json({
+                error: { code: 'VALIDATION_ERROR', message }
+            });
+            return;
+        }
+
+        res.status(500).json({
+            error: { code: 'INTERNAL_ERROR', message }
+        });
+    }
+}));
+
+/**
  * DELETE /api/future/received/:id - 删除收到的信件 (软删除，仅从收件人视角)
  */
 router.delete('/received/:id', requireAuth, asyncHandler(async (req: AuthRequest, res: Response) => {
@@ -1289,10 +1365,11 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
     const cursor = req.query.cursor as string | undefined;
 
     // 基础查询条件(不含游标) - 公开信发送后即显示，不等待送达
+    // 排除草稿、已取消、被驳回、待审核状态的信件
     const baseWhereClause = `
         WHERE fl.is_public = TRUE
             AND fl.deleted_at IS NULL
-            AND fl.status NOT IN ('draft', 'cancelled')
+            AND fl.status NOT IN ('draft', 'cancelled', 'rejected', 'pending_review')
     `;
 
     // 构建分页查询条件
@@ -1385,7 +1462,7 @@ router.get('/public/letters/:id', asyncHandler(async (req: AuthRequest, res: Res
         WHERE fl.id = ?
             AND fl.is_public = TRUE
             AND fl.deleted_at IS NULL
-            AND fl.status NOT IN ('draft', 'cancelled')
+            AND fl.status NOT IN ('draft', 'cancelled', 'rejected', 'pending_review')
         LIMIT 1
     `;
     const [rows] = await pool.execute<RowDataPacket[]>(query, [letterId]);

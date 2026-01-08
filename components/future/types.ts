@@ -86,6 +86,7 @@ export interface FutureLetterSummary {
     isEncrypted: boolean;
     hasMusic: boolean;
     attachmentCount: number;
+    isPublic: boolean;
     createdAt: string;
 }
 

@@ -286,7 +286,7 @@ export async function getLetterList(
         SELECT
             fl.id, fl.title, fl.recipient_type, fl.recipient_name,
             fl.scheduled_at_utc, fl.scheduled_tz, fl.status,
-            fl.is_encrypted, fl.music_url, fl.created_at,
+            fl.is_encrypted, fl.music_url, fl.is_public, fl.created_at,
             (SELECT COUNT(*) FROM future_letter_attachments WHERE letter_id = fl.id) as attachment_count
         FROM future_letters fl
         ${whereClause}
@@ -508,6 +508,76 @@ export async function withdrawLetter(
 }
 
 /**
+ * 取消已排期但未送达的信件 (approved/scheduled/delivering -> cancelled)
+ * 允许用户在信件送达前取消发送
+ */
+export async function cancelScheduledLetter(
+    letterId: string,
+    userId: number
+): Promise<FutureLetter | null> {
+    const letter = await getLetter(letterId, userId);
+    if (!letter) return null;
+
+    // 只能取消这些状态的信件
+    const cancellableStatuses = ['approved', 'scheduled', 'delivering'];
+    if (!cancellableStatuses.includes(letter.status)) {
+        throw new Error(`Cannot cancel letter with status: ${letter.status}`);
+    }
+
+    // 检查是否已送达
+    if (letter.deliveredAt) {
+        throw new Error('Cannot cancel already delivered letter');
+    }
+
+    await pool.execute(
+        `UPDATE future_letters
+         SET status = 'cancelled', cancelled_at = ?
+         WHERE id = ? AND sender_user_id = ?`,
+        [new Date(), letterId, userId]
+    );
+
+    await logEvent(letterId, userId, 'user', 'cancelled', 'cancelled', '用户取消了信件发送');
+
+    return getLetter(letterId, userId);
+}
+
+/**
+ * 切换信件的公开状态
+ * 允许用户在任何时刻将公开信件改为非公开（反之亦然，但改为公开需要审核）
+ */
+export async function togglePublicStatus(
+    letterId: string,
+    userId: number,
+    isPublic: boolean
+): Promise<FutureLetter | null> {
+    const letter = await getLetter(letterId, userId);
+    if (!letter) return null;
+
+    // 不能修改已删除的信件
+    if (letter.deletedAt) {
+        throw new Error('Cannot modify deleted letter');
+    }
+
+    // 如果是将非公开改为公开，且信件已经提交/排期，需要重新审核
+    if (isPublic && !letter.isPublic && letter.status !== 'draft') {
+        throw new Error('Cannot make a submitted letter public. Please withdraw and resubmit.');
+    }
+
+    await pool.execute(
+        `UPDATE future_letters
+         SET is_public = ?
+         WHERE id = ? AND sender_user_id = ?`,
+        [isPublic, letterId, userId]
+    );
+
+    const action = isPublic ? 'set_public' : 'set_private';
+    const note = isPublic ? '用户将信件设为公开' : '用户将信件设为非公开';
+    await logEvent(letterId, userId, 'user', action, letter.status, note);
+
+    return getLetter(letterId, userId);
+}
+
+/**
  * 删除收到的信件 (软删除，仅从收件人视角)
  */
 export async function deleteReceivedLetter(
@@ -716,6 +786,7 @@ function mapRowToSummary(row: RowDataPacket): FutureLetterSummary {
         isEncrypted: Boolean(row.is_encrypted),
         hasMusic: Boolean(row.music_url),
         attachmentCount: row.attachment_count || 0,
+        isPublic: Boolean(row.is_public),
         createdAt: row.created_at?.toISOString(),
     };
 }
