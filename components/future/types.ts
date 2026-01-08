@@ -36,6 +36,7 @@ export interface FutureLetter {
     recipientName?: string;
 
     title: string;
+    category?: 'love' | 'family' | 'friendship' | 'growth' | 'gratitude' | 'time' | null;
     content: string;
     contentHtmlSanitized?: string;
     templateId?: number;
@@ -289,6 +290,8 @@ export interface ComposeState {
     isPublic: boolean;
     publicAnonymous: boolean;
     publicAlias: string;
+    // 信件分类（公开信墙用）
+    category?: 'love' | 'family' | 'friendship' | 'growth' | 'gratitude' | 'time';
 }
 
 // ============================================

@@ -3,7 +3,7 @@
  * Displays publicly shared letters without authentication
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
     ArrowLeft,
     ScrollText,
@@ -21,9 +21,28 @@ interface OpenLetterWallProps {
     onBack: () => void;
 }
 
+// 分类标签定义
+type LetterCategory = 'love' | 'family' | 'friendship' | 'growth' | 'gratitude' | 'time';
+
+interface CategoryTab {
+    key: LetterCategory | 'all';
+    label: string;
+}
+
+const CATEGORY_TABS: CategoryTab[] = [
+    { key: 'all', label: '全部' },
+    { key: 'love', label: '爱情' },
+    { key: 'family', label: '亲情' },
+    { key: 'friendship', label: '友情' },
+    { key: 'growth', label: '成长' },
+    { key: 'gratitude', label: '感恩' },
+    { key: 'time', label: '时光' },
+];
+
 interface PublicLetterSummary {
     id: string;
     title: string;
+    category: LetterCategory | null;
     contentPreview: string;
     displayName: string;
     publishedAt: string;
@@ -53,6 +72,10 @@ interface PublicLetterListResponse {
 const PAGE_LIMIT = 20;
 
 export default function OpenLetterWall({ onBack }: OpenLetterWallProps) {
+    // 分类筛选状态
+    const [activeCategory, setActiveCategory] = useState<LetterCategory | 'all'>('all');
+    const tabsContainerRef = useRef<HTMLDivElement>(null);
+
     // List state
     const [letters, setLetters] = useState<PublicLetterSummary[]>([]);
     const [nextCursor, setNextCursor] = useState<string | undefined>();
@@ -70,7 +93,7 @@ export default function OpenLetterWall({ onBack }: OpenLetterWallProps) {
     /**
      * Load public letters list
      */
-    const loadLetters = useCallback(async (cursor?: string, append = false) => {
+    const loadLetters = useCallback(async (cursor?: string, append = false, category?: LetterCategory | 'all') => {
         if (cursor) {
             setIsLoadingMore(true);
         } else {
@@ -83,6 +106,11 @@ export default function OpenLetterWall({ onBack }: OpenLetterWallProps) {
                 limit: String(PAGE_LIMIT),
             });
             if (cursor) params.set('cursor', cursor);
+            // 只有非「全部」分类时才传 category 参数
+            const categoryToUse = category !== undefined ? category : activeCategory;
+            if (categoryToUse && categoryToUse !== 'all') {
+                params.set('category', categoryToUse);
+            }
 
             const response = await fetch(`${API_BASE}/api/future/public/letters?${params.toString()}`, {
                 credentials: 'include',
@@ -108,7 +136,7 @@ export default function OpenLetterWall({ onBack }: OpenLetterWallProps) {
             setIsLoading(false);
             setIsLoadingMore(false);
         }
-    }, []);
+    }, [activeCategory]);
 
     /**
      * Load single letter detail
@@ -142,6 +170,17 @@ export default function OpenLetterWall({ onBack }: OpenLetterWallProps) {
     useEffect(() => {
         loadLetters();
     }, [loadLetters]);
+
+    /**
+     * Handle category tab change
+     */
+    const handleCategoryChange = (category: LetterCategory | 'all') => {
+        if (category === activeCategory) return;
+        setActiveCategory(category);
+        setLetters([]);
+        setNextCursor(undefined);
+        loadLetters(undefined, false, category);
+    };
 
     /**
      * Handle back navigation
@@ -216,10 +255,33 @@ export default function OpenLetterWall({ onBack }: OpenLetterWallProps) {
                 {!isDetailView && (
                     <>
                         {/* Stats */}
-                        <div className="mb-6 flex items-center justify-between">
+                        <div className="mb-4 flex items-center justify-between">
                             <p className="text-white/60 text-sm">
                                 共 {total} 封公开信
                             </p>
+                        </div>
+
+                        {/* Category Tabs - 水平滚动分类标签 */}
+                        <div className="mb-6 -mx-4 px-4">
+                            <div
+                                ref={tabsContainerRef}
+                                className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide"
+                                style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                            >
+                                {CATEGORY_TABS.map((tab) => (
+                                    <button
+                                        key={tab.key}
+                                        onClick={() => handleCategoryChange(tab.key)}
+                                        className={`flex-shrink-0 px-4 py-2 rounded-full text-sm font-medium transition-all ${
+                                            activeCategory === tab.key
+                                                ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-lg shadow-purple-500/30'
+                                                : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
+                                        }`}
+                                    >
+                                        {tab.label}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
 
                         {/* Loading */}

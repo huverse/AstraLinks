@@ -81,7 +81,7 @@ export async function createLetter(
             id, sender_user_id,
             recipient_type, recipient_email, recipient_email_normalized,
             recipient_email_hash, recipient_name,
-            title, content, content_html_sanitized, content_sha256,
+            title, category, content, content_html_sanitized, content_sha256,
             template_id, is_encrypted, encryption_hint,
             music_url,
             scheduled_local, scheduled_tz, scheduled_at_utc,
@@ -92,7 +92,7 @@ export async function createLetter(
             ?, ?,
             ?, ?, ?,
             ?, ?,
-            ?, ?, ?, ?,
+            ?, ?, ?, ?, ?,
             ?, ?, ?,
             ?,
             ?, ?, ?,
@@ -106,7 +106,7 @@ export async function createLetter(
         id, userId,
         data.recipientType, data.recipientEmail || null, recipientEmailNormalized,
         recipientEmailHash, data.recipientName || null,
-        data.title, data.content, contentHtmlSanitized, contentSha256,
+        data.title, data.category || null, data.content, contentHtmlSanitized, contentSha256,
         data.templateId || null, data.isEncrypted || false, data.encryptionHint || null,
         data.musicUrl || null,
         scheduledLocal, timezone, scheduledAtUtc,
@@ -431,6 +431,11 @@ export async function updateLetter(
         params.push(data.publicAlias || null);
     }
 
+    if (data.category !== undefined) {
+        updates.push('category = ?');
+        params.push(data.category || null);
+    }
+
     // 更新版本
     updates.push('version = version + 1');
     updates.push('updated_at = ?');
@@ -728,6 +733,7 @@ function mapRowToLetter(row: RowDataPacket): FutureLetter {
         recipientEmailHash: row.recipient_email_hash,
         recipientName: row.recipient_name,
         title: row.title,
+        category: row.category || null,
         content: row.content,
         contentHtmlSanitized: row.content_html_sanitized,
         contentSha256: row.content_sha256,

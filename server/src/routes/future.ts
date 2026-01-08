@@ -1351,6 +1351,10 @@ function maskName(name: string): string {
     return `${name[0]}${'*'.repeat(len - 2)}${name[len - 1]}`;
 }
 
+// 信件分类类型
+type LetterCategory = 'love' | 'family' | 'friendship' | 'growth' | 'gratitude' | 'time';
+const VALID_CATEGORIES: LetterCategory[] = ['love', 'family', 'friendship', 'growth', 'gratitude', 'time'];
+
 /**
  * GET /api/future/public/letters - 获取公开信列表 (无需登录)
  */
@@ -1369,18 +1373,29 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
     const safeLimit = Number.isFinite(rawLimit) ? rawLimit : PUBLIC_LETTER_DEFAULT_LIMIT;
     const limit = Math.min(Math.max(safeLimit, 1), PUBLIC_LETTER_MAX_LIMIT);
     const cursor = req.query.cursor as string | undefined;
+    const category = req.query.category as string | undefined;
+
+    // 验证分类参数
+    const validCategory = category && VALID_CATEGORIES.includes(category as LetterCategory) ? category : undefined;
 
     // 基础查询条件(不含游标) - 公开信发送后即显示，不等待送达
     // 排除草稿、已取消、被驳回、待审核状态的信件
-    const baseWhereClause = `
+    let baseWhereClause = `
         WHERE fl.is_public = TRUE
             AND fl.deleted_at IS NULL
             AND fl.status NOT IN ('draft', 'cancelled', 'rejected', 'pending_review')
     `;
+    const baseParams: (string | number)[] = [];
+
+    // 分类过滤
+    if (validCategory) {
+        baseWhereClause += ' AND fl.category = ?';
+        baseParams.push(validCategory);
+    }
 
     // 构建分页查询条件
     let whereClause = baseWhereClause;
-    const params: (string | number)[] = [];
+    const params: (string | number)[] = [...baseParams];
 
     // 游标分页 - 使用 created_at 代替 delivered_at
     if (cursor) {
@@ -1395,7 +1410,7 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
 
     // 获取总数(使用基础条件,不受分页影响)
     const countSql = `SELECT COUNT(*) as total FROM future_letters fl ${baseWhereClause}`;
-    const [countRows] = await pool.execute<RowDataPacket[]>(countSql, []);
+    const [countRows] = await pool.execute<RowDataPacket[]>(countSql, baseParams);
     const total = countRows[0]?.total || 0;
 
     // 获取列表 - 按创建时间排序
@@ -1403,6 +1418,7 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
         SELECT
             fl.id,
             fl.title,
+            fl.category,
             SUBSTRING(fl.content, 1, 240) as content_preview,
             fl.public_anonymous,
             fl.public_alias,
@@ -1421,6 +1437,7 @@ router.get('/public/letters', asyncHandler(async (req: AuthRequest, res: Respons
     const letters = rows.slice(0, limit).map((row) => ({
         id: row.id,
         title: row.title || '无题',
+        category: row.category || null,
         contentPreview: row.content_preview ? String(row.content_preview) : '',
         displayName: getPublicDisplayName(Boolean(row.public_anonymous), row.public_alias, row.sender_username),
         publishedAt: toIsoString(row.created_at),

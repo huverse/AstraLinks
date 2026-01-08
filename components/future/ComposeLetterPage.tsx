@@ -88,6 +88,7 @@ const INITIAL_STATE: ComposeState = {
     isPublic: false,
     publicAnonymous: false,
     publicAlias: '',
+    category: undefined,
 };
 
 export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPageProps) {
@@ -247,6 +248,7 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                 isPublic: state.isPublic,
                 publicAnonymous: state.publicAnonymous,
                 publicAlias: state.publicAlias || undefined,
+                category: state.category || undefined,
             };
 
             let response: Response;
@@ -746,6 +748,34 @@ export default function ComposeLetterPage({ onBack, draftId }: ComposeLetterPage
                                         className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm focus:border-indigo-500 focus:outline-none"
                                     />
                                 )}
+                                {/* Category selector */}
+                                <div className="pt-2">
+                                    <div className="text-sm mb-2">信件分类</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {[
+                                            { key: 'love', label: '爱情' },
+                                            { key: 'family', label: '亲情' },
+                                            { key: 'friendship', label: '友情' },
+                                            { key: 'growth', label: '成长' },
+                                            { key: 'gratitude', label: '感恩' },
+                                            { key: 'time', label: '时光' },
+                                        ].map((cat) => (
+                                            <button
+                                                key={cat.key}
+                                                type="button"
+                                                onClick={() => updateState('category', state.category === cat.key ? undefined : cat.key as any)}
+                                                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-all ${
+                                                    state.category === cat.key
+                                                        ? 'bg-gradient-to-r from-purple-500 to-pink-500 text-white shadow-md'
+                                                        : 'bg-white/10 text-white/70 hover:bg-white/20'
+                                                }`}
+                                            >
+                                                {cat.label}
+                                            </button>
+                                        ))}
+                                    </div>
+                                    <p className="text-xs text-white/40 mt-2">选择分类便于他人在公开信墙中浏览</p>
+                                </div>
                                 <p className="text-xs text-amber-400/80 flex items-center gap-1">
                                     <Info className="w-3 h-3" />
                                     公开信会在送达后显示在公开信墙，所有人可见
