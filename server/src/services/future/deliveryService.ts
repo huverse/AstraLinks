@@ -163,8 +163,8 @@ export async function deliverLetter(letterId: string): Promise<void> {
 
     const letterRow = letters[0];
 
-    // 检查状态
-    if (!['scheduled', 'delivering'].includes(letterRow.status)) {
+    // 检查状态（scheduled, approved, delivering都可以投递）
+    if (!['scheduled', 'approved', 'delivering'].includes(letterRow.status)) {
         console.log(`Letter ${letterId} status is ${letterRow.status}, skipping delivery`);
         return;
     }
@@ -622,13 +622,14 @@ async function handleComplaint(letterId: string, payload: ResendWebhookPayload):
  * 解决BullMQ不适合超长延迟的问题
  */
 export async function runScheduler(): Promise<void> {
-    // 查找未来24小时内需要投递的信件
+    // 查找未来24小时内需要投递的信件（scheduled或approved状态）
     const [letters] = await pool.execute<RowDataPacket[]>(
         `SELECT id, scheduled_at_utc
          FROM future_letters
-         WHERE status = 'scheduled'
+         WHERE status IN ('scheduled', 'approved')
          AND scheduled_at_utc <= DATE_ADD(NOW(), INTERVAL 24 HOUR)
          AND scheduled_at_utc > NOW()
+         AND deleted_at IS NULL
          AND id NOT IN (
              SELECT letter_id FROM future_letter_queue
              WHERE action = 'send_email' AND status = 'pending'
@@ -645,11 +646,13 @@ export async function runScheduler(): Promise<void> {
  * 检查逾期未投递的信件
  */
 export async function processOverdueLetters(): Promise<void> {
+    // 处理逾期未投递的信件（scheduled或approved状态，已过投递时间）
     const [letters] = await pool.execute<RowDataPacket[]>(
         `SELECT id
          FROM future_letters
-         WHERE status = 'scheduled'
-         AND scheduled_at_utc <= NOW()`
+         WHERE status IN ('scheduled', 'approved')
+         AND scheduled_at_utc <= NOW()
+         AND deleted_at IS NULL`
     );
 
     for (const letter of letters) {

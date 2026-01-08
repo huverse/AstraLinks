@@ -1470,10 +1470,16 @@ router.post('/admin/letters/:id/approve', requireAuth, requireAdmin, asyncHandle
         return;
     }
 
-    // 更新信件状态为approved
+    // 获取信件的投递时间
+    const [[letterDetails]] = await pool.execute<RowDataPacket[]>(
+        'SELECT scheduled_at_utc FROM future_letters WHERE id = ?',
+        [letterId]
+    );
+
+    // 更新信件状态为scheduled（准备投递）
     await pool.execute(
         `UPDATE future_letters SET
-            status = 'approved',
+            status = 'scheduled',
             reviewed_at = NOW(),
             reviewer_user_id = ?,
             review_note = ?
@@ -1481,7 +1487,13 @@ router.post('/admin/letters/:id/approve', requireAuth, requireAdmin, asyncHandle
         [adminId, note || null, letterId]
     );
 
-    res.json({ success: true, message: '信件已审核通过' });
+    // 调度投递任务
+    if (letterDetails?.scheduled_at_utc) {
+        await deliveryService.scheduleLetterDelivery(letterId, new Date(letterDetails.scheduled_at_utc));
+        console.log(`[FutureLetter] Scheduled delivery for letter ${letterId}`);
+    }
+
+    res.json({ success: true, message: '信件已审核通过并排期投递' });
 }));
 
 /**
