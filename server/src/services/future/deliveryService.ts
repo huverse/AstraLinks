@@ -113,7 +113,7 @@ function renderLetterHtml(data: LetterEmailData): string {
         <div class="header">
             <div class="title">✉️ ${letter.title}</div>
             <div class="from">来自 ${senderName}</div>
-            <div class="date">写于 ${formatDate(letter.createdAt)}</div>
+            <div class="date">写于 ${formatDate(letter.createdAt, letter.scheduledTz)}</div>
         </div>
         <div class="content">
             ${letter.contentHtmlSanitized || letter.content}
@@ -131,7 +131,7 @@ function renderLetterHtml(data: LetterEmailData): string {
         </div>` : ''}
         <div class="footer">
             <p>这是一封来自过去的时光信</p>
-            <p>由 AstraLinks 时光信 在 ${formatDate(letter.scheduledAtUtc)} 送达</p>
+            <p>由 AstraLinks 时光信 在 ${formatDate(letter.scheduledLocal, letter.scheduledTz)} 送达</p>
             ${viewUrl ? `<p><a href="${viewUrl}" style="color: #666;">在网站上查看此信</a></p>` : ''}
         </div>
     </div>
@@ -139,7 +139,7 @@ function renderLetterHtml(data: LetterEmailData): string {
 </html>`;
 }
 
-function formatDate(date: Date | string): string {
+function formatDate(date: Date | string, timezone?: string): string {
     const d = new Date(date);
     return d.toLocaleString('zh-CN', {
         year: 'numeric',
@@ -147,6 +147,7 @@ function formatDate(date: Date | string): string {
         day: 'numeric',
         hour: '2-digit',
         minute: '2-digit',
+        timeZone: timezone,
     });
 }
 
