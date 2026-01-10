@@ -95,6 +95,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
         const qqLogin = urlParams.get('qq_login');
         const qqBind = urlParams.get('qq_bind');
         const googleBound = urlParams.get('google_bound');
+        const linuxDoBind = urlParams.get('linux_do_bind');
         const error = urlParams.get('error');
 
         // Handle errors
@@ -108,6 +109,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
                 'qq_already_bound': '该QQ已绑定其他账号',
                 'google_already_bound': '该Google账号已绑定其他账号',
                 'google_auth_failed': 'Google授权失败，请重试',
+                'linux_do_already_bound': '该Linux DO账号已绑定其他账号',
+                'linux_do_auth_failed': 'Linux DO授权失败，请重试',
                 'config_error': '服务配置错误，请联系管理员',
                 'qq_blacklisted': '该QQ账号已被封禁'
             };
@@ -129,6 +132,13 @@ export function AuthProvider({ children }: AuthProviderProps) {
         // Handle successful Google bind
         if (googleBound === 'success') {
             alert('Google绑定成功！');
+            window.history.replaceState({}, '', window.location.pathname);
+            return;
+        }
+
+        // Handle successful Linux DO bind
+        if (linuxDoBind === 'success') {
+            alert('Linux DO 绑定成功！');
             window.history.replaceState({}, '', window.location.pathname);
             return;
         }

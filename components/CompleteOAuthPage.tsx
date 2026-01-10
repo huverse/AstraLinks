@@ -9,7 +9,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Loader2, User, Key, Ticket, Link2, UserPlus, CheckCircle, AlertCircle, Mail } from 'lucide-react';
 
-type OAuthType = 'qq' | 'google' | 'email';
+type OAuthType = 'qq' | 'google' | 'email' | 'linux_do';
 
 interface SessionInfo {
     // QQ specific
@@ -19,6 +19,8 @@ interface SessionInfo {
     email?: string;
     name?: string;
     avatar?: string;
+    // Linux DO specific
+    linuxDoUsername?: string;
 }
 
 export default function CompleteOAuthPage() {
@@ -29,9 +31,10 @@ export default function CompleteOAuthPage() {
     const qqSession = searchParams.get('qq_session');
     const googleSession = searchParams.get('google_session');
     const emailSession = searchParams.get('email_session');
+    const linuxDoSession = searchParams.get('linux_do_session');
 
-    const oauthType: OAuthType | null = qqSession ? 'qq' : googleSession ? 'google' : emailSession ? 'email' : null;
-    const session = qqSession || googleSession || emailSession;
+    const oauthType: OAuthType | null = qqSession ? 'qq' : googleSession ? 'google' : emailSession ? 'email' : linuxDoSession ? 'linux_do' : null;
+    const session = qqSession || googleSession || emailSession || linuxDoSession;
 
     const [sessionInfo, setSessionInfo] = useState<SessionInfo | null>(null);
     const [loading, setLoading] = useState(true);
@@ -55,6 +58,7 @@ export default function CompleteOAuthPage() {
             case 'qq': return `${base}/qq/${action}`;
             case 'google': return `${base}/google/${action}`;
             case 'email': return `${base}/email/${action}`;
+            case 'linux_do': return `${base}/linux-do/${action}`;
             default: return '';
         }
     };
@@ -90,6 +94,16 @@ export default function CompleteOAuthPage() {
                     title: '邮箱登录',
                     icon: <Mail className="w-6 h-6 text-purple-500" />,
                     color: 'purple'
+                };
+            case 'linux_do':
+                return {
+                    title: 'Linux DO 登录',
+                    icon: (
+                        <svg viewBox="0 0 24 24" className="w-6 h-6 text-orange-500" fill="currentColor">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                        </svg>
+                    ),
+                    color: 'orange'
                 };
             default:
                 return { title: '登录', icon: null, color: 'gray' };
@@ -160,6 +174,7 @@ export default function CompleteOAuthPage() {
             if (oauthType === 'qq') body.qqSession = session;
             else if (oauthType === 'google') body.googleSession = session;
             else if (oauthType === 'email') body.emailSession = session;
+            else if (oauthType === 'linux_do') body.linuxDoSession = session;
 
             if (activeTab === 'create' && invitationCodeEnabled) {
                 body.invitationCode = invitationCode;
@@ -223,7 +238,7 @@ export default function CompleteOAuthPage() {
 
     // Get avatar and display name based on OAuth type
     const avatarUrl = sessionInfo?.avatarUrl || sessionInfo?.avatar;
-    const displayName = sessionInfo?.qqNickname || sessionInfo?.name || sessionInfo?.email || '用户';
+    const displayName = sessionInfo?.qqNickname || sessionInfo?.name || sessionInfo?.email || sessionInfo?.linuxDoUsername || '用户';
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900 flex items-center justify-center p-4">

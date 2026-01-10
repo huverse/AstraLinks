@@ -2017,6 +2017,519 @@ router.delete('/google/unbind', authMiddleware, async (req: AuthenticatedRequest
     }
 });
 
+// ============================================
+// Linux DO OAuth (connect.linux.do)
+// ============================================
+
+const LINUX_DO_CLIENT_ID = process.env.LINUX_DO_CLIENT_ID;
+const LINUX_DO_CLIENT_SECRET = process.env.LINUX_DO_CLIENT_SECRET;
+const LINUX_DO_REDIRECT_URI = process.env.LINUX_DO_REDIRECT_URI;
+
+// Linux DO session store for new users
+const linuxDoSessionStore = new Map<string, { linuxDoId: string; username: string; expires: number }>();
+// Linux DO state store for CSRF protection
+const linuxDoStateStore = new Map<string, { action: string; userId?: number; expires: number }>();
+
+/**
+ * GET /api/auth/linux-do
+ * Initiate Linux DO OAuth flow
+ */
+router.get('/linux-do', optionalAuthMiddleware as any, async (req: Request, res: Response) => {
+    try {
+        const action = (req.query.action as string) === 'bind' ? 'bind' : 'login';
+        const userId = action === 'bind' ? (req as AuthenticatedRequest).user?.id : undefined;
+        const turnstileToken = req.query.turnstileToken as string | undefined;
+
+        if (action === 'bind' && !userId) {
+            res.status(401).json({ error: '请先登录后再绑定Linux DO' });
+            return;
+        }
+
+        // Verify Turnstile for login action
+        if (action === 'login' && await isTurnstileLoginEnabled()) {
+            if (!turnstileToken) {
+                res.status(400).json({ error: '请先完成人机验证' });
+                return;
+            }
+            const clientIP = req.ip || req.socket.remoteAddress || '';
+            const turnstileResult = await verifyTurnstileToken(turnstileToken, clientIP);
+            if (!turnstileResult.success) {
+                res.status(400).json({ error: turnstileResult.error || '人机验证失败' });
+                return;
+            }
+        }
+
+        if (!LINUX_DO_CLIENT_ID || !LINUX_DO_REDIRECT_URI) {
+            res.status(500).json({ error: 'Linux DO OAuth 未配置' });
+            return;
+        }
+
+        // Generate state for CSRF protection
+        const state = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+        linuxDoStateStore.set(state, { action, userId, expires: Date.now() + 10 * 60 * 1000 });
+
+        const authUrl = new URL('https://connect.linux.do/oauth2/authorize');
+        authUrl.searchParams.set('client_id', LINUX_DO_CLIENT_ID);
+        authUrl.searchParams.set('redirect_uri', LINUX_DO_REDIRECT_URI);
+        authUrl.searchParams.set('response_type', 'code');
+        authUrl.searchParams.set('state', state);
+
+        res.redirect(authUrl.toString());
+    } catch (error) {
+        console.error('Linux DO OAuth init error:', error);
+        res.status(500).json({ error: 'OAuth初始化失败' });
+    }
+});
+
+/**
+ * GET /api/auth/linux-do/callback
+ * Handle Linux DO OAuth callback
+ */
+router.get('/linux-do/callback', async (req: Request, res: Response) => {
+    try {
+        const { code, state } = req.query;
+
+        if (!code || !state) {
+            res.redirect(`${FRONTEND_URL}?error=missing_params`);
+            return;
+        }
+
+        // Verify state
+        const stateData = linuxDoStateStore.get(state as string);
+        if (!stateData || stateData.expires < Date.now()) {
+            linuxDoStateStore.delete(state as string);
+            res.redirect(`${FRONTEND_URL}?error=invalid_state`);
+            return;
+        }
+        linuxDoStateStore.delete(state as string);
+
+        if (!LINUX_DO_CLIENT_SECRET || !LINUX_DO_CLIENT_ID || !LINUX_DO_REDIRECT_URI) {
+            console.error('[Linux DO] OAuth not configured');
+            res.redirect(`${FRONTEND_URL}?error=config_error`);
+            return;
+        }
+
+        // Exchange code for access token
+        const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', {
+            client_id: LINUX_DO_CLIENT_ID,
+            client_secret: LINUX_DO_CLIENT_SECRET,
+            code,
+            grant_type: 'authorization_code',
+            redirect_uri: LINUX_DO_REDIRECT_URI,
+        }, {
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const { access_token } = tokenResponse.data;
+
+        if (!access_token) {
+            console.error('[Linux DO] No access token:', tokenResponse.data);
+            res.redirect(`${FRONTEND_URL}?error=token_failed`);
+            return;
+        }
+
+        // Get user info from Linux DO
+        const userInfoResponse = await axios.get('https://connect.linux.do/api/user', {
+            headers: { Authorization: `Bearer ${access_token}` }
+        });
+
+        const { id: linuxDoId, username: linuxDoUsername } = userInfoResponse.data;
+
+        if (!linuxDoId) {
+            console.error('[Linux DO] No user id:', userInfoResponse.data);
+            res.redirect(`${FRONTEND_URL}?error=openid_failed`);
+            return;
+        }
+
+        const linuxDoIdStr = String(linuxDoId);
+
+        // Handle bind action
+        if (stateData.action === 'bind' && stateData.userId) {
+            const [existing] = await pool.execute<RowDataPacket[]>(
+                'SELECT id FROM users WHERE linux_do_id = ?',
+                [linuxDoIdStr]
+            );
+
+            if (existing.length > 0) {
+                res.redirect(`${FRONTEND_URL}?error=linux_do_already_bound`);
+                return;
+            }
+
+            await pool.execute(
+                'UPDATE users SET linux_do_id = ?, linux_do_username = ? WHERE id = ?',
+                [linuxDoIdStr, linuxDoUsername, stateData.userId]
+            );
+
+            res.redirect(`${FRONTEND_URL}?linux_do_bind=success`);
+            return;
+        }
+
+        // Check if user exists with this Linux DO ID
+        const [existingUsers] = await pool.execute<RowDataPacket[]>(
+            'SELECT id, username, email, is_admin FROM users WHERE linux_do_id = ?',
+            [linuxDoIdStr]
+        );
+
+        if (existingUsers.length > 0) {
+            // Existing user - login directly
+            const user = existingUsers[0];
+            await pool.execute(
+                'UPDATE users SET linux_do_username = ?, last_login = NOW() WHERE id = ?',
+                [linuxDoUsername, user.id]
+            );
+
+            const token = generateToken({
+                id: user.id,
+                username: user.username,
+                isAdmin: user.is_admin || false
+            });
+
+            res.redirect(`${FRONTEND_URL}?token=${token}&linux_do_login=success`);
+        } else {
+            // New Linux DO user - create session and redirect to complete registration
+            const linuxDoSession = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+            linuxDoSessionStore.set(linuxDoSession, {
+                linuxDoId: linuxDoIdStr,
+                username: linuxDoUsername,
+                expires: Date.now() + 30 * 60 * 1000
+            });
+
+            res.redirect(`${FRONTEND_URL}/complete-oauth?linux_do_session=${linuxDoSession}`);
+        }
+    } catch (error: any) {
+        console.error('Linux DO callback error:', error.response?.data || error);
+        res.redirect(`${FRONTEND_URL}?error=linux_do_auth_failed`);
+    }
+});
+
+/**
+ * GET /api/auth/linux-do/session
+ * Get Linux DO session info for completing registration
+ */
+router.get('/linux-do/session', async (req: Request, res: Response) => {
+    try {
+        const linuxDoSession = req.query.session as string;
+
+        if (!linuxDoSession) {
+            res.status(400).json({ error: '缺少 session 参数' });
+            return;
+        }
+
+        const sessionData = linuxDoSessionStore.get(linuxDoSession);
+        if (!sessionData || sessionData.expires < Date.now()) {
+            linuxDoSessionStore.delete(linuxDoSession);
+            res.status(400).json({ error: 'Session 已过期' });
+            return;
+        }
+
+        res.json({
+            linuxDoUsername: sessionData.username
+        });
+    } catch (error) {
+        console.error('Linux DO session error:', error);
+        res.status(500).json({ error: '获取 session 失败' });
+    }
+});
+
+/**
+ * POST /api/auth/linux-do/complete
+ * Complete Linux DO OAuth registration
+ */
+router.post('/linux-do/complete', async (req: Request, res: Response) => {
+    try {
+        const { linuxDoSession, action, username, password, invitationCode } = req.body;
+
+        if (!linuxDoSession) {
+            res.status(400).json({ error: '缺少 Linux DO session' });
+            return;
+        }
+
+        const sessionData = linuxDoSessionStore.get(linuxDoSession);
+        if (!sessionData || sessionData.expires < Date.now()) {
+            linuxDoSessionStore.delete(linuxDoSession);
+            res.status(400).json({ error: 'Session 已过期，请重新登录' });
+            return;
+        }
+
+        const { linuxDoId, username: linuxDoUsername } = sessionData;
+
+        if (!username || !password) {
+            res.status(400).json({ error: '请输入用户名和密码' });
+            return;
+        }
+
+        if (password.length < 6) {
+            res.status(400).json({ error: '密码长度至少 6 个字符' });
+            return;
+        }
+
+        if (action === 'bind') {
+            // Bind to existing account
+            const [users] = await pool.execute<RowDataPacket[]>(
+                'SELECT id, username, password_hash, is_admin, linux_do_id FROM users WHERE username = ?',
+                [username]
+            );
+
+            if (users.length === 0) {
+                res.status(401).json({ error: '用户名或密码错误' });
+                return;
+            }
+
+            const user = users[0];
+
+            if (user.linux_do_id) {
+                res.status(400).json({ error: '该账户已绑定其他Linux DO账号' });
+                return;
+            }
+
+            const isValid = await verifyPassword(password, user.password_hash);
+            if (!isValid) {
+                res.status(401).json({ error: '用户名或密码错误' });
+                return;
+            }
+
+            await pool.execute(
+                'UPDATE users SET linux_do_id = ?, linux_do_username = ?, last_login = NOW() WHERE id = ?',
+                [linuxDoId, linuxDoUsername, user.id]
+            );
+
+            linuxDoSessionStore.delete(linuxDoSession);
+
+            const token = generateToken({
+                id: user.id,
+                username: user.username,
+                isAdmin: user.is_admin || false
+            });
+
+            res.json({
+                message: 'Linux DO 绑定成功',
+                token,
+                user: { id: user.id, username: user.username, isAdmin: user.is_admin || false }
+            });
+
+        } else if (action === 'create') {
+            // Create new account
+            if (username.length < 3 || username.length > 60) {
+                res.status(400).json({ error: '用户名长度应为 3-60 个字符' });
+                return;
+            }
+
+            // Check if username exists
+            const [existingUser] = await pool.execute<RowDataPacket[]>(
+                'SELECT id FROM users WHERE username = ?',
+                [username]
+            );
+
+            if (existingUser.length > 0) {
+                res.status(400).json({ error: '用户名已存在' });
+                return;
+            }
+
+            // Check invitation code if required
+            const [normalCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+                'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+                ['invitation_code_enabled']
+            );
+            const normalCodeEnabled = normalCodeEnabledSetting[0]?.setting_value === 'true';
+
+            const [splitCodeEnabledSetting] = await pool.execute<RowDataPacket[]>(
+                'SELECT setting_value FROM site_settings WHERE setting_key = ?',
+                ['split_invitation_enabled']
+            );
+            const splitCodeEnabled = splitCodeEnabledSetting[0]?.setting_value === 'true';
+
+            const invitationCodeRequired = normalCodeEnabled || splitCodeEnabled;
+
+            let codeType: 'normal' | 'split' | null = null;
+            let codeData: any = null;
+            let splitTreeId: string | null = null;
+
+            if (invitationCodeRequired) {
+                if (!invitationCode) {
+                    res.status(400).json({ error: '请输入邀请码' });
+                    return;
+                }
+
+                // Check normal codes
+                if (normalCodeEnabled) {
+                    const [normalCodes] = await pool.execute<RowDataPacket[]>(
+                        'SELECT id, is_used FROM invitation_codes WHERE code = ?',
+                        [invitationCode]
+                    );
+                    if (normalCodes.length > 0) {
+                        codeData = normalCodes[0];
+                        codeType = 'normal';
+                        if (codeData.is_used) {
+                            res.status(400).json({ error: '该邀请码已被使用' });
+                            return;
+                        }
+                    }
+                }
+
+                // Check split codes
+                if (!codeData && splitCodeEnabled) {
+                    const [splitCodes] = await pool.execute<RowDataPacket[]>(
+                        `SELECT c.*, t.is_banned as tree_banned
+                         FROM split_invitation_codes c
+                         JOIN split_invitation_trees t ON c.tree_id = t.id
+                         WHERE c.code = ?`,
+                        [invitationCode]
+                    );
+                    if (splitCodes.length > 0) {
+                        codeData = splitCodes[0];
+                        codeType = 'split';
+                        splitTreeId = codeData.tree_id;
+                        if (codeData.is_used) {
+                            res.status(400).json({ error: '该邀请码已被使用' });
+                            return;
+                        }
+                        if (codeData.tree_banned) {
+                            res.status(400).json({ error: '该邀请码所属邀请树已被封禁' });
+                            return;
+                        }
+                    }
+                }
+
+                if (!codeData) {
+                    res.status(400).json({ error: '邀请码无效' });
+                    return;
+                }
+            }
+
+            // Create user
+            const passwordHash = await hashPassword(password);
+
+            let insertSql: string;
+            let insertParams: any[];
+
+            if (codeType === 'split') {
+                insertSql = `INSERT INTO users (username, password_hash, linux_do_id, linux_do_username, split_tree_id, invited_by_code_id, created_at, last_login)
+                             VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`;
+                insertParams = [username, passwordHash, linuxDoId, linuxDoUsername, splitTreeId, codeData.id];
+            } else {
+                insertSql = `INSERT INTO users (username, password_hash, linux_do_id, linux_do_username, created_at, last_login)
+                             VALUES (?, ?, ?, ?, NOW(), NOW())`;
+                insertParams = [username, passwordHash, linuxDoId, linuxDoUsername];
+            }
+
+            const [result] = await pool.execute<ResultSetHeader>(insertSql, insertParams);
+            const userId = result.insertId;
+
+            // Mark invitation code as used
+            if (codeType === 'normal') {
+                await pool.execute(
+                    'UPDATE invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?',
+                    [userId, codeData.id]
+                );
+            } else if (codeType === 'split') {
+                await pool.execute(
+                    'UPDATE split_invitation_codes SET is_used = TRUE, used_by_user_id = ?, used_at = NOW() WHERE id = ?',
+                    [userId, codeData.id]
+                );
+            }
+
+            linuxDoSessionStore.delete(linuxDoSession);
+
+            const token = generateToken({
+                id: userId,
+                username,
+                isAdmin: false
+            });
+
+            res.status(201).json({
+                message: '注册成功',
+                token,
+                user: { id: userId, username, isAdmin: false }
+            });
+        } else {
+            res.status(400).json({ error: '无效的 action' });
+        }
+    } catch (error: any) {
+        console.error('Linux DO complete error:', error);
+        res.status(500).json({ error: '服务器错误' });
+    }
+});
+
+/**
+ * GET /api/auth/linux-do/status
+ * Get Linux DO binding status for current user
+ */
+router.get('/linux-do/status', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+
+        const [users] = await pool.execute<RowDataPacket[]>(
+            'SELECT linux_do_id, linux_do_username FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (users.length === 0) {
+            res.status(404).json({ error: '用户不存在' });
+            return;
+        }
+
+        const user = users[0];
+        res.json({
+            bound: !!user.linux_do_id,
+            username: user.linux_do_username
+        });
+    } catch (error) {
+        console.error('Linux DO status error:', error);
+        res.status(500).json({ error: '获取状态失败' });
+    }
+});
+
+/**
+ * DELETE /api/auth/linux-do/unbind
+ * Unbind Linux DO from current user account
+ */
+router.delete('/linux-do/unbind', authMiddleware, async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        const userId = req.user?.id;
+
+        const [users] = await pool.execute<RowDataPacket[]>(
+            'SELECT password_hash, qq_openid, google_id, linux_do_id FROM users WHERE id = ?',
+            [userId]
+        );
+
+        if (users.length === 0) {
+            res.status(404).json({ error: '用户不存在' });
+            return;
+        }
+
+        const user = users[0];
+        // Must have password or another OAuth bound
+        if (!user.password_hash && !user.qq_openid && !user.google_id && user.linux_do_id) {
+            res.status(400).json({ error: '请先设置密码或绑定其他登录方式后再解绑Linux DO' });
+            return;
+        }
+
+        await pool.execute('UPDATE users SET linux_do_id = NULL, linux_do_username = NULL WHERE id = ?', [userId]);
+
+        res.json({ message: 'Linux DO 解绑成功' });
+    } catch (error) {
+        console.error('Linux DO unbind error:', error);
+        res.status(500).json({ error: '解绑失败' });
+    }
+});
+
+// Cleanup expired Google and Linux DO states periodically
+setInterval(() => {
+    const now = Date.now();
+    for (const [key, value] of googleSessionStore.entries()) {
+        if (value.expires < now) googleSessionStore.delete(key);
+    }
+    for (const [key, value] of googleStateStore.entries()) {
+        if (value.expires < now) googleStateStore.delete(key);
+    }
+    for (const [key, value] of linuxDoSessionStore.entries()) {
+        if (value.expires < now) linuxDoSessionStore.delete(key);
+    }
+    for (const [key, value] of linuxDoStateStore.entries()) {
+        if (value.expires < now) linuxDoStateStore.delete(key);
+    }
+}, 60000);
+
 /**
  * POST /api/auth/email/verify-code-only
  * Verify email code without performing any action (for security verification)
