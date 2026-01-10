@@ -2110,15 +2110,16 @@ router.get('/linux-do/callback', async (req: Request, res: Response) => {
             return;
         }
 
-        // Exchange code for access token
-        const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', {
-            client_id: LINUX_DO_CLIENT_ID,
-            client_secret: LINUX_DO_CLIENT_SECRET,
-            code,
-            grant_type: 'authorization_code',
-            redirect_uri: LINUX_DO_REDIRECT_URI,
-        }, {
-            headers: { 'Content-Type': 'application/json' }
+        // Exchange code for access token (Linux DO requires form-urlencoded)
+        const tokenParams = new URLSearchParams();
+        tokenParams.append('client_id', LINUX_DO_CLIENT_ID);
+        tokenParams.append('client_secret', LINUX_DO_CLIENT_SECRET);
+        tokenParams.append('code', code as string);
+        tokenParams.append('grant_type', 'authorization_code');
+        tokenParams.append('redirect_uri', LINUX_DO_REDIRECT_URI);
+
+        const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', tokenParams, {
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
         });
 
         const { access_token } = tokenResponse.data;
