@@ -2072,6 +2072,7 @@ router.get('/linux-do', optionalAuthMiddleware as any, async (req: Request, res:
         authUrl.searchParams.set('client_id', LINUX_DO_CLIENT_ID);
         authUrl.searchParams.set('redirect_uri', LINUX_DO_REDIRECT_URI);
         authUrl.searchParams.set('response_type', 'code');
+        authUrl.searchParams.set('scope', 'read');
         authUrl.searchParams.set('state', state);
 
         res.redirect(authUrl.toString());
