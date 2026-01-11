@@ -75,6 +75,12 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
         if (!token) return;
 
         setLoading(true);
+        // Reset binding states to ensure fresh data
+        setGoogleBound(false);
+        setGoogleEmail(null);
+        setLinuxDoBound(false);
+        setLinuxDoUsername(null);
+
         try {
             // Fetch profile
             const profileRes = await fetch(`${API_BASE}/api/profile`, {
@@ -84,6 +90,8 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                 const data = await profileRes.json();
                 setProfile(data);
                 setEditForm({ username: data.username, email: data.email || '' });
+            } else {
+                console.error('Profile fetch failed:', profileRes.status);
             }
 
             // Fetch Google binding status
