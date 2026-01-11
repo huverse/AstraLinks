@@ -2119,6 +2119,14 @@ router.get('/linux-do/callback', async (req: Request, res: Response) => {
         // Basic Auth: base64(client_id:client_secret)
         const basicAuth = Buffer.from(`${LINUX_DO_CLIENT_ID}:${LINUX_DO_CLIENT_SECRET}`).toString('base64');
 
+        // Debug logging
+        console.log('[Linux DO] Token request debug:', {
+            client_id_length: LINUX_DO_CLIENT_ID.length,
+            client_secret_length: LINUX_DO_CLIENT_SECRET.length,
+            redirect_uri: LINUX_DO_REDIRECT_URI,
+            body: tokenParams.toString()
+        });
+
         const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', tokenParams, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
