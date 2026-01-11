@@ -113,7 +113,7 @@ export class MCPRegistry {
 
         // 从数据库获取第三方 MCP
         const [rows] = await pool.execute<RowDataPacket[]>(
-            `SELECT * FROM mcp_registry WHERE (scope = ? OR scope = 'both') AND status = 'active'`,
+            `SELECT * FROM mcp_registry WHERE (scope = ? OR scope = 'both') AND is_enabled = TRUE`,
             [scope]
         );
 
@@ -255,7 +255,7 @@ export class MCPRegistry {
 
     // 搜索 MCP
     async searchMCPs(query: string, scope?: MCPScope): Promise<MCPRegistryEntry[]> {
-        let sql = `SELECT * FROM mcp_registry WHERE (name LIKE ? OR description LIKE ?) AND status = 'active'`;
+        let sql = `SELECT * FROM mcp_registry WHERE (name LIKE ? OR description LIKE ?) AND is_enabled = TRUE`;
         const params: unknown[] = [`%${query}%`, `%${query}%`];
 
         if (scope) {
@@ -271,7 +271,7 @@ export class MCPRegistry {
 
     // 获取热门 MCP
     async getPopularMCPs(scope?: MCPScope, limit: number = 20): Promise<MCPRegistryEntry[]> {
-        let sql = `SELECT * FROM mcp_registry WHERE status = 'active'`;
+        let sql = `SELECT * FROM mcp_registry WHERE is_enabled = TRUE`;
         const params: unknown[] = [];
 
         if (scope) {
@@ -294,7 +294,7 @@ export class MCPRegistry {
             description: row.description,
             version: row.version,
             scope: row.scope,
-            status: row.status,
+            status: row.is_enabled ? 'active' : 'inactive',
             isBuiltin: row.is_builtin === 1,
             isVerified: row.is_verified === 1,
             ratingScore: row.rating_score,
