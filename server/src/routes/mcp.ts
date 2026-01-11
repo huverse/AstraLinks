@@ -5,6 +5,7 @@ import { spawn } from 'child_process';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
+import { mcpRegistry, mcpExecutor, MCPScope, MCPCallRequest } from '../mcp';
 
 const router = Router();
 
@@ -347,6 +348,239 @@ except Exception as e:
         });
     } catch (error: any) {
         console.error('[MCP] Python execution error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// MCP 双子架构 API
+// ============================================
+
+/**
+ * POST /api/mcp/call
+ * 统一 MCP 工具调用接口
+ */
+router.post('/call', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const { mcpId, tool, params, scope } = req.body;
+        const userId = (req as any).user?.id;
+
+        if (!mcpId || !tool || !scope) {
+            res.status(400).json({ error: '缺少必要参数: mcpId, tool, scope' });
+            return;
+        }
+
+        const request: MCPCallRequest = {
+            mcpId,
+            tool,
+            params: params ?? {},
+            scope: scope as MCPScope,
+            context: {
+                userId,
+                workspaceId: req.body.workspaceId,
+                conversationId: req.body.conversationId
+            }
+        };
+
+        const result = await mcpExecutor.execute(request);
+        res.json(result);
+    } catch (error: any) {
+        console.error('[MCP] Call error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/mcp/registry
+ * 获取 MCP 注册表（按作用域）
+ */
+router.get('/registry', async (req: Request, res: Response) => {
+    try {
+        const scope = req.query.scope as MCPScope | undefined;
+
+        if (scope && scope !== 'workspace' && scope !== 'chat' && scope !== 'both') {
+            res.status(400).json({ error: '无效的 scope 参数' });
+            return;
+        }
+
+        const mcps = scope
+            ? await mcpRegistry.getMCPsByScope(scope)
+            : [...await mcpRegistry.getMCPsByScope('workspace'), ...await mcpRegistry.getMCPsByScope('chat')];
+
+        res.json({
+            success: true,
+            mcps: mcps.map(mcp => ({
+                id: mcp.id,
+                name: mcp.name,
+                description: mcp.description,
+                version: mcp.version,
+                scope: mcp.scope,
+                isBuiltin: mcp.isBuiltin,
+                isVerified: mcp.isVerified,
+                ratingScore: mcp.ratingScore,
+                tools: mcp.tools.map(t => ({ name: t.name, description: t.description })),
+                permissions: mcp.permissions
+            }))
+        });
+    } catch (error: any) {
+        console.error('[MCP] Registry error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/mcp/user/installed
+ * 获取用户已安装的 MCP
+ */
+router.get('/user/installed', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        const scope = req.query.scope as MCPScope | undefined;
+
+        const installs = await mcpRegistry.getUserInstalledMCPs(userId, scope);
+
+        res.json({
+            success: true,
+            installs
+        });
+    } catch (error: any) {
+        console.error('[MCP] User installed error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * POST /api/mcp/user/install
+ * 安装 MCP
+ */
+router.post('/user/install', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        const { mcpId, scope, config } = req.body;
+
+        if (!mcpId || !scope) {
+            res.status(400).json({ error: '缺少必要参数: mcpId, scope' });
+            return;
+        }
+
+        const installId = await mcpRegistry.installMCP(userId, mcpId, scope, config ?? {});
+
+        res.json({
+            success: true,
+            installId
+        });
+    } catch (error: any) {
+        console.error('[MCP] Install error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * DELETE /api/mcp/user/uninstall/:mcpId
+ * 卸载 MCP
+ */
+router.delete('/user/uninstall/:mcpId', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        const { mcpId } = req.params;
+
+        await mcpRegistry.uninstallMCP(userId, mcpId);
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('[MCP] Uninstall error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * PATCH /api/mcp/user/toggle/:mcpId
+ * 启用/禁用 MCP
+ */
+router.patch('/user/toggle/:mcpId', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        const { mcpId } = req.params;
+        const { enabled } = req.body;
+
+        if (typeof enabled !== 'boolean') {
+            res.status(400).json({ error: '缺少必要参数: enabled' });
+            return;
+        }
+
+        await mcpRegistry.setMCPEnabled(userId, mcpId, enabled);
+
+        res.json({ success: true });
+    } catch (error: any) {
+        console.error('[MCP] Toggle error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/mcp/tools
+ * 获取用户可用的所有工具
+ */
+router.get('/tools', authMiddleware, async (req: Request, res: Response) => {
+    try {
+        const userId = (req as any).user?.id;
+        const scope = (req.query.scope as MCPScope) ?? 'chat';
+
+        const tools = await mcpExecutor.getAvailableTools(userId, scope);
+
+        res.json({
+            success: true,
+            tools
+        });
+    } catch (error: any) {
+        console.error('[MCP] Tools error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/mcp/search
+ * 搜索 MCP
+ */
+router.get('/search', async (req: Request, res: Response) => {
+    try {
+        const query = req.query.q as string;
+        const scope = req.query.scope as MCPScope | undefined;
+
+        if (!query) {
+            res.status(400).json({ error: '缺少搜索关键词' });
+            return;
+        }
+
+        const mcps = await mcpRegistry.searchMCPs(query, scope);
+
+        res.json({
+            success: true,
+            mcps
+        });
+    } catch (error: any) {
+        console.error('[MCP] Search error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * GET /api/mcp/popular
+ * 获取热门 MCP
+ */
+router.get('/popular', async (req: Request, res: Response) => {
+    try {
+        const scope = req.query.scope as MCPScope | undefined;
+        const limit = parseInt(req.query.limit as string) || 20;
+
+        const mcps = await mcpRegistry.getPopularMCPs(scope, limit);
+
+        res.json({
+            success: true,
+            mcps
+        });
+    } catch (error: any) {
+        console.error('[MCP] Popular error:', error);
         res.status(500).json({ error: error.message });
     }
 });

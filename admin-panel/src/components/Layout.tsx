@@ -1,6 +1,6 @@
 import { type ReactNode, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { LayoutDashboard, Users, Ticket, Flag, Ban, FileText, LogOut, BarChart3, MessageSquare, Megaphone, Settings, FileCode, Moon, Sun, Share2, GitBranch, Plug, Mail } from 'lucide-react';
+import { LayoutDashboard, Users, Ticket, Flag, Ban, FileText, LogOut, BarChart3, MessageSquare, Megaphone, Settings, FileCode, Moon, Sun, Share2, GitBranch, Plug, Mail, Key, Cpu } from 'lucide-react';
 import { setAuthToken } from '../services/api';
 import UndoToast from './UndoToast';
 
@@ -19,6 +19,8 @@ const navItems = [
     { path: '/config-templates', label: '配置模板', icon: FileCode },
     { path: '/workflows', label: '工作流管理', icon: GitBranch },
     { path: '/mcp-registry', label: 'MCP 注册', icon: Plug },
+    { path: '/keypool', label: '号池管理', icon: Key },
+    { path: '/ai-providers', label: 'AI 提供商', icon: Cpu },
     { path: '/settings', label: '站点设置', icon: Settings },
 ];
 

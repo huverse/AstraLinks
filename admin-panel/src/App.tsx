@@ -17,6 +17,8 @@ import ConfigTemplates from './pages/ConfigTemplates';
 import WorkflowManagement from './pages/WorkflowManagement';
 import MCPRegistry from './pages/MCPRegistry';
 import FutureLetters from './pages/FutureLetters';
+import KeyPoolManagement from './pages/KeyPoolManagement';
+import AIProviders from './pages/AIProviders';
 import Layout from './components/Layout';
 import './index.css';
 
@@ -52,6 +54,8 @@ function App() {
           <Route path="/workflows" element={<WorkflowManagement />} />
           <Route path="/mcp-registry" element={<MCPRegistry />} />
           <Route path="/future-letters" element={<FutureLetters />} />
+          <Route path="/keypool" element={<KeyPoolManagement />} />
+          <Route path="/ai-providers" element={<AIProviders />} />
         </Routes>
       </Layout>
     </BrowserRouter>

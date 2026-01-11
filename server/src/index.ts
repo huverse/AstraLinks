@@ -33,6 +33,11 @@ import webhookRoutes from './routes/webhooks';
 import collaborationRoutes from './routes/collaboration';
 import databaseRoutes from './routes/database';
 import worldEngineRoutes from './routes/world-engine';
+import aiProvidersRoutes from './routes/ai-providers';
+import aiCredentialsRoutes from './routes/ai-credentials';
+import keypoolRoutes from './routes/keypool';
+import previewRoutes from './routes/preview';
+import mediaRoutes from './routes/media';
 import { initDatabase, initTimezone } from './config/database';
 import { runSync } from './services/syncService';
 import { initWebSocket } from './services/websocket';
@@ -98,6 +103,11 @@ app.use('/api/webhooks', webhookRoutes);
 app.use('/api/workflows', collaborationRoutes); // P5 协作功能 (嵌套在 workflows 下)
 app.use('/api/database', databaseRoutes); // P7 数据库连接器
 app.use('/api/v1/world-engine', worldEngineRoutes); // World Engine API v1
+app.use('/api/ai-providers', aiProvidersRoutes);
+app.use('/api/ai-credentials', aiCredentialsRoutes);
+app.use('/api/keypool', keypoolRoutes);
+app.use('/api/preview', previewRoutes);
+app.use('/api/media', mediaRoutes);
 app.use('/api/future', futureRoutes); // 时光信 API
 
 // 隔离模式 API

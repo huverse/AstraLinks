@@ -12,6 +12,7 @@ import { RowDataPacket, ResultSetHeader } from 'mysql2';
 import { authMiddleware } from '../middleware/auth';
 import * as fs from 'fs';
 import * as path from 'path';
+import { knowledgeManager, summarizer, mindmapGenerator } from '../knowledge';
 
 // pdf-parse v1.x uses function-based API
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -484,6 +485,100 @@ router.post('/:workspaceId/query', async (req: Request, res: Response): Promise<
         });
     } catch (error: any) {
         console.error('[Knowledge] Query error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// ============================================
+// 总结和思维导图 API
+// ============================================
+
+/**
+ * 生成文档总结
+ * POST /api/knowledge/:workspaceId/documents/:documentId/summarize
+ */
+router.post('/:workspaceId/documents/:documentId/summarize', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { workspaceId, documentId } = req.params;
+        const userId = (req as any).user?.id;
+        const { style = 'brief' } = req.body;
+
+        if (!await verifyOwnership(workspaceId, userId)) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        const summary = await knowledgeManager.summarizeDocument(documentId, workspaceId, {
+            userId,
+            style
+        });
+
+        res.json({
+            success: true,
+            documentId,
+            summary
+        });
+    } catch (error: any) {
+        console.error('[Knowledge] Summarize error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 生成思维导图
+ * POST /api/knowledge/:workspaceId/documents/:documentId/mindmap
+ */
+router.post('/:workspaceId/documents/:documentId/mindmap', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { workspaceId, documentId } = req.params;
+        const userId = (req as any).user?.id;
+        const { maxDepth = 3 } = req.body;
+
+        if (!await verifyOwnership(workspaceId, userId)) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        const mindmap = await knowledgeManager.generateMindmap(documentId, workspaceId, {
+            userId,
+            maxDepth
+        });
+
+        res.json({
+            success: true,
+            documentId,
+            mindmap,
+            nodeCount: mindmapGenerator.countNodes(mindmap),
+            markdown: mindmapGenerator.toMarkdown(mindmap)
+        });
+    } catch (error: any) {
+        console.error('[Knowledge] Mindmap error:', error);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+/**
+ * 获取工作区知识库统计
+ * GET /api/knowledge/:workspaceId/stats
+ */
+router.get('/:workspaceId/stats', async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { workspaceId } = req.params;
+        const userId = (req as any).user?.id;
+
+        if (!await verifyOwnership(workspaceId, userId)) {
+            res.status(403).json({ error: '无权访问' });
+            return;
+        }
+
+        const stats = await knowledgeManager.getStats(workspaceId);
+
+        res.json({
+            success: true,
+            ...stats
+        });
+    } catch (error: any) {
+        console.error('[Knowledge] Stats error:', error);
         res.status(500).json({ error: error.message });
     }
 });
