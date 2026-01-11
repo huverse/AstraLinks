@@ -2110,24 +2110,13 @@ router.get('/linux-do/callback', async (req: Request, res: Response) => {
             return;
         }
 
-        // Exchange code for access token (per Linux DO docs: Basic Auth only, no client creds in body)
-        const tokenParams = new URLSearchParams();
-        tokenParams.append('grant_type', 'authorization_code');
-        tokenParams.append('code', code as string);
-        tokenParams.append('redirect_uri', LINUX_DO_REDIRECT_URI);
-
-        // Basic Auth: base64(client_id:client_secret)
+        // Exchange code for access token using POST with form-urlencoded body
         const basicAuth = Buffer.from(`${LINUX_DO_CLIENT_ID}:${LINUX_DO_CLIENT_SECRET}`).toString('base64');
+        const tokenBody = `grant_type=authorization_code&code=${encodeURIComponent(code as string)}&redirect_uri=${encodeURIComponent(LINUX_DO_REDIRECT_URI)}`;
 
-        // Debug logging
-        console.log('[Linux DO] Token request debug:', {
-            client_id_length: LINUX_DO_CLIENT_ID.length,
-            client_secret_length: LINUX_DO_CLIENT_SECRET.length,
-            redirect_uri: LINUX_DO_REDIRECT_URI,
-            body: tokenParams.toString()
-        });
+        console.log('[Linux DO] Token request:', { basicAuth: basicAuth.substring(0, 10) + '...', bodyLength: tokenBody.length });
 
-        const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', tokenParams, {
+        const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', tokenBody, {
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': `Basic ${basicAuth}`

@@ -55,6 +55,8 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
     // Binding status states
     const [googleBound, setGoogleBound] = useState(false);
     const [googleEmail, setGoogleEmail] = useState<string | null>(null);
+    const [linuxDoBound, setLinuxDoBound] = useState(false);
+    const [linuxDoUsername, setLinuxDoUsername] = useState<string | null>(null);
 
     // Security verification states
     const [showSecurityModal, setShowSecurityModal] = useState<'password' | 'delete' | 'bindEmail' | null>(null);
@@ -96,6 +98,20 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                 }
             } catch (e) {
                 console.error('Failed to fetch Google status:', e);
+            }
+
+            // Fetch Linux DO binding status
+            try {
+                const linuxDoRes = await fetch(`${API_BASE}/api/auth/linux-do/status`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (linuxDoRes.ok) {
+                    const linuxDoData = await linuxDoRes.json();
+                    setLinuxDoBound(linuxDoData.bound);
+                    setLinuxDoUsername(linuxDoData.username || null);
+                }
+            } catch (e) {
+                console.error('Failed to fetch Linux DO status:', e);
             }
 
             // Check if split invitation is enabled
@@ -425,6 +441,55 @@ export default function ProfileCenter({ isOpen, onClose, onLogout, token }: Prof
                                             <p className="text-xs text-gray-500">
                                                 {googleBound
                                                     ? `已绑定: ${googleEmail || 'Google用户'} - 点击解绑`
+                                                    : '未绑定 - 点击绑定'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                    <ChevronRight size={20} className="text-gray-400" />
+                                </button>
+                                {/* Linux DO 绑定 */}
+                                <button
+                                    className={`w-full flex items-center justify-between p-4 rounded-lg transition-colors ${linuxDoBound
+                                        ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 hover:bg-green-100 dark:hover:bg-green-900/30'
+                                        : 'bg-gray-50 dark:bg-slate-700 hover:bg-gray-100 dark:hover:bg-slate-600'
+                                        }`}
+                                    onClick={async () => {
+                                        if (linuxDoBound) {
+                                            // Unbind Linux DO
+                                            if (!confirm('确定解绑 Linux DO？解绑后将无法使用 Linux DO 登录此账号')) return;
+                                            try {
+                                                const res = await fetch(`${API_BASE}/api/auth/linux-do/unbind`, {
+                                                    method: 'DELETE',
+                                                    headers: { 'Authorization': `Bearer ${token}` }
+                                                });
+                                                if (res.ok) {
+                                                    alert('Linux DO 解绑成功');
+                                                    setLinuxDoBound(false);
+                                                    setLinuxDoUsername(null);
+                                                } else {
+                                                    const data = await res.json();
+                                                    alert(data.error || 'Linux DO 解绑失败');
+                                                }
+                                            } catch (e) {
+                                                alert('网络错误，请稍后重试');
+                                            }
+                                        } else {
+                                            // Bind Linux DO
+                                            window.location.href = `${API_BASE}/api/auth/linux-do?action=bind&token=${token}`;
+                                        }
+                                    }}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <svg viewBox="0 0 24 24" className="w-5 h-5 text-orange-500" fill="currentColor">
+                                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
+                                        </svg>
+                                        <div className="text-left">
+                                            <p className="font-medium text-gray-900 dark:text-white">
+                                                {linuxDoBound ? '解绑 Linux DO' : '绑定 Linux DO'}
+                                            </p>
+                                            <p className="text-xs text-gray-500">
+                                                {linuxDoBound
+                                                    ? `已绑定: ${linuxDoUsername || 'Linux DO 用户'} - 点击解绑`
                                                     : '未绑定 - 点击绑定'}
                                             </p>
                                         </div>
