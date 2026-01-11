@@ -2110,16 +2110,23 @@ router.get('/linux-do/callback', async (req: Request, res: Response) => {
             return;
         }
 
-        // Exchange code for access token using POST with form-urlencoded body
-        const basicAuth = Buffer.from(`${LINUX_DO_CLIENT_ID}:${LINUX_DO_CLIENT_SECRET}`).toString('base64');
-        const tokenBody = `grant_type=authorization_code&code=${encodeURIComponent(code as string)}&redirect_uri=${encodeURIComponent(LINUX_DO_REDIRECT_URI)}`;
+        // Exchange code for access token using client_secret_post method
+        // Linux DO (Discourse OAuth2) requires client_id and client_secret in POST body, not Basic Auth
+        const tokenParams = new URLSearchParams();
+        tokenParams.append('grant_type', 'authorization_code');
+        tokenParams.append('code', code as string);
+        tokenParams.append('redirect_uri', LINUX_DO_REDIRECT_URI);
+        tokenParams.append('client_id', LINUX_DO_CLIENT_ID);
+        tokenParams.append('client_secret', LINUX_DO_CLIENT_SECRET);
 
-        console.log('[Linux DO] Token request:', { basicAuth: basicAuth.substring(0, 10) + '...', bodyLength: tokenBody.length });
+        console.log('[Linux DO] Token request (client_secret_post):', {
+            redirect_uri: LINUX_DO_REDIRECT_URI,
+            client_id: LINUX_DO_CLIENT_ID.substring(0, 8) + '...'
+        });
 
-        const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', tokenBody, {
+        const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', tokenParams.toString(), {
             headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Authorization': `Basic ${basicAuth}`
+                'Content-Type': 'application/x-www-form-urlencoded'
             }
         });
 
