@@ -18,8 +18,8 @@ const router = Router();
 router.get('/', async (req: Request, res: Response) => {
     try {
         const [rows] = await pool.query(`
-      SELECT * FROM mcp_registry 
-      WHERE status != 'deleted'
+      SELECT * FROM mcp_registry
+      WHERE is_enabled = TRUE
       ORDER BY created_at DESC
     `);
 
@@ -128,8 +128,8 @@ router.post('/', async (req: Request, res: Response) => {
         const id = `mcp-custom-${uuidv4().slice(0, 8)}`;
 
         await pool.query(`
-      INSERT INTO mcp_registry (id, name, description, version, provider_type, status, tools, connection, permissions, metadata)
-      VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+      INSERT INTO mcp_registry (id, name, description, version, provider_type, is_enabled, health_status, tools, connection, permissions, metadata)
+      VALUES (?, ?, ?, ?, ?, TRUE, 'HEALTHY', ?, ?, ?, ?)
     `, [id, name, description, version || '1.0.0', providerType || 'custom',
             JSON.stringify(tools || []), JSON.stringify(connection || {}),
             JSON.stringify(permissions || []), JSON.stringify(metadata || {})]);
@@ -146,7 +146,7 @@ router.post('/', async (req: Request, res: Response) => {
 
 router.delete('/:id', async (req: Request, res: Response) => {
     try {
-        await pool.query('UPDATE mcp_registry SET status = ? WHERE id = ?', ['deleted', req.params.id]);
+        await pool.query('UPDATE mcp_registry SET is_enabled = FALSE WHERE id = ?', [req.params.id]);
         res.json({ success: true });
     } catch (error: any) {
         res.status(500).json({ success: false, error: error.message });
@@ -185,7 +185,7 @@ router.post('/:id/call', async (req: Request, res: Response) => {
         }
 
         // 非内置 MCP: 从数据库查询并执行
-        const [rows] = await pool.query('SELECT * FROM mcp_registry WHERE id = ? AND status != ?', [mcpId, 'deleted']);
+        const [rows] = await pool.query('SELECT * FROM mcp_registry WHERE id = ? AND is_enabled = TRUE', [mcpId]);
 
         if ((rows as any[]).length === 0) {
             res.status(404).json({

@@ -33,10 +33,11 @@ router.get('/', async (req: Request, res: Response): Promise<void> => {
         let userMCPs: any[] = [];
         try {
             const [rows] = await pool.execute<RowDataPacket[]>(`
-                SELECT 
-                    id, name, version, 'USER_UPLOADED' as source, status,
+                SELECT
+                    id, name, version, 'USER_UPLOADED' as source, health_status AS status,
                     tool_count, usage_count, owner, created_at
                 FROM mcp_registry
+                WHERE is_enabled = TRUE
                 ORDER BY created_at DESC
             `);
             userMCPs = rows;
@@ -63,7 +64,7 @@ router.post('/:id/approve', async (req: Request, res: Response): Promise<void> =
         const { id } = req.params;
 
         await pool.execute(
-            'UPDATE mcp_registry SET status = ? WHERE id = ?',
+            'UPDATE mcp_registry SET health_status = ? WHERE id = ?',
             ['HEALTHY', id]
         );
 
