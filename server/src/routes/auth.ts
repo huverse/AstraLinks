@@ -2110,15 +2110,13 @@ router.get('/linux-do/callback', async (req: Request, res: Response) => {
             return;
         }
 
-        // Exchange code for access token
+        // Exchange code for access token (per Linux DO docs: Basic Auth only, no client creds in body)
         const tokenParams = new URLSearchParams();
-        tokenParams.append('client_id', LINUX_DO_CLIENT_ID);
-        tokenParams.append('client_secret', LINUX_DO_CLIENT_SECRET);
-        tokenParams.append('code', code as string);
         tokenParams.append('grant_type', 'authorization_code');
+        tokenParams.append('code', code as string);
         tokenParams.append('redirect_uri', LINUX_DO_REDIRECT_URI);
 
-        // Try both Basic Auth and body params for maximum compatibility
+        // Basic Auth: base64(client_id:client_secret)
         const basicAuth = Buffer.from(`${LINUX_DO_CLIENT_ID}:${LINUX_DO_CLIENT_SECRET}`).toString('base64');
 
         const tokenResponse = await axios.post('https://connect.linux.do/oauth2/token', tokenParams, {
