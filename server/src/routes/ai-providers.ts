@@ -18,7 +18,7 @@ interface AuthRequest extends Request {
 // GET /api/ai-providers - 获取所有激活的 Provider
 router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
     const [rows] = await pool.execute<RowDataPacket[]>(
-        `SELECT id, name, type, base_url, default_model, capabilities,
+        `SELECT id, name, type, base_url, default_models, capabilities,
                 is_builtin, is_active, created_at
          FROM ai_providers
          WHERE is_active = TRUE
@@ -30,7 +30,7 @@ router.get('/', authMiddleware, async (req: AuthRequest, res: Response) => {
         name: row.name,
         type: row.type,
         baseUrl: row.base_url,
-        defaultModel: row.default_model,
+        defaultModels: row.default_models ? JSON.parse(row.default_models) : [],
         capabilities: row.capabilities ? JSON.parse(row.capabilities) : {},
         isBuiltin: row.is_builtin,
         isActive: row.is_active,
@@ -61,7 +61,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
             name: row.name,
             type: row.type,
             baseUrl: row.base_url,
-            defaultModel: row.default_model,
+            defaultModels: row.default_models ? JSON.parse(row.default_models) : [],
             defaultHeaders: row.default_headers ? JSON.parse(row.default_headers) : null,
             capabilities: row.capabilities ? JSON.parse(row.capabilities) : {},
             isBuiltin: row.is_builtin,
@@ -74,7 +74,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response) => {
 
 // POST /api/ai-providers - 创建自定义 Provider (管理员)
 router.post('/', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
-    const { name, type, baseUrl, defaultModel, defaultHeaders, capabilities, description } = req.body;
+    const { name, type, baseUrl, defaultModels, defaultHeaders, capabilities, description } = req.body;
 
     if (!name || !type || !baseUrl) {
         res.status(400).json({ error: 'Missing required fields: name, type, baseUrl' });
@@ -85,17 +85,16 @@ router.post('/', authMiddleware, adminMiddleware, async (req: AuthRequest, res: 
 
     await pool.execute(
         `INSERT INTO ai_providers
-         (id, name, type, base_url, default_model, default_headers, capabilities, description, is_builtin, is_active)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)`,
+         (id, name, type, base_url, default_models, default_headers, capabilities, is_builtin, is_active)
+         VALUES (?, ?, ?, ?, ?, ?, ?, FALSE, TRUE)`,
         [
             id,
             name,
             type,
             baseUrl,
-            defaultModel,
+            defaultModels ? JSON.stringify(defaultModels) : null,
             defaultHeaders ? JSON.stringify(defaultHeaders) : null,
-            capabilities ? JSON.stringify(capabilities) : JSON.stringify({ text: true }),
-            description
+            capabilities ? JSON.stringify(capabilities) : JSON.stringify({ text: true })
         ]
     );
 
@@ -105,7 +104,7 @@ router.post('/', authMiddleware, adminMiddleware, async (req: AuthRequest, res: 
 // PUT /api/ai-providers/:id - 更新 Provider (管理员)
 router.put('/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
     const { id } = req.params;
-    const { name, baseUrl, defaultModel, defaultHeaders, capabilities, description, isActive } = req.body;
+    const { name, baseUrl, defaultModels, defaultHeaders, capabilities, description, isActive } = req.body;
 
     // 检查是否存在
     const [existing] = await pool.execute<RowDataPacket[]>(
@@ -136,9 +135,9 @@ router.put('/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, res
             updates.push('base_url = ?');
             values.push(baseUrl);
         }
-        if (defaultModel !== undefined) {
-            updates.push('default_model = ?');
-            values.push(defaultModel);
+        if (defaultModels !== undefined) {
+            updates.push('default_models = ?');
+            values.push(defaultModels ? JSON.stringify(defaultModels) : null);
         }
         if (defaultHeaders !== undefined) {
             updates.push('default_headers = ?');
@@ -210,7 +209,7 @@ router.delete('/:id', authMiddleware, adminMiddleware, async (req: AuthRequest, 
 // GET /api/admin/ai-providers - 获取所有 Provider (管理员)
 router.get('/admin/all', authMiddleware, adminMiddleware, async (req: AuthRequest, res: Response) => {
     const [rows] = await pool.execute<RowDataPacket[]>(
-        `SELECT id, name, type, base_url, default_model, default_headers,
+        `SELECT id, name, type, base_url, default_headers,
                 capabilities, default_models, is_builtin, is_active, created_at, updated_at
          FROM ai_providers
          ORDER BY is_builtin DESC, name ASC`
@@ -221,7 +220,6 @@ router.get('/admin/all', authMiddleware, adminMiddleware, async (req: AuthReques
         name: row.name,
         type: row.type,
         baseUrl: row.base_url,
-        defaultModel: row.default_model,
         defaultHeaders: row.default_headers ? JSON.parse(row.default_headers) : null,
         capabilities: row.capabilities ? JSON.parse(row.capabilities) : {},
         defaultModels: row.default_models ? JSON.parse(row.default_models) : [],
